@@ -3,3 +3,28 @@
 [[package]]
 name = "fin"
 version = "0.1.0"
+dependencies = [
+ "unicode_reader",
+]
+
+[[package]]
+name = "smallvec"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbee7696b84bbf3d89a1c2eccff0850e3047ed46bfcd2e92c29a2d074d57e252"
+
+[[package]]
+name = "unicode-segmentation"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e83e153d1053cbb5a118eeff7fd5be06ed99153f00dbcd8ae310c5fb2b22edc0"
+
+[[package]]
+name = "unicode_reader"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b639121690b27acd92c97ed2b52c5e5e8d3d39482e943b4559695cef62f771a"
+dependencies = [
+ "smallvec",
+ "unicode-segmentation",
+]
