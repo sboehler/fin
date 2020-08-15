@@ -16,6 +16,7 @@ fn main() {
 
 pub struct Scanner<R: Read> {
     codepoints: Peekable<CodePoints<Bytes<R>>>,
+    cur: Option<char>,
     pos: (u64, u64),
 }
 
@@ -23,11 +24,32 @@ impl<R: Read> Scanner<R> {
     pub fn new(r: R) -> Scanner<R> {
         Scanner {
             codepoints: CodePoints::from(r).peekable(),
+            cur: None,
             pos: (0, 0),
         }
     }
-    pub fn current(&mut self) -> Option<&Result<char>> {
-        self.codepoints.peek()
+    pub fn current(&self) -> Option<char> {
+        self.cur
+    }
+    pub fn advance(&mut self) -> Result<()> {
+        match self.codepoints.next() {
+            Some(r) => match r {
+                Err(e) => return Err(e),
+                Ok(c) => {
+                    if c == '\n' {
+                        self.pos = (self.pos.0 + 1, 0)
+                    } else {
+                        self.pos = (self.pos.0, self.pos.1 + 1);
+                    }
+                    self.cur = Some(c);
+                }
+            },
+            None => {
+                self.pos = (self.pos.0, self.pos.1 + 1);
+                self.cur = None;
+            }
+        };
+        Ok(())
     }
 }
 
@@ -49,17 +71,13 @@ where
     P: Fn(&char) -> bool,
 {
     let mut b = String::new();
-    while let Some(r) = s.current() {
-        match r {
-            Ok(c) => {
-                if pred(c) {
-                    b.push(s.next().unwrap().unwrap())
-                } else {
-                    break;
-                }
-            }
-            Err(_) => return Err(s.next().unwrap().unwrap_err()),
+    while let Some(c) = s.current() {
+        if pred(&c) {
+            b.push(c)
+        } else {
+            break;
         }
+        s.advance()?
     }
     Ok(b)
 }
@@ -68,31 +86,24 @@ fn consume_while<R: Read, P>(s: &mut Scanner<R>, pred: P) -> Result<()>
 where
     P: Fn(&char) -> bool,
 {
-    while let Some(r) = s.current() {
-        match r {
-            Ok(c) => {
-                if pred(c) {
-                    s.next();
-                } else {
-                    break;
-                }
-            }
-            Err(_) => return Err(s.next().unwrap().unwrap_err()),
+    while let Some(c) = s.current() {
+        if !pred(&c) {
+            break;
         }
+        s.advance()?
     }
     Ok(())
 }
 
 fn consume_char<R: Read>(s: &mut Scanner<R>, c: char) -> Result<()> {
-    match s.current() { 
-        Some(_) => {
-            let q = s.next().unwrap()?;
-            if c == q {
+    match s.current() {
+        Some(d) => {
+            if c == d {
                 Ok(())
             } else {
                 Err(Error::new(
                     ErrorKind::InvalidData,
-                    format!("Expected '{}', got '{}'", c, q),
+                    format!("Expected '{}', got '{}'", c, d),
                 ))
             }
         }
