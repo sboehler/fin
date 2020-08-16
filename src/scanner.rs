@@ -19,22 +19,16 @@ impl<R: Read> Scanner<R> {
         self.cur
     }
     pub fn advance(&mut self) -> Result<()> {
-        match self.codepoints.next() {
-            Some(r) => match r {
-                Err(e) => return Err(e),
-                Ok(c) => {
-                    if c == '\n' {
-                        self.pos = (self.pos.0 + 1, 0)
-                    } else {
-                        self.pos = (self.pos.0, self.pos.1 + 1);
-                    }
-                    self.cur = Some(c);
-                }
-            },
-            None => {
-                self.pos = (self.pos.0, self.pos.1 + 1);
-                self.cur = None;
-            }
+        let x = self.codepoints.next();
+        self.pos = match x {
+            Some(Ok('\n')) => (self.pos.0 + 1, 0),
+            Some(Ok(_)) | None => (self.pos.0, self.pos.1 + 1),
+            Some(Err(e)) => return Err(e),
+        };
+        self.cur = match x {
+            Some(Ok(c)) => Some(c),
+            None => None,
+            Some(Err(e)) => return Err(e),
         };
         Ok(())
     }
