@@ -1,17 +1,16 @@
 use std::io::Read;
 use std::io::{Bytes, Error, ErrorKind, Result};
-use std::iter::Peekable;
 use unicode_reader::CodePoints;
 
 pub struct Scanner<R: Read> {
-    codepoints: Peekable<CodePoints<Bytes<R>>>,
+    codepoints: CodePoints<Bytes<R>>,
     cur: Option<char>,
     pos: (u64, u64),
 }
 impl<R: Read> Scanner<R> {
     pub fn new(r: R) -> Scanner<R> {
         Scanner {
-            codepoints: CodePoints::from(r).peekable(),
+            codepoints: CodePoints::from(r),
             cur: None,
             pos: (0, 0),
         }
