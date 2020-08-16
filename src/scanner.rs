@@ -5,31 +5,48 @@ use unicode_reader::CodePoints;
 pub struct Scanner<R: Read> {
     codepoints: CodePoints<Bytes<R>>,
     cur: Option<char>,
-    pos: (u64, u64),
+    pos: Position,
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct Position {
+    line: u64,
+    column: u64,
+}
+
+impl Position {
+    fn update(&mut self, cur: Option<char>, new: Option<char>) {
+        match new {
+            Some('\n') => {
+                self.line += 1;
+                self.column = 0;
+            }
+            Some(_) => {
+                self.column += 1;
+            }
+            None if cur.is_some() => {
+                self.column += 1;
+            }
+            _ => {}
+        };
+    }
+}
+
 impl<R: Read> Scanner<R> {
     pub fn new(r: R) -> Scanner<R> {
         Scanner {
             codepoints: CodePoints::from(r),
             cur: None,
-            pos: (0, 0),
+            pos: Position { line: 0, column: 0 },
         }
     }
     pub fn current(&self) -> Option<char> {
         self.cur
     }
     pub fn advance(&mut self) -> Result<()> {
-        let x = self.codepoints.next();
-        self.pos = match x {
-            Some(Ok('\n')) => (self.pos.0 + 1, 0),
-            Some(Ok(_)) | None => (self.pos.0, self.pos.1 + 1),
-            Some(Err(e)) => return Err(e),
-        };
-        self.cur = match x {
-            Some(Ok(c)) => Some(c),
-            None => None,
-            Some(Err(e)) => return Err(e),
-        };
+        let next = self.codepoints.next().transpose()?;
+        self.pos.update(self.cur, next);
+        self.cur = next;
         Ok(())
     }
 }
