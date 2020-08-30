@@ -119,3 +119,11 @@ pub fn read_quoted_string<R: Read>(s: &mut Scanner<R>) -> Result<String> {
 pub fn read_identifier<R: Read>(s: &mut Scanner<R>) -> Result<String> {
     read_while(s, |c| c.is_alphanumeric())
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
+}
