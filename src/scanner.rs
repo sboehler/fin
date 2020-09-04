@@ -94,7 +94,7 @@ pub fn consume_char<R: Read>(s: &mut Scanner<R>, c: char) -> Result<()> {
     match s.current() {
         Some(d) => {
             if c == d {
-                Ok(())
+                s.advance()
             } else {
                 Err(Error::new(
                     ErrorKind::InvalidData,
@@ -122,8 +122,19 @@ pub fn read_identifier<R: Read>(s: &mut Scanner<R>) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn test_read_while() {
+        let mut s = Scanner::new("asdf".as_bytes());
+        s.advance().unwrap();
+        assert_eq!(read_while(&mut s, |&c| c != 'f').unwrap(), "asd")
+    }
+
+    #[test]
+    fn test_read_quoted_string() {
+        let mut s = Scanner::new("\"A string\"".as_bytes());
+        s.advance().unwrap();
+        assert_eq!(read_quoted_string(&mut s).unwrap(), "A string");
     }
 }
