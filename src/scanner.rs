@@ -117,24 +117,91 @@ pub fn read_quoted_string<R: Read>(s: &mut Scanner<R>) -> Result<String> {
 }
 
 pub fn read_identifier<R: Read>(s: &mut Scanner<R>) -> Result<String> {
-    read_while(s, |c| c.is_alphanumeric())
+    let res = read_while(s, |c| c.is_alphanumeric())?;
+    if res.len() == 0 {
+        Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("Expected identifier, got nothing")))
+    } else {
+        Ok(res)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Result;
 
     #[test]
-    fn test_read_while() {
+    fn test_read_while() -> Result<()> {
         let mut s = Scanner::new("asdf".as_bytes());
-        s.advance().unwrap();
-        assert_eq!(read_while(&mut s, |&c| c != 'f').unwrap(), "asd")
+        s.advance()?;
+        assert_eq!(read_while(&mut s, |&c| c != 'f')?, "asd");
+        Ok(())
     }
 
     #[test]
-    fn test_read_quoted_string() {
-        let mut s = Scanner::new("\"A string\"".as_bytes());
-        s.advance().unwrap();
-        assert_eq!(read_quoted_string(&mut s).unwrap(), "A string");
+    fn test_consume_while() -> Result<()> {
+        let mut s = Scanner::new("asdf".as_bytes());
+        s.advance()?;
+        consume_while(&mut s, |&c| c != 'f')?;
+        consume_char(&mut s, 'f')?;
+        assert!(s.current().is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn test_consume_char() -> Result<()> {
+        let bs = "asdf".as_bytes();
+        let mut s = Scanner::new(bs);
+        s.advance()?;
+        for b in CodePoints::from(bs) {
+            consume_char(&mut s, b?)?
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_quoted_string() -> Result<()> {
+        let tests = [
+            ("\"\"", ""),
+            ("\"A String \"", "A String "),
+            ("\"a\"\"", "a"),
+        ];
+        for (test, expected) in &tests {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert_eq!(read_quoted_string(&mut s)?, *expected);
+        }
+        let tests = [
+            "\""
+        ];
+        for test in &tests {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert!(read_quoted_string(&mut s).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_identifier() -> Result<()> {
+        let tests = [
+            ("23asdf 3asdf", "23asdf"),
+            ("foo bar", "foo"),
+            ("Foo Bar", "Foo"),
+        ];
+        for (test, expected) in &tests {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert_eq!(read_identifier(&mut s)?, *expected);
+        }
+        let tests = [" "];
+        for test in &tests {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert!(read_identifier(&mut s).is_err())
+        }
+        Ok(())
     }
 }
