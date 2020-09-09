@@ -121,7 +121,8 @@ pub fn read_identifier<R: Read>(s: &mut Scanner<R>) -> Result<String> {
     if res.len() == 0 {
         Err(Error::new(
             ErrorKind::InvalidData,
-            format!("Expected identifier, got nothing")))
+            format!("Expected identifier, got nothing"),
+        ))
     } else {
         Ok(res)
     }
@@ -168,15 +169,13 @@ mod tests {
             ("\"A String \"", "A String "),
             ("\"a\"\"", "a"),
         ];
-        for (test, expected) in &tests {
+        for (test, expected) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert_eq!(read_quoted_string(&mut s)?, *expected);
         }
-        let tests = [
-            "\""
-        ];
-        for test in &tests {
+        let tests = ["\""];
+        for test in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert!(read_quoted_string(&mut s).is_err());
@@ -191,13 +190,13 @@ mod tests {
             ("foo bar", "foo"),
             ("Foo Bar", "Foo"),
         ];
-        for (test, expected) in &tests {
+        for (test, expected) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert_eq!(read_identifier(&mut s)?, *expected);
         }
         let tests = [" "];
-        for test in &tests {
+        for test in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert!(read_identifier(&mut s).is_err())
