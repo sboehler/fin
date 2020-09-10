@@ -13,7 +13,7 @@ fn main() {
         .subcommand(
             App::new("print").about("pretty prints the journal").arg(
                 Arg::with_name("JOURNAL")
-                    .about("The journal file to use")
+                    .help("the journal file to use")
                     .required(true)
                     .index(1),
             ),
