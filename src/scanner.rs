@@ -49,6 +49,10 @@ impl<R: Read> Scanner<R> {
         self.cur = next;
         Ok(())
     }
+
+    pub fn position(&self) -> &Position {
+        return &self.pos;
+    }
 }
 
 impl<R: Read> Iterator for Scanner<R> {
