@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 unicode_reader = "1.0.1"
 clap = "2.33"
+chrono = "0.4"

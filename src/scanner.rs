@@ -132,6 +132,25 @@ pub fn read_identifier<R: Read>(s: &mut Scanner<R>) -> Result<String> {
     }
 }
 
+pub fn read_string<R: Read>(s: &mut Scanner<R>, n: usize) -> Result<String> {
+    let mut res = String::with_capacity(n);
+    for _ in 0..n {
+        match s.current() {
+            Some(d) => {
+                res.push(d);
+                s.advance()?
+            }
+            None => {
+                return Err(Error::new(
+                    ErrorKind::UnexpectedEof,
+                    format!("Expected more input, got EOF"),
+                ))
+            }
+        }
+    }
+    Ok(res)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,6 +223,26 @@ mod tests {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert!(read_identifier(&mut s).is_err())
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_string() -> Result<()> {
+        let tests = [
+            ("23asdf 3asdf", "23as"),
+            ("foo bar", "foo "),
+            ("Foo Bar", "Foo "),
+        ];
+        for (test, expected) in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert_eq!(read_string(&mut s, 4)?, *expected);
+        }
+        for (test, _) in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert!(read_string(&mut s, test.len() + 1).is_err())
         }
         Ok(())
     }
