@@ -19,14 +19,21 @@ pub fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
 }
 
 pub fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
-    let r = read_string(s, 10)?;
-    NaiveDate::parse_from_str(r.as_str(), "%Y-%m-%d")
-        .map_err(|_| Error::new(ErrorKind::InvalidData, format!("Invalid date '{}'", r)))
+    let b = read_string(s, 10)
+        .map_err(|_| Error::new(ErrorKind::UnexpectedEof, format!("Expected date, got EOF")))?;
+    match NaiveDate::parse_from_str(b.as_str(), "%Y-%m-%d") {
+        Ok(d) => Ok(d),
+        Err(_) => Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("Invalid date '{}'", b),
+        )),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scanner::read_while;
     use std::io::Result;
 
     #[test]
@@ -39,9 +46,21 @@ mod tests {
 
     #[test]
     fn test_parse_date() -> Result<()> {
-        let mut s = Scanner::new("2020-02-03".as_bytes());
-        s.advance()?;
-        assert_eq!(parse_date(&mut s)?, NaiveDate::from_ymd(2020, 2, 3));
+        let tests = [
+            ("0202-02-02", chrono::NaiveDate::from_ymd(202, 2, 2), ""),
+            ("2020-09-15 ", chrono::NaiveDate::from_ymd(2020, 9, 15), " "),
+        ];
+        for (test, expected, remainder) in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert_eq!(parse_date(&mut s)?, *expected);
+            assert_eq!(read_while(&mut s, |_| true)?, *remainder)
+        }
         Ok(())
+    }
+
+    #[test]
+    fn test_playground() {
+        assert_eq!("00000202".parse::<i32>().unwrap(), 202)
     }
 }
