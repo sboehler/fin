@@ -1,4 +1,6 @@
+use crate::model::Account;
 use crate::model::AccountType;
+use crate::scanner::consume_char;
 use crate::scanner::{read_identifier, read_string, Scanner};
 use chrono::NaiveDate;
 use std::io::{Error, ErrorKind, Read, Result};
@@ -28,6 +30,16 @@ pub fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
             format!("Invalid date '{}'", b),
         )),
     }
+}
+
+pub fn parse_account<R: Read>(s: &mut Scanner<R>) -> Result<Account> {
+    let account_type = parse_account_type(s)?;
+    let mut segments = Vec::new();
+    while let Some(':') = s.current() {
+        consume_char(s, ':')?;
+        segments.push(read_identifier(s)?)
+    }
+    Ok(Account::new(account_type, segments))
 }
 
 #[cfg(test)]
@@ -60,7 +72,22 @@ mod tests {
     }
 
     #[test]
-    fn test_playground() {
-        assert_eq!("00000202".parse::<i32>().unwrap(), 202)
+    fn test_parse_account() -> Result<()> {
+        let tests = [
+            ("Assets", Account::new(AccountType::Assets, Vec::new())),
+            (
+                "Liabilities:CreditCards:Visa",
+                Account::new(
+                    AccountType::Liabilities,
+                    vec![String::from("CreditCards"), String::from("Visa")],
+                ),
+            ),
+        ];
+        for (test, expected) in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert_eq!(parse_account(&mut s)?, *expected);
+        }
+        Ok(())
     }
 }
