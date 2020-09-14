@@ -151,6 +151,26 @@ pub fn read_string<R: Read>(s: &mut Scanner<R>, n: usize) -> Result<String> {
     Ok(res)
 }
 
+pub fn consume_eol<R: Read>(s: &mut Scanner<R>) -> Result<()> {
+    if s.current().is_none() {
+        Ok(())
+    } else {
+        consume_char(s, '\n')
+    }
+}
+
+pub fn consume_space1<R: Read>(s: &mut Scanner<R>) -> Result<()> {
+    if let Some(c) = s.current() {
+        if !c.is_ascii_whitespace() {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                format!("Expected white space, got '{}'", c),
+            ));
+        }
+    }
+    consume_while(s, |c| *c != '\n' && c.is_ascii_whitespace())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,19 +250,55 @@ mod tests {
     #[test]
     fn test_read_string() -> Result<()> {
         let tests = [
-            ("23asdf 3asdf", "23as"),
-            ("foo bar", "foo "),
-            ("Foo Bar", "Foo "),
+            ("23asdf 3asdf", "23as", "df 3asdf"),
+            ("foo bar", "foo ", "bar"),
+            ("Foo Bar", "Foo ", "Bar"),
         ];
-        for (test, expected) in tests.iter() {
+        for (test, expected, remainder) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert_eq!(read_string(&mut s, 4)?, *expected);
+            assert_eq!(read_while(&mut s, |_| true)?.as_str(), *remainder)
         }
-        for (test, _) in tests.iter() {
+        for (test, _, _) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
-            assert!(read_string(&mut s, test.len() + 1).is_err())
+            assert!(read_string(&mut s, test.len() + 1).is_err());
+            assert_eq!(read_while(&mut s, |_| true)?.as_str(), "")
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_consume_eol() -> Result<()> {
+        let tests = ["", "\n", "\na"];
+        for test in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            consume_eol(&mut s)?
+        }
+        let tests = [" ", "not an eol", "na"];
+        for test in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert!(consume_eol(&mut s).is_err())
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_consume_space1() -> Result<()> {
+        let tests = ["", "\n", "\t"];
+        for test in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            consume_space1(&mut s)?
+        }
+        let tests = ["a\n", "n", "na"];
+        for test in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert!(consume_space1(&mut s).is_err())
         }
         Ok(())
     }
