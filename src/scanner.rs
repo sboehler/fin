@@ -81,6 +81,15 @@ where
     Ok(b)
 }
 
+pub fn read_all<R: Read>(s: &mut Scanner<R>) -> Result<String> {
+    let mut b = String::new();
+    while let Some(c) = s.current() {
+        b.push(c);
+        s.advance()?
+    }
+    Ok(b)
+}
+
 pub fn consume_while<R: Read, P>(s: &mut Scanner<R>, pred: P) -> Result<()>
 where
     P: Fn(&char) -> bool,
@@ -111,6 +120,13 @@ pub fn consume_char<R: Read>(s: &mut Scanner<R>, c: char) -> Result<()> {
             format!("Expected '{}', got EOF", c),
         )),
     }
+}
+
+pub fn consume_string<R: Read>(s: &mut Scanner<R>, str: &str) -> Result<()> {
+    for c in str.chars() {
+        consume_char(s, c)?;
+    }
+    Ok(())
 }
 
 pub fn read_quoted_string<R: Read>(s: &mut Scanner<R>) -> Result<String> {
@@ -206,6 +222,17 @@ mod tests {
     }
 
     #[test]
+    fn test_consume_string() -> Result<()> {
+        let tests = ["asdf"];
+        for test in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            consume_string(&mut s, test)?
+        }
+        Ok(())
+    }
+
+    #[test]
     fn test_read_quoted_string() -> Result<()> {
         let tests = [
             ("\"\"", ""),
@@ -258,13 +285,13 @@ mod tests {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert_eq!(read_string(&mut s, 4)?, *expected);
-            assert_eq!(read_while(&mut s, |_| true)?.as_str(), *remainder)
+            assert_eq!(read_all(&mut s)?.as_str(), *remainder)
         }
         for (test, _, _) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert!(read_string(&mut s, test.len() + 1).is_err());
-            assert_eq!(read_while(&mut s, |_| true)?.as_str(), "")
+            assert_eq!(read_all(&mut s)?.as_str(), "")
         }
         Ok(())
     }
