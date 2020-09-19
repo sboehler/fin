@@ -106,7 +106,7 @@ impl Transaction {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tag {
-    pub tag: String,
+    tag: String,
 }
 
 impl Tag {
@@ -129,7 +129,7 @@ pub struct Lot;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Commodity {
-    pub name: String,
+    name: String,
 }
 
 impl Commodity {
