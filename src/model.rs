@@ -1,8 +1,8 @@
 use chrono::prelude::NaiveDate;
-use rust_decimal::prelude::Decimal;
+use rust_decimal::prelude::{Decimal, Zero};
 use std::fmt;
 use std::fmt::Display;
-use std::io::Result;
+use std::io::{Error, ErrorKind, Result};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum AccountType {
@@ -70,9 +70,31 @@ impl Transaction {
         d: NaiveDate,
         desc: String,
         tags: Vec<Tag>,
-        postings: Vec<Posting>,
-        _account: Option<Account>,
+        mut postings: Vec<Posting>,
+        account: Option<Account>,
     ) -> Result<Transaction> {
+        let mut amounts: Vec<(Commodity, Decimal)> = Vec::with_capacity(postings.len());
+        for p in postings.iter() {
+            match amounts.iter_mut().find(|c| c.0 == p.commodity) {
+                None => amounts.push((p.commodity.clone(), p.amount)),
+                Some(e) => e.1 += p.amount,
+            };
+        }
+        for amt in amounts.iter() {
+            if amt.1.is_zero() {
+                continue;
+            }
+            match account {
+                None => return Err(Error::new(ErrorKind::InvalidData, format!("error"))),
+                Some(ref a) => postings.push(Posting {
+                    account: a.clone(),
+                    commodity: amt.0.clone(),
+                    amount: -amt.1,
+                    lot: None,
+                    tag: None,
+                }),
+            }
+        }
         Ok(Transaction {
             date: d,
             description: desc,
@@ -105,7 +127,7 @@ pub struct Posting {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Lot;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Commodity {
     pub name: String,
 }

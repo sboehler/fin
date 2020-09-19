@@ -344,6 +344,24 @@ mod tests {
                     None,
                 )?,
             ),
+            (
+                "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1",
+                NaiveDate::from_ymd(2020, 1, 30),
+                Transaction::new(
+                    NaiveDate::from_ymd(2020, 1, 30),
+                    "some description".into(),
+                    vec![Tag::new("tag1".into()), Tag::new("tag2".into())],
+                    vec![
+                        posting.clone(),
+                        Posting {
+                            account: Account::new(AccountType::Income, vec!["Gains1".into()]),
+                            amount: Decimal::new(-24545, 2),
+                            ..(posting.clone())
+                        },
+                    ],
+                    None,
+                )?,
+            ),
         ];
         for (test, date, expected) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
