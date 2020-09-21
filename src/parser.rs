@@ -1,5 +1,5 @@
 use crate::model::{
-    Account, AccountType, Close, Commodity, Directive, Lot, Open, Posting, Tag, Transaction,
+    Account, AccountType, Close, Commodity, Directive, Lot, Open, Posting, Price, Tag, Transaction,
 };
 use crate::scanner::{
     consume_char, consume_eol, consume_space1, consume_string, read_identifier, read_quoted_string,
@@ -53,6 +53,7 @@ pub fn parse_directive<R: Read>(s: &mut Scanner<R>) -> Result<Directive> {
         Some('o') => Ok(Directive::Open(parse_open(d, s)?)),
         Some('c') => Ok(Directive::Close(parse_close(d, s)?)),
         Some('"') => Ok(Directive::Trx(parse_transaction(d, s)?)),
+        Some('p') => Ok(Directive::Price(parse_price(d, s)?)),
         Some(c) => Err(Error::new(
             ErrorKind::InvalidData,
             format!("Expected directive, found '{}'", c),
@@ -132,7 +133,11 @@ fn parse_lot<R: Read>(_s: &mut Scanner<R>) -> Result<Lot> {
 pub fn parse_postings<R: Read>(s: &mut Scanner<R>) -> Result<(Vec<Posting>, Option<Account>)> {
     let mut postings = Vec::new();
     let mut wildcard = None;
-    while s.current().map_or(false, |c| c.is_ascii_alphanumeric()) {
+    while s
+        .current()
+        .map(|c| c.is_ascii_alphanumeric())
+        .unwrap_or(false)
+    {
         let mut lot = None;
         let mut tag = None;
         let account = parse_account(s)?;
@@ -170,6 +175,19 @@ pub fn parse_postings<R: Read>(s: &mut Scanner<R>) -> Result<(Vec<Posting>, Opti
         consume_eol(s)?
     }
     Ok((postings, wildcard))
+}
+
+fn parse_price<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Price> {
+    consume_string(s, "price")?;
+    consume_space1(s)?;
+    let source = parse_commodity(s)?;
+    consume_space1(s)?;
+    let price = parse_decimal(s)?;
+    consume_space1(s)?;
+    let target = parse_commodity(s)?;
+    consume_space1(s)?;
+    consume_eol(s)?;
+    Ok(Price::new(d, price, target, source))
 }
 
 #[cfg(test)]
@@ -407,6 +425,38 @@ mod tests {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert_eq!(parse_postings(&mut s)?, *expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_price() -> Result<()> {
+        let tests = [
+            (
+                "price USD 0.901 CHF",
+                NaiveDate::from_ymd(2020, 2, 2),
+                Price::new(
+                    NaiveDate::from_ymd(2020, 2, 2),
+                    Decimal::new(901, 3),
+                    Commodity::new("CHF".into()),
+                    Commodity::new("USD".into()),
+                ),
+            ),
+            (
+                "price 1MDB 1000000000 USD",
+                NaiveDate::from_ymd(2020, 2, 2),
+                Price::new(
+                    NaiveDate::from_ymd(2020, 2, 2),
+                    Decimal::new(1000000000, 0),
+                    Commodity::new("USD".into()),
+                    Commodity::new("1MDB".into()),
+                ),
+            ),
+        ];
+        for (test, d, want) in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert_eq!(parse_price(*d, &mut s)?, *want)
         }
         Ok(())
     }

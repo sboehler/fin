@@ -139,10 +139,29 @@ impl Commodity {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Price {
+    pub date: NaiveDate,
+    pub price: Decimal,
+    pub source: Commodity,
+    pub target: Commodity,
+}
+
+impl Price {
+    pub fn new(date: NaiveDate, price: Decimal, target: Commodity, source: Commodity) -> Price {
+        Price {
+            date,
+            price,
+            source,
+            target,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Directive {
     Open(Open),
     Close(Close),
     Trx(Transaction),
-    Price,
+    Price(Price),
     Assertion,
 }
