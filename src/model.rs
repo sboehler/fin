@@ -158,10 +158,34 @@ impl Price {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Assertion {
+    pub date: NaiveDate,
+    pub account: Account,
+    pub balance: Decimal,
+    pub commodity: Commodity,
+}
+
+impl Assertion {
+    pub fn new(
+        date: NaiveDate,
+        account: Account,
+        balance: Decimal,
+        commodity: Commodity,
+    ) -> Assertion {
+        Assertion {
+            date,
+            account,
+            balance,
+            commodity,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Directive {
     Open(Open),
     Close(Close),
     Trx(Transaction),
     Price(Price),
-    Assertion,
+    Assertion(Assertion),
 }

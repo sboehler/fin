@@ -1,5 +1,6 @@
 use crate::model::{
-    Account, AccountType, Close, Commodity, Directive, Lot, Open, Posting, Price, Tag, Transaction,
+    Account, AccountType, Assertion, Close, Commodity, Directive, Lot, Open, Posting, Price, Tag,
+    Transaction,
 };
 use crate::scanner::{
     consume_char, consume_eol, consume_space1, consume_string, read_identifier, read_quoted_string,
@@ -54,6 +55,7 @@ pub fn parse_directive<R: Read>(s: &mut Scanner<R>) -> Result<Directive> {
         Some('c') => Ok(Directive::Close(parse_close(d, s)?)),
         Some('"') => Ok(Directive::Trx(parse_transaction(d, s)?)),
         Some('p') => Ok(Directive::Price(parse_price(d, s)?)),
+        Some('b') => Ok(Directive::Assertion(parse_assertion(d, s)?)),
         Some(c) => Err(Error::new(
             ErrorKind::InvalidData,
             format!("Expected directive, found '{}'", c),
@@ -188,6 +190,19 @@ fn parse_price<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Price> {
     consume_space1(s)?;
     consume_eol(s)?;
     Ok(Price::new(d, price, target, source))
+}
+
+fn parse_assertion<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Assertion> {
+    consume_string(s, "balance")?;
+    consume_space1(s)?;
+    let account = parse_account(s)?;
+    consume_space1(s)?;
+    let price = parse_decimal(s)?;
+    consume_space1(s)?;
+    let commodity = parse_commodity(s)?;
+    consume_space1(s)?;
+    consume_eol(s)?;
+    Ok(Assertion::new(d, account, price, commodity))
 }
 
 #[cfg(test)]
@@ -457,6 +472,38 @@ mod tests {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
             assert_eq!(parse_price(*d, &mut s)?, *want)
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_assertion() -> Result<()> {
+        let tests = [
+            (
+                "balance Assets:MyAccount 0.901 USD",
+                NaiveDate::from_ymd(2020, 2, 2),
+                Assertion::new(
+                    NaiveDate::from_ymd(2020, 2, 2),
+                    Account::new(AccountType::Assets, vec!["MyAccount".into()]),
+                    Decimal::new(901, 3),
+                    Commodity::new("USD".into()),
+                ),
+            ),
+            (
+                "balance Liabilities:123foo 100 1CT",
+                NaiveDate::from_ymd(2020, 2, 2),
+                Assertion::new(
+                    NaiveDate::from_ymd(2020, 2, 2),
+                    Account::new(AccountType::Liabilities, vec!["123foo".into()]),
+                    Decimal::new(100, 0),
+                    Commodity::new("1CT".into()),
+                ),
+            ),
+        ];
+        for (test, d, want) in tests.iter() {
+            let mut s = Scanner::new(test.as_bytes());
+            s.advance()?;
+            assert_eq!(parse_assertion(*d, &mut s)?, *want)
         }
         Ok(())
     }
