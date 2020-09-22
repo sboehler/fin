@@ -11,7 +11,7 @@ use rust_decimal::Decimal;
 use std::io::{Error, ErrorKind, Read, Result};
 use std::str::FromStr;
 
-pub fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
+fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
     let s = read_identifier(s)?;
     match s.as_str() {
         "Assets" => Ok(AccountType::Assets),
@@ -26,7 +26,7 @@ pub fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
     }
 }
 
-pub fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
+fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
     let b = read_string(s, 10)?;
     match NaiveDate::parse_from_str(b.as_str(), "%Y-%m-%d") {
         Ok(d) => Ok(d),
@@ -37,7 +37,7 @@ pub fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
     }
 }
 
-pub fn parse_account<R: Read>(s: &mut Scanner<R>) -> Result<Account> {
+fn parse_account<R: Read>(s: &mut Scanner<R>) -> Result<Account> {
     let account_type = parse_account_type(s)?;
     let mut segments = Vec::new();
     while let Some(':') = s.current() {
@@ -67,7 +67,7 @@ pub fn parse_directive<R: Read>(s: &mut Scanner<R>) -> Result<Directive> {
     }
 }
 
-pub fn parse_open<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Open> {
+fn parse_open<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Open> {
     consume_string(s, "open")?;
     consume_space1(s)?;
     let a = parse_account(s)?;
@@ -79,7 +79,7 @@ pub fn parse_open<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Open> {
     })
 }
 
-pub fn parse_close<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Close> {
+fn parse_close<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Close> {
     consume_string(s, "close")?;
     consume_space1(s)?;
     let a = parse_account(s)?;
@@ -91,7 +91,7 @@ pub fn parse_close<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Close> {
     })
 }
 
-pub fn parse_transaction<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Transaction> {
+fn parse_transaction<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Transaction> {
     let desc = read_quoted_string(s)?;
     consume_space1(s)?;
     let tags = parse_tags(s)?;
@@ -100,7 +100,7 @@ pub fn parse_transaction<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Tr
     Transaction::new(d, desc, tags, postings, account)
 }
 
-pub fn parse_tags<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Tag>> {
+fn parse_tags<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Tag>> {
     let mut v = Vec::new();
     while let Some('#') = s.current() {
         v.push(parse_tag(s)?);
@@ -132,7 +132,7 @@ fn parse_lot<R: Read>(_s: &mut Scanner<R>) -> Result<Lot> {
     Ok(Lot)
 }
 
-pub fn parse_postings<R: Read>(s: &mut Scanner<R>) -> Result<(Vec<Posting>, Option<Account>)> {
+fn parse_postings<R: Read>(s: &mut Scanner<R>) -> Result<(Vec<Posting>, Option<Account>)> {
     let mut postings = Vec::new();
     let mut wildcard = None;
     while s
