@@ -12,6 +12,7 @@ use std::io::{Error, ErrorKind, Read, Result};
 use std::path::PathBuf;
 use std::str::FromStr;
 
+#[derive(Debug)]
 pub enum Directive {
     Command(Command),
     Include(PathBuf),
@@ -19,26 +20,28 @@ pub enum Directive {
 
 pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
     let mut result = Vec::new();
-    while let Some(c) = s.current() {
+    while s.current().is_some() {
         consume_while(s, |c| c.is_ascii_whitespace())?;
-        match c {
-            '0'..='9' => {
-                let c = parse_command(s)?;
-                result.push(Directive::Command(c))
-            }
-            '*' | '#' => {
-                consume_rest_of_line(s)?;
-            }
-            'i' => {
-                parse_include(s)?;
-            }
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::InvalidData,
-                    format!("Expected a directive, got {}", c),
-                ))
-            }
-        };
+        if let Some(c) = s.current() {
+            match c {
+                '0'..='9' => {
+                    let c = parse_command(s)?;
+                    result.push(Directive::Command(c))
+                }
+                '*' | '#' => {
+                    consume_rest_of_line(s)?;
+                }
+                'i' => {
+                    parse_include(s)?;
+                }
+                _ => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidData,
+                        format!("Expected a directive, got {}", c),
+                    ))
+                }
+            };
+        }
     }
     Ok(result)
 }
@@ -71,6 +74,7 @@ fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
         "Equity" => Ok(AccountType::Equity),
         "Income" => Ok(AccountType::Income),
         "Expenses" => Ok(AccountType::Expenses),
+        "TBD" => Ok(AccountType::TBD),
         _ => Err(Error::new(
             ErrorKind::InvalidData,
             format!("Expected account type, got '{}'", s),

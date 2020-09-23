@@ -11,6 +11,7 @@ pub enum AccountType {
     Equity,
     Income,
     Expenses,
+    TBD,
 }
 
 impl Display for AccountType {
