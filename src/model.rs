@@ -126,7 +126,28 @@ pub struct Posting {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Lot;
+pub struct Lot {
+    price: Decimal,
+    commodity: Commodity,
+    date: NaiveDate,
+    label: Option<String>,
+}
+
+impl Lot {
+    pub fn new(
+        price: Decimal,
+        commodity: Commodity,
+        date: NaiveDate,
+        label: Option<String>,
+    ) -> Self {
+        Self {
+            price,
+            commodity,
+            date,
+            label,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Commodity {

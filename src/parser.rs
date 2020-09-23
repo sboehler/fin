@@ -3,8 +3,8 @@ use crate::model::{
     Transaction,
 };
 use crate::scanner::{
-    consume_char, consume_eol, consume_rest_of_line, consume_space1, consume_string, consume_while,
-    read_identifier, read_quoted_string, read_string, read_while, Scanner,
+    consume_char, consume_eol, consume_rest_of_line, consume_space, consume_space1, consume_string,
+    consume_while, read_identifier, read_quoted_string, read_string, read_while, Scanner,
 };
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -26,6 +26,7 @@ pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
             match c {
                 '0'..='9' => {
                     let c = parse_command(s)?;
+                    print!("{:#?}", c);
                     result.push(Directive::Command(c))
                 }
                 '*' | '#' => {
@@ -132,7 +133,7 @@ fn parse_transaction<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Transa
     consume_space1(s)?;
     let tags = parse_tags(s)?;
     consume_eol(s)?;
-    let (postings, account) = parse_postings(s)?;
+    let (postings, account) = parse_postings(s, d)?;
     Transaction::new(d, desc, tags, postings, account)
 }
 
@@ -164,11 +165,49 @@ fn parse_commodity<R: Read>(s: &mut Scanner<R>) -> Result<Commodity> {
     Ok(Commodity::new(read_identifier(s)?))
 }
 
-fn parse_lot<R: Read>(_s: &mut Scanner<R>) -> Result<Lot> {
-    Ok(Lot)
+fn parse_lot<R: Read>(s: &mut Scanner<R>, d: NaiveDate) -> Result<Lot> {
+    consume_char(s, '{')?;
+    consume_space1(s)?;
+    let price = parse_decimal(s)?;
+    consume_space1(s)?;
+    let commodity = parse_commodity(s)?;
+    let mut label = None;
+    let mut date = d;
+    consume_space(s)?;
+    while let Some(',') = s.current() {
+        consume_char(s, ',')?;
+        consume_space(s)?;
+        match s.current() {
+            Some('"') => {
+                label = Some(read_quoted_string(s)?);
+                consume_space(s)?;
+            }
+            Some(d) if d.is_ascii_digit() => {
+                date = parse_date(s)?;
+                consume_space(s)?;
+            }
+            Some(c) => {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Expected label or date, got {}", c),
+                ))
+            }
+            None => {
+                return Err(Error::new(
+                    ErrorKind::UnexpectedEof,
+                    format!("Expected label or date, got EOF"),
+                ))
+            }
+        }
+    }
+    consume_char(s, '}')?;
+    Ok(Lot::new(price, commodity, date, label))
 }
 
-fn parse_postings<R: Read>(s: &mut Scanner<R>) -> Result<(Vec<Posting>, Option<Account>)> {
+fn parse_postings<R: Read>(
+    s: &mut Scanner<R>,
+    d: NaiveDate,
+) -> Result<(Vec<Posting>, Option<Account>)> {
     let mut postings = Vec::new();
     let mut wildcard = None;
     while s
@@ -196,7 +235,7 @@ fn parse_postings<R: Read>(s: &mut Scanner<R>) -> Result<(Vec<Posting>, Option<A
         let commodity = parse_commodity(s)?;
         consume_space1(s)?;
         if let Some('{') = s.current() {
-            lot = Some(parse_lot(s)?);
+            lot = Some(parse_lot(s, d)?);
             consume_space1(s)?;
         }
         if let Some('#') = s.current() {
@@ -486,7 +525,10 @@ mod tests {
         for (test, expected) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
-            assert_eq!(parse_postings(&mut s)?, *expected);
+            assert_eq!(
+                parse_postings(&mut s, NaiveDate::from_ymd(2020, 2, 2))?,
+                *expected
+            );
         }
         Ok(())
     }

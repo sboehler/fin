@@ -184,6 +184,10 @@ pub fn consume_space1<R: Read>(s: &mut Scanner<R>) -> Result<()> {
             ));
         }
     }
+    consume_space(s)
+}
+
+pub fn consume_space<R: Read>(s: &mut Scanner<R>) -> Result<()> {
     consume_while(s, |c| *c != '\n' && c.is_ascii_whitespace())
 }
 
