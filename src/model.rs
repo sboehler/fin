@@ -182,7 +182,7 @@ impl Assertion {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Directive {
+pub enum Command {
     Open(Open),
     Close(Close),
     Trx(Transaction),

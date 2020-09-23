@@ -1,15 +1,67 @@
 use crate::model::{
-    Account, AccountType, Assertion, Close, Commodity, Directive, Lot, Open, Posting, Price, Tag,
+    Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting, Price, Tag,
     Transaction,
 };
 use crate::scanner::{
-    consume_char, consume_eol, consume_space1, consume_string, read_identifier, read_quoted_string,
-    read_string, read_while, Scanner,
+    consume_char, consume_eol, consume_rest_of_line, consume_space1, consume_string, consume_while,
+    read_identifier, read_quoted_string, read_string, read_while, Scanner,
 };
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use std::io::{Error, ErrorKind, Read, Result};
+use std::path::PathBuf;
 use std::str::FromStr;
+
+pub enum Directive {
+    Command(Command),
+    Include(PathBuf),
+}
+
+pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
+    let mut result = Vec::new();
+    while let Some(c) = s.current() {
+        consume_while(s, |c| c.is_ascii_whitespace())?;
+        match c {
+            '0'..='9' => {
+                let c = parse_command(s)?;
+                result.push(Directive::Command(c))
+            }
+            '*' | '#' => {
+                consume_rest_of_line(s)?;
+            }
+            'i' => {
+                parse_include(s)?;
+            }
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Expected a directive, got {}", c),
+                ))
+            }
+        };
+    }
+    Ok(result)
+}
+
+pub fn parse_command<R: Read>(s: &mut Scanner<R>) -> Result<Command> {
+    let d = parse_date(s)?;
+    consume_space1(s)?;
+    match s.current() {
+        Some('p') => Ok(Command::Price(parse_price(d, s)?)),
+        Some('"') => Ok(Command::Trx(parse_transaction(d, s)?)),
+        Some('o') => Ok(Command::Open(parse_open(d, s)?)),
+        Some('b') => Ok(Command::Assertion(parse_assertion(d, s)?)),
+        Some('c') => Ok(Command::Close(parse_close(d, s)?)),
+        Some(c) => Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("Expected directive, found '{}'", c),
+        )),
+        None => Err(Error::new(
+            ErrorKind::UnexpectedEof,
+            format!("Expected directive, found EOF"),
+        )),
+    }
+}
 
 fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
     let s = read_identifier(s)?;
@@ -45,26 +97,6 @@ fn parse_account<R: Read>(s: &mut Scanner<R>) -> Result<Account> {
         segments.push(read_identifier(s)?)
     }
     Ok(Account::new(account_type, segments))
-}
-
-pub fn parse_directive<R: Read>(s: &mut Scanner<R>) -> Result<Directive> {
-    let d = parse_date(s)?;
-    consume_space1(s)?;
-    match s.current() {
-        Some('o') => Ok(Directive::Open(parse_open(d, s)?)),
-        Some('c') => Ok(Directive::Close(parse_close(d, s)?)),
-        Some('"') => Ok(Directive::Trx(parse_transaction(d, s)?)),
-        Some('p') => Ok(Directive::Price(parse_price(d, s)?)),
-        Some('b') => Ok(Directive::Assertion(parse_assertion(d, s)?)),
-        Some(c) => Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("Expected directive, found '{}'", c),
-        )),
-        None => Err(Error::new(
-            ErrorKind::UnexpectedEof,
-            format!("Expected directive, found EOF"),
-        )),
-    }
 }
 
 fn parse_open<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Open> {
@@ -203,6 +235,17 @@ fn parse_assertion<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Assertio
     consume_space1(s)?;
     consume_eol(s)?;
     Ok(Assertion::new(d, account, price, commodity))
+}
+
+fn parse_include<R: Read>(s: &mut Scanner<R>) -> Result<Directive> {
+    consume_string(s, "include")?;
+    consume_space1(s)?;
+    let directive = read_quoted_string(s)
+        .map(std::path::PathBuf::from)
+        .map(Directive::Include)?;
+    consume_space1(s)?;
+    consume_eol(s)?;
+    Ok(directive)
 }
 
 #[cfg(test)]
