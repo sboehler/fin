@@ -29,6 +29,6 @@ fn main() -> Result<()> {
         p.advance()?;
         let d = fin::parser::parse(&mut p)?;
         print!("{:#?}", d);
-     }
+    }
     Ok(())
 }
