@@ -1,5 +1,5 @@
+use std::io::Bytes;
 use std::io::Read;
-use std::io::{Bytes, Error, ErrorKind, Result};
 use unicode_reader::CodePoints;
 
 pub struct Scanner<R: Read> {
@@ -32,6 +32,45 @@ impl Position {
     }
 }
 
+#[derive(Debug)]
+pub enum ParserError {
+    IO(Position, std::io::Error),
+    Unexpected(Position, String),
+}
+
+impl std::fmt::Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ParserError::Unexpected(pos, msg) => write!(f, "{}: {}", pos, msg),
+            // This is a wrapper, so defer to the underlying types' implementation of `fmt`.
+            ParserError::IO(pos, err) => {
+                write!(f, "{}: IO Error: ", pos)?;
+                err.fmt(f)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParserError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match *self {
+            ParserError::IO(_, ref err) => Some(err),
+            // The cause is the underlying implementation error type. Is implicitly
+            // cast to the trait object `&error::Error`. This works because the
+            // underlying type already implements the `Error` trait.
+            ParserError::Unexpected(_, _) => None,
+        }
+    }
+}
+
+pub type Result<T> = std::result::Result<T, ParserError>;
+
+impl std::fmt::Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "(Line: {}, Column: {})", self.line, self.column)
+    }
+}
+
 impl<R: Read> Scanner<R> {
     pub fn new(r: R) -> Scanner<R> {
         Scanner {
@@ -44,26 +83,30 @@ impl<R: Read> Scanner<R> {
         self.cur
     }
     pub fn advance(&mut self) -> Result<()> {
-        let next = self.codepoints.next().transpose()?;
+        let next = self
+            .codepoints
+            .next()
+            .transpose()
+            .map_err(|e| ParserError::IO(self.position(), e))?;
         self.pos.update(self.cur, next);
         self.cur = next;
         Ok(())
     }
 
-    pub fn position(&self) -> &Position {
-        return &self.pos;
+    pub fn position(&self) -> Position {
+        return self.pos;
     }
 }
 
-impl<R: Read> Iterator for Scanner<R> {
-    type Item = Result<char>;
-    fn next(&mut self) -> Option<Result<char>> {
-        match self.advance() {
-            Err(e) => Some(Err(e)),
-            Ok(_) => self.current().map(|c| Ok(c)),
-        }
-    }
-}
+// impl<R: Read> Iterator for Scanner<R> {
+//     type Item = Result<char>;
+//     fn next(&mut self) -> Option<Result<char>> {
+//         match self.advance() {
+//             Err(e) => Some(Err(e)),
+//             Ok(_) => self.current().map(|c| Ok(c)),
+//         }
+//     }
+// }
 
 pub fn read_while<R: Read, P>(s: &mut Scanner<R>, pred: P) -> Result<String>
 where
@@ -109,14 +152,14 @@ pub fn consume_char<R: Read>(s: &mut Scanner<R>, c: char) -> Result<()> {
             if c == d {
                 s.advance()
             } else {
-                Err(Error::new(
-                    ErrorKind::InvalidData,
+                Err(ParserError::Unexpected(
+                    s.position(),
                     format!("Expected '{}', got '{}'", c, d),
                 ))
             }
         }
-        None => Err(Error::new(
-            ErrorKind::UnexpectedEof,
+        None => Err(ParserError::Unexpected(
+            s.position(),
             format!("Expected '{}', got EOF", c),
         )),
     }
@@ -139,8 +182,8 @@ pub fn read_quoted_string<R: Read>(s: &mut Scanner<R>) -> Result<String> {
 pub fn read_identifier<R: Read>(s: &mut Scanner<R>) -> Result<String> {
     let res = read_while(s, |c| c.is_alphanumeric())?;
     if res.len() == 0 {
-        Err(Error::new(
-            ErrorKind::InvalidData,
+        Err(ParserError::Unexpected(
+            s.position(),
             format!("Expected identifier, got nothing"),
         ))
     } else {
@@ -157,8 +200,8 @@ pub fn read_string<R: Read>(s: &mut Scanner<R>, n: usize) -> Result<String> {
                 s.advance()?
             }
             None => {
-                return Err(Error::new(
-                    ErrorKind::UnexpectedEof,
+                return Err(ParserError::Unexpected(
+                    s.position(),
                     format!("Expected more input, got EOF"),
                 ))
             }
@@ -178,8 +221,8 @@ pub fn consume_eol<R: Read>(s: &mut Scanner<R>) -> Result<()> {
 pub fn consume_space1<R: Read>(s: &mut Scanner<R>) -> Result<()> {
     if let Some(c) = s.current() {
         if !c.is_ascii_whitespace() {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
+            return Err(ParserError::Unexpected(
+                s.position(),
                 format!("Expected white space, got '{}'", c),
             ));
         }
@@ -199,7 +242,6 @@ pub fn consume_rest_of_line<R: Read>(s: &mut Scanner<R>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Result;
 
     #[test]
     fn test_read_while() -> Result<()> {
@@ -224,8 +266,9 @@ mod tests {
         let bs = "asdf".as_bytes();
         let mut s = Scanner::new(bs);
         s.advance()?;
-        for b in CodePoints::from(bs) {
-            consume_char(&mut s, b?)?
+        for codepoint in CodePoints::from(bs) {
+            let cp = codepoint.map_err(|e| ParserError::IO(s.position(), e))?;
+            consume_char(&mut s, cp)?
         }
         Ok(())
     }

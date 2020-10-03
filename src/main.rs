@@ -2,7 +2,7 @@ extern crate clap;
 extern crate fin;
 extern crate unicode_reader;
 use clap::{App, Arg};
-use fin::scanner::Scanner;
+use fin::scanner::{ParserError, Scanner};
 use std::fs::File;
 use std::io::Result;
 
@@ -25,10 +25,19 @@ fn main() -> Result<()> {
     if let Some(print_cmd) = matches.subcommand_matches("print") {
         let path = print_cmd.value_of("JOURNAL").unwrap();
         let file = File::open(path).expect("Could not open file");
-        let mut p = Scanner::new(file);
-        p.advance()?;
-        let d = fin::parser::parse(&mut p)?;
+        let d = parse(file).map_err(|e| match e {
+            ParserError::IO(_, e) => e,
+            ParserError::Unexpected(p, e) => {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{}: {}", p, e))
+            }
+        });
         print!("{:#?}", d);
     }
     Ok(())
+}
+
+fn parse(f: File) -> fin::scanner::Result<Vec<fin::parser::Directive>> {
+    let mut p = Scanner::new(f);
+    p.advance()?;
+    fin::parser::parse(&mut p)
 }

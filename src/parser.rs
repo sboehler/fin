@@ -4,11 +4,12 @@ use crate::model::{
 };
 use crate::scanner::{
     consume_char, consume_eol, consume_rest_of_line, consume_space, consume_space1, consume_string,
-    consume_while, read_identifier, read_quoted_string, read_string, read_while, Scanner,
+    consume_while, read_identifier, read_quoted_string, read_string, read_while, ParserError,
+    Result, Scanner,
 };
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use std::io::{Error, ErrorKind, Read, Result};
+use std::io::Read;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -36,8 +37,8 @@ pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
                     parse_include(s)?;
                 }
                 _ => {
-                    return Err(Error::new(
-                        ErrorKind::InvalidData,
+                    return Err(ParserError::Unexpected(
+                        s.position(),
                         format!("Expected a directive, got {}", c),
                     ))
                 }
@@ -56,29 +57,29 @@ pub fn parse_command<R: Read>(s: &mut Scanner<R>) -> Result<Command> {
         Some('o') => Ok(Command::Open(parse_open(d, s)?)),
         Some('b') => Ok(Command::Assertion(parse_assertion(d, s)?)),
         Some('c') => Ok(Command::Close(parse_close(d, s)?)),
-        Some(c) => Err(Error::new(
-            ErrorKind::InvalidData,
+        Some(c) => Err(ParserError::Unexpected(
+            s.position(),
             format!("Expected directive, found '{}'", c),
         )),
-        None => Err(Error::new(
-            ErrorKind::UnexpectedEof,
+        None => Err(ParserError::Unexpected(
+            s.position(),
             format!("Expected directive, found EOF"),
         )),
     }
 }
 
 fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
-    let s = read_identifier(s)?;
-    match s.as_str() {
+    let str = read_identifier(s)?;
+    match str.as_str() {
         "Assets" => Ok(AccountType::Assets),
         "Liabilities" => Ok(AccountType::Liabilities),
         "Equity" => Ok(AccountType::Equity),
         "Income" => Ok(AccountType::Income),
         "Expenses" => Ok(AccountType::Expenses),
         "TBD" => Ok(AccountType::TBD),
-        _ => Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("Expected account type, got '{}'", s),
+        _ => Err(ParserError::Unexpected(
+            s.position(),
+            format!("Expected account type, got '{}'", str),
         )),
     }
 }
@@ -87,8 +88,8 @@ fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
     let b = read_string(s, 10)?;
     match NaiveDate::parse_from_str(b.as_str(), "%Y-%m-%d") {
         Ok(d) => Ok(d),
-        Err(_) => Err(Error::new(
-            ErrorKind::InvalidData,
+        Err(_) => Err(ParserError::Unexpected(
+            s.position(),
             format!("Invalid date '{}'", b),
         )),
     }
@@ -135,6 +136,7 @@ fn parse_transaction<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Transa
     consume_eol(s)?;
     let (postings, account) = parse_postings(s, d)?;
     Transaction::new(d, desc, tags, postings, account)
+        .map_err(|e| ParserError::Unexpected(s.position(), e))
 }
 
 fn parse_tags<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Tag>> {
@@ -153,12 +155,8 @@ fn parse_tag<R: Read>(s: &mut Scanner<R>) -> Result<Tag> {
 
 fn parse_decimal<R: Read>(s: &mut Scanner<R>) -> Result<Decimal> {
     let t = read_while(s, |c| *c == '-' || *c == '.' || c.is_ascii_digit())?;
-    Decimal::from_str(&t).map_err(|e| {
-        Error::new(
-            ErrorKind::InvalidData,
-            format!("Error parsing decimal: {}", e),
-        )
-    })
+    Decimal::from_str(&t)
+        .map_err(|e| ParserError::Unexpected(s.position(), format!("Error parsing decimal: {}", e)))
 }
 
 fn parse_commodity<R: Read>(s: &mut Scanner<R>) -> Result<Commodity> {
@@ -187,14 +185,14 @@ fn parse_lot<R: Read>(s: &mut Scanner<R>, d: NaiveDate) -> Result<Lot> {
                 consume_space(s)?;
             }
             Some(c) => {
-                return Err(Error::new(
-                    ErrorKind::InvalidData,
+                return Err(ParserError::Unexpected(
+                    s.position(),
                     format!("Expected label or date, got {}", c),
                 ))
             }
             None => {
-                return Err(Error::new(
-                    ErrorKind::UnexpectedEof,
+                return Err(ParserError::Unexpected(
+                    s.position(),
                     format!("Expected label or date, got EOF"),
                 ))
             }
@@ -225,8 +223,8 @@ fn parse_postings<R: Read>(
                 consume_eol(s)?;
                 continue;
             }
-            return Err(Error::new(
-                ErrorKind::InvalidData,
+            return Err(ParserError::Unexpected(
+                s.position(),
                 format!("Duplicate wildcard"),
             ));
         }
@@ -294,8 +292,7 @@ fn parse_include<R: Read>(s: &mut Scanner<R>) -> Result<Directive> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scanner::read_all;
-    use std::io::Result;
+    use crate::scanner::{read_all, Result};
 
     #[test]
     fn test_parse_account_type() -> Result<()> {
@@ -443,7 +440,7 @@ mod tests {
                         },
                     ],
                     None,
-                )?,
+                ),
             ),
             (
                 "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1 -245.45 CHF",
@@ -461,7 +458,7 @@ mod tests {
                         },
                     ],
                     None,
-                )?,
+                ),
             ),
             (
                 "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1",
@@ -479,13 +476,16 @@ mod tests {
                         },
                     ],
                     None,
-                )?,
+                ),
             ),
         ];
         for (test, date, expected) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
             s.advance()?;
-            assert_eq!(parse_transaction(*date, &mut s)?, *expected);
+            let exp = expected
+                .as_ref()
+                .map_err(|e| ParserError::Unexpected(s.position(), e.to_string()))?;
+            assert_eq!(parse_transaction(*date, &mut s)?, *exp);
         }
         Ok(())
     }

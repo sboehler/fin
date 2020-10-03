@@ -2,7 +2,7 @@ use chrono::prelude::NaiveDate;
 use rust_decimal::prelude::{Decimal, Zero};
 use std::fmt;
 use std::fmt::Display;
-use std::io::{Error, ErrorKind, Result};
+use std::result::Result;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum AccountType {
@@ -73,7 +73,7 @@ impl Transaction {
         tags: Vec<Tag>,
         mut postings: Vec<Posting>,
         account: Option<Account>,
-    ) -> Result<Transaction> {
+    ) -> Result<Transaction, String> {
         let mut amounts: Vec<(Commodity, Decimal)> = Vec::with_capacity(postings.len());
         for p in postings.iter() {
             match amounts.iter_mut().find(|c| c.0 == p.commodity) {
@@ -86,7 +86,7 @@ impl Transaction {
                 continue;
             }
             match account {
-                None => return Err(Error::new(ErrorKind::InvalidData, format!("error"))),
+                None => return Err(format!("Transaction is not balanced")),
                 Some(ref a) => postings.push(Posting {
                     account: a.clone(),
                     commodity: amt.0.clone(),
