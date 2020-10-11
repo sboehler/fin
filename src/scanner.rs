@@ -42,7 +42,6 @@ impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             ParserError::Unexpected(pos, msg) => write!(f, "{}: {}", pos, msg),
-            // This is a wrapper, so defer to the underlying types' implementation of `fmt`.
             ParserError::IO(pos, err) => {
                 write!(f, "{}: IO Error: ", pos)?;
                 err.fmt(f)
@@ -53,12 +52,9 @@ impl std::fmt::Display for ParserError {
 
 impl std::error::Error for ParserError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match *self {
-            ParserError::IO(_, ref err) => Some(err),
-            // The cause is the underlying implementation error type. Is implicitly
-            // cast to the trait object `&error::Error`. This works because the
-            // underlying type already implements the `Error` trait.
-            ParserError::Unexpected(_, _) => None,
+        match self {
+            ParserError::IO(_, err) => Some(err),
+            _ => None,
         }
     }
 }
