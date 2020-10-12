@@ -2,7 +2,7 @@ extern crate clap;
 extern crate fin;
 extern crate unicode_reader;
 use clap::{App, Arg};
-use fin::scanner::{ParserError, Scanner};
+use fin::scanner::Scanner;
 use std::fs::File;
 
 fn main() {
@@ -26,8 +26,7 @@ fn main() {
         let file = File::open(path).expect("Could not open file");
         let d = parse(file);
         match d {
-            Err(ParserError::IO(_, e)) => println!("{}", e),
-            Err(e @ ParserError::Unexpected(_, _)) => println!("{}", e),
+            Err(e) => println!("{}", e),
             Ok(ds) => {
                 for d in &ds {
                     println!("{}", d);
