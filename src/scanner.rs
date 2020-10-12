@@ -9,20 +9,18 @@ pub struct Position {
 }
 
 impl Position {
-    fn update(&mut self, cur: Option<char>, new: Option<char>) {
-        match new {
-            Some('\n') => {
+    pub fn new() -> Self {
+        Position { line: 0, column: 0 }
+    }
+    pub fn update(&mut self, cur: Option<char>, new: Option<char>) {
+        match (cur, new) {
+            (Some(c), _) if c != '\n' => self.column += 1,
+            (_, Some(_)) => {
                 self.line += 1;
-                self.column = 0;
-            }
-            Some(_) => {
-                self.column += 1;
-            }
-            None if cur.is_some() => {
-                self.column += 1;
+                self.column = 1;
             }
             _ => {}
-        };
+        }
     }
 }
 
@@ -41,7 +39,7 @@ pub enum ParserError {
 impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ParserError::Unexpected(pos, msg) => write!(f, "{}: {}", pos, msg),
+            ParserError::Unexpected(pos, msg) => write!(f, "{}: Error: {}", pos, msg),
             ParserError::IO(pos, err) => {
                 write!(f, "{}: IO Error: ", pos)?;
                 err.fmt(f)
@@ -72,7 +70,7 @@ impl<R: Read> Scanner<R> {
         Scanner {
             codepoints: CodePoints::from(r),
             cur: None,
-            pos: Position { line: 0, column: 0 },
+            pos: Position::new(),
         }
     }
     pub fn current(&self) -> Option<char> {
@@ -144,19 +142,14 @@ where
 
 pub fn consume_char<R: Read>(s: &mut Scanner<R>, c: char) -> Result<()> {
     match s.current() {
-        Some(d) => {
-            if c == d {
-                s.advance()
-            } else {
-                Err(ParserError::Unexpected(
-                    s.position(),
-                    format!("Expected '{}', got '{}'", c, d),
-                ))
-            }
-        }
+        Some(d) if c == d => s.advance(),
+        Some(d) => Err(ParserError::Unexpected(
+            s.position(),
+            format!("Expected {:?}, got {:?}", c, d),
+        )),
         None => Err(ParserError::Unexpected(
             s.position(),
-            format!("Expected '{}', got EOF", c),
+            format!("Expected {:?}, got EOF", c),
         )),
     }
 }
@@ -219,7 +212,7 @@ pub fn consume_space1<R: Read>(s: &mut Scanner<R>) -> Result<()> {
         if !c.is_ascii_whitespace() {
             return Err(ParserError::Unexpected(
                 s.position(),
-                format!("Expected white space, got '{}'", c),
+                format!("Expected white space, got {:?}", c),
             ));
         }
     }

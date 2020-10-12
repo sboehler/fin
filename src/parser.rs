@@ -9,6 +9,8 @@ use crate::scanner::{
 };
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
+use std::fmt;
+use std::fmt::Display;
 use std::io::Read;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -19,6 +21,15 @@ pub enum Directive {
     Include(PathBuf),
 }
 
+impl Display for Directive {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Directive::Command(c) = &self {
+            write!(f, "{}", c)?;
+        }
+        Ok(())
+    }
+}
+
 pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
     let mut result = Vec::new();
     while s.current().is_some() {
@@ -27,7 +38,6 @@ pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
             match c {
                 '0'..='9' => {
                     let c = parse_command(s)?;
-                    print!("{:#?}", c);
                     result.push(Directive::Command(c))
                 }
                 '*' | '#' => {
@@ -39,7 +49,7 @@ pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
                 _ => {
                     return Err(ParserError::Unexpected(
                         s.position(),
-                        format!("Expected a directive, got {}", c),
+                        format!("Expected a directive, got {:?}", c),
                     ))
                 }
             };
@@ -59,7 +69,7 @@ pub fn parse_command<R: Read>(s: &mut Scanner<R>) -> Result<Command> {
         Some('c') => Ok(Command::Close(parse_close(d, s)?)),
         Some(c) => Err(ParserError::Unexpected(
             s.position(),
-            format!("Expected directive, found '{}'", c),
+            format!("Expected directive, found {:?}", c),
         )),
         None => Err(ParserError::Unexpected(
             s.position(),
@@ -79,7 +89,7 @@ fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
         "TBD" => Ok(AccountType::TBD),
         _ => Err(ParserError::Unexpected(
             s.position(),
-            format!("Expected account type, got '{}'", str),
+            format!("Expected account type, got {:?}", str),
         )),
     }
 }
@@ -90,7 +100,7 @@ fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
         Ok(d) => Ok(d),
         Err(_) => Err(ParserError::Unexpected(
             s.position(),
-            format!("Invalid date '{}'", b),
+            format!("Invalid date {:?}", b),
         )),
     }
 }

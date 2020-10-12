@@ -4,9 +4,8 @@ extern crate unicode_reader;
 use clap::{App, Arg};
 use fin::scanner::{ParserError, Scanner};
 use std::fs::File;
-use std::io::Result;
 
-fn main() -> Result<()> {
+fn main() {
     let matches = App::new("fin")
         .version("0.1")
         .about("A personal finance tool")
@@ -25,15 +24,18 @@ fn main() -> Result<()> {
     if let Some(print_cmd) = matches.subcommand_matches("print") {
         let path = print_cmd.value_of("JOURNAL").unwrap();
         let file = File::open(path).expect("Could not open file");
-        let d = parse(file).map_err(|e| match e {
-            ParserError::IO(_, e) => e,
-            ParserError::Unexpected(p, e) => {
-                std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{}: {}", p, e))
+        let d = parse(file);
+        match d {
+            Err(ParserError::IO(_, e)) => println!("{}", e),
+            Err(e @ ParserError::Unexpected(_, _)) => println!("{}", e),
+            Ok(ds) => {
+                for d in &ds {
+                    println!("{}", d);
+                    println!();
+                }
             }
-        });
-        print!("{:#?}", d);
+        };
     }
-    Ok(())
 }
 
 fn parse(f: File) -> fin::scanner::Result<Vec<fin::parser::Directive>> {

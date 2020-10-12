@@ -52,10 +52,22 @@ pub struct Open {
     pub account: Account,
 }
 
+impl Display for Open {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} open {}", self.date.format("%Y-%m-%d"), self.account)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Close {
     pub date: NaiveDate,
     pub account: Account,
+}
+
+impl Display for Close {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} close {}", self.date.format("%Y-%m-%d"), self.account)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,9 +97,9 @@ impl Transaction {
             if amt.1.is_zero() {
                 continue;
             }
-            match account {
+            match &account {
                 None => return Err(format!("Transaction is not balanced")),
-                Some(ref a) => postings.push(Posting {
+                Some(a) => postings.push(Posting {
                     account: a.clone(),
                     commodity: amt.0.clone(),
                     amount: -amt.1,
@@ -105,6 +117,25 @@ impl Transaction {
     }
 }
 
+impl Display for Transaction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} \"{}\"",
+            self.date.format("%Y-%m-%d"),
+            self.description
+        )?;
+        for t in &self.tags {
+            write!(f, " {}", t)?
+        }
+        for posting in &self.postings {
+            writeln!(f)?;
+            write!(f, "{}", posting)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tag {
     tag: String,
@@ -116,6 +147,12 @@ impl Tag {
     }
 }
 
+impl Display for Tag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "#{}", self.tag)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Posting {
     pub account: Account,
@@ -123,6 +160,19 @@ pub struct Posting {
     pub amount: Decimal,
     pub lot: Option<Lot>,
     pub tag: Option<Tag>,
+}
+
+impl Display for Posting {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {} {}", self.account, self.amount, self.commodity)?;
+        if let Some(l) = &self.lot {
+            write!(f, " {}", l)?
+        }
+        if let Some(t) = &self.tag {
+            write!(f, " {}", t)?
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -149,6 +199,16 @@ impl Lot {
     }
 }
 
+impl Display for Lot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{ {} {}, {}", self.price, self.commodity, self.date)?;
+        if let Some(l) = &self.label {
+            write!(f, ", {}", l)?
+        }
+        write!(f, "}}")
+    }
+}
+
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Commodity {
     name: String,
@@ -157,6 +217,12 @@ pub struct Commodity {
 impl Commodity {
     pub fn new(name: String) -> Commodity {
         Commodity { name }
+    }
+}
+
+impl Display for Commodity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 
@@ -176,6 +242,19 @@ impl Price {
             source,
             target,
         }
+    }
+}
+
+impl Display for Price {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} price {} {} {}",
+            self.date.format("%Y-%m-%d"),
+            self.source,
+            self.price,
+            self.target
+        )
     }
 }
 
@@ -203,6 +282,19 @@ impl Assertion {
     }
 }
 
+impl Display for Assertion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {} {} {}",
+            self.date.format("%Y-%m-%d"),
+            self.account,
+            self.balance,
+            self.commodity
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Open(Open),
@@ -210,4 +302,16 @@ pub enum Command {
     Trx(Transaction),
     Price(Price),
     Assertion(Assertion),
+}
+
+impl Display for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Command::Open(o) => write!(f, "{}", o),
+            Command::Close(c) => write!(f, "{}", c),
+            Command::Trx(t) => write!(f, "{}", t),
+            Command::Price(p) => write!(f, "{}", p),
+            Command::Assertion(a) => write!(f, "{}", a),
+        }
+    }
 }
