@@ -154,7 +154,7 @@ fn parse_tag<R: Read>(s: &mut Scanner<R>) -> Result<Tag> {
 }
 
 fn parse_decimal<R: Read>(s: &mut Scanner<R>) -> Result<Decimal> {
-    let t = read_while(s, |c| *c == '-' || *c == '.' || c.is_ascii_digit())?;
+    let t = read_while(s, |c| c == '-' || c == '.' || c.is_ascii_digit())?;
     Decimal::from_str(&t)
         .map_err(|e| ParserError::Unexpected(s.position(), format!("Error parsing decimal: {}", e)))
 }

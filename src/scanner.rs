@@ -2,12 +2,6 @@ use std::io::Bytes;
 use std::io::Read;
 use unicode_reader::CodePoints;
 
-pub struct Scanner<R: Read> {
-    codepoints: CodePoints<Bytes<R>>,
-    cur: Option<char>,
-    pos: Position,
-}
-
 #[derive(Debug, Copy, Clone)]
 pub struct Position {
     line: u64,
@@ -29,6 +23,12 @@ impl Position {
             }
             _ => {}
         };
+    }
+}
+
+impl std::fmt::Display for Position {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "(Line: {}, Column: {})", self.line, self.column)
     }
 }
 
@@ -61,10 +61,10 @@ impl std::error::Error for ParserError {
 
 pub type Result<T> = std::result::Result<T, ParserError>;
 
-impl std::fmt::Display for Position {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "(Line: {}, Column: {})", self.line, self.column)
-    }
+pub struct Scanner<R: Read> {
+    codepoints: CodePoints<Bytes<R>>,
+    cur: Option<char>,
+    pos: Position,
 }
 
 impl<R: Read> Scanner<R> {
@@ -106,11 +106,11 @@ impl<R: Read> Scanner<R> {
 
 pub fn read_while<R: Read, P>(s: &mut Scanner<R>, pred: P) -> Result<String>
 where
-    P: Fn(&char) -> bool,
+    P: Fn(char) -> bool,
 {
     let mut b = String::new();
     while let Some(c) = s.current() {
-        if pred(&c) {
+        if pred(c) {
             b.push(c)
         } else {
             break;
@@ -170,7 +170,7 @@ pub fn consume_string<R: Read>(s: &mut Scanner<R>, str: &str) -> Result<()> {
 
 pub fn read_quoted_string<R: Read>(s: &mut Scanner<R>) -> Result<String> {
     consume_char(s, '"')?;
-    let res = read_while(s, |c| *c != '"')?;
+    let res = read_while(s, |c| c != '"')?;
     consume_char(s, '"')?;
     Ok(res)
 }
@@ -243,7 +243,7 @@ mod tests {
     fn test_read_while() -> Result<()> {
         let mut s = Scanner::new("asdf".as_bytes());
         s.advance()?;
-        assert_eq!(read_while(&mut s, |&c| c != 'f')?, "asd");
+        assert_eq!(read_while(&mut s, |c| c != 'f')?, "asd");
         Ok(())
     }
 
