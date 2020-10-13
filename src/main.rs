@@ -2,8 +2,10 @@ extern crate clap;
 extern crate fin;
 extern crate unicode_reader;
 use clap::{App, Arg};
+use fin::parser::Directive;
 use fin::scanner::Scanner;
 use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 fn main() {
     let matches = App::new("fin")
@@ -24,7 +26,8 @@ fn main() {
     if let Some(print_cmd) = matches.subcommand_matches("print") {
         let path = print_cmd.value_of("JOURNAL").unwrap();
         let file = File::open(path).expect("Could not open file");
-        let d = parse(file);
+        let f = BufReader::new(file);
+        let d = parse(f);
         match d {
             Err(e) => println!("{}", e),
             Ok(ds) => {
@@ -37,7 +40,7 @@ fn main() {
     }
 }
 
-fn parse(f: File) -> fin::scanner::Result<Vec<fin::parser::Directive>> {
+fn parse<B: BufRead>(f: B) -> fin::scanner::Result<Vec<Directive>> {
     let mut p = Scanner::new(f);
     p.advance()?;
     fin::parser::parse(&mut p)
