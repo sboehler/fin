@@ -17,3 +17,19 @@ impl Display for Commodity {
         write!(f, "{}", self.name)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fmt() {
+        let tests = [
+            (Commodity::new("USD".into()), "USD"),
+            (Commodity::new("100T".into()), "100T"),
+        ];
+        for (test, expected) in tests.iter() {
+            assert_eq!(format!("{}", test), **expected);
+        }
+    }
+}
