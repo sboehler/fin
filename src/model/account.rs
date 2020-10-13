@@ -42,3 +42,22 @@ impl Display for Account {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fmt() {
+        let tests = [
+            (
+                Account::new(AccountType::Assets, vec!["Bank".into(), "Checking".into()]),
+                "Assets:Bank:Checking",
+            ),
+            (Account::new(AccountType::TBD, vec![]), "TBD"),
+        ];
+        for (test, expected) in tests.iter() {
+            assert_eq!(format!("{}", test), **expected);
+        }
+    }
+}
