@@ -29,7 +29,7 @@ fn main() {
         let f = BufReader::new(file);
         let d = parse(f);
         match d {
-            Err(e) => println!("{}", e),
+            Err(e) => eprintln!("{}", e),
             Ok(ds) => {
                 for d in &ds {
                     println!("{}", d);
