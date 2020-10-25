@@ -73,7 +73,7 @@ pub fn parse_command<R: Read>(s: &mut Scanner<R>) -> Result<Command> {
         )),
         None => Err(ParserError::Unexpected(
             s.position(),
-            format!("Expected directive, found EOF"),
+            "Expected directive, found EOF".into(),
         )),
     }
 }
@@ -203,7 +203,7 @@ fn parse_lot<R: Read>(s: &mut Scanner<R>, d: NaiveDate) -> Result<Lot> {
             None => {
                 return Err(ParserError::Unexpected(
                     s.position(),
-                    format!("Expected label or date, got EOF"),
+                    "Expected label or date, got EOF".into(),
                 ))
             }
         }
@@ -235,7 +235,7 @@ fn parse_postings<R: Read>(
             }
             return Err(ParserError::Unexpected(
                 s.position(),
-                format!("Duplicate wildcard"),
+                "Duplicate wildcard".into(),
             ));
         }
         let amount = parse_decimal(s)?;
@@ -306,7 +306,7 @@ mod tests {
 
     #[test]
     fn test_parse_account_type() -> Result<()> {
-        let mut s = Scanner::new("Assets".as_bytes());
+        let mut s = Scanner::new(&b"Assets"[..]);
         s.advance()?;
         assert_eq!(parse_account_type(&mut s)?, AccountType::Assets);
         Ok(())
@@ -397,7 +397,7 @@ mod tests {
                 vec![Tag::new("tag1".into()), Tag::new("1tag".into())],
                 "no more tags",
             ),
-            ("".into(), vec![], "".into()),
+            ("", vec![], ""),
         ];
         for (test, want, remainder) in tests.iter() {
             let mut s = Scanner::new(test.as_bytes());
@@ -482,7 +482,7 @@ mod tests {
                         Posting {
                             account: Account::new(AccountType::Income, vec!["Gains1".into()]),
                             amount: Decimal::new(-24545, 2),
-                            ..(posting.clone())
+                            ..posting
                         },
                     ],
                     None,
@@ -527,7 +527,7 @@ mod tests {
             (
                 "Assets:Account1 245.45 CHF\nIncome:Gains1",
                 (
-                    vec![posting.clone()],
+                    vec![posting],
                     Some(Account::new(AccountType::Income, vec!["Gains1".into()])),
                 ),
             ),

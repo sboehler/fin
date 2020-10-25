@@ -24,6 +24,12 @@ impl Position {
     }
 }
 
+impl Default for Position {
+    fn default() -> Self {
+        Position::new()
+    }
+}
+
 impl std::fmt::Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "(Line: {}, Column: {})", self.line, self.column)
@@ -88,7 +94,7 @@ impl<R: Read> Scanner<R> {
     }
 
     pub fn position(&self) -> Position {
-        return self.pos;
+        self.pos
     }
 }
 
@@ -170,10 +176,10 @@ pub fn read_quoted_string<R: Read>(s: &mut Scanner<R>) -> Result<String> {
 
 pub fn read_identifier<R: Read>(s: &mut Scanner<R>) -> Result<String> {
     let res = read_while(s, |c| c.is_alphanumeric())?;
-    if res.len() == 0 {
+    if res.is_empty() {
         Err(ParserError::Unexpected(
             s.position(),
-            format!("Expected identifier, got nothing"),
+            "Expected identifier, got nothing".to_string(),
         ))
     } else {
         Ok(res)
@@ -191,7 +197,7 @@ pub fn read_string<R: Read>(s: &mut Scanner<R>, n: usize) -> Result<String> {
             None => {
                 return Err(ParserError::Unexpected(
                     s.position(),
-                    format!("Expected more input, got EOF"),
+                    "Expected more input, got EOF".to_string(),
                 ))
             }
         }
@@ -234,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_read_while() -> Result<()> {
-        let mut s = Scanner::new("asdf".as_bytes());
+        let mut s = Scanner::new(&b"asdf"[..]);
         s.advance()?;
         assert_eq!(read_while(&mut s, |c| c != 'f')?, "asd");
         Ok(())
@@ -242,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_consume_while() -> Result<()> {
-        let mut s = Scanner::new("asdf".as_bytes());
+        let mut s = Scanner::new(&b"asdf"[..]);
         s.advance()?;
         consume_while(&mut s, |&c| c != 'f')?;
         consume_char(&mut s, 'f')?;
@@ -252,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_consume_char() -> Result<()> {
-        let bs = "asdf".as_bytes();
+        let bs = &b"asdf"[..];
         let mut s = Scanner::new(bs);
         s.advance()?;
         for codepoint in CodePoints::from(bs) {

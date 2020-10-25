@@ -34,7 +34,7 @@ impl Transaction {
                 continue;
             }
             match &account {
-                None => return Err(format!("Transaction is not balanced")),
+                None => return Err("Transaction is not balanced".into()),
                 Some(a) => postings.push(Posting {
                     account: a.clone(),
                     commodity: amt.0.clone(),
@@ -47,8 +47,8 @@ impl Transaction {
         Ok(Transaction {
             date: d,
             description: desc,
-            tags: tags,
-            postings: postings,
+            tags,
+            postings,
         })
     }
 }
