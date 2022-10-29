@@ -8,7 +8,6 @@ pub enum AccountType {
     Equity,
     Income,
     Expenses,
-    TBD,
 }
 
 impl Display for AccountType {
@@ -54,7 +53,7 @@ mod tests {
                 Account::new(AccountType::Assets, vec!["Bank".into(), "Checking".into()]),
                 "Assets:Bank:Checking",
             ),
-            (Account::new(AccountType::TBD, vec![]), "TBD"),
+            (Account::new(AccountType::Expenses, vec![]), "Expenses"),
         ];
         for (test, expected) in tests.iter() {
             assert_eq!(format!("{}", test), **expected);

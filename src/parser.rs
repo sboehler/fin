@@ -86,7 +86,6 @@ fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
         "Equity" => Ok(AccountType::Equity),
         "Income" => Ok(AccountType::Income),
         "Expenses" => Ok(AccountType::Expenses),
-        "TBD" => Ok(AccountType::TBD),
         _ => Err(ParserError::Unexpected(
             s.position(),
             format!("Expected account type, got {:?}", str),
