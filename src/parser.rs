@@ -11,7 +11,6 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use std::fmt;
 use std::fmt::Display;
-use std::io::Read;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -30,7 +29,7 @@ impl Display for Directive {
     }
 }
 
-pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
+pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
     let mut result = Vec::new();
     while s.current().is_some() {
         consume_while(s, |c| c.is_ascii_whitespace())?;
@@ -58,7 +57,7 @@ pub fn parse<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Directive>> {
     Ok(result)
 }
 
-pub fn parse_command<R: Read>(s: &mut Scanner<R>) -> Result<Command> {
+pub fn parse_command(s: &mut Scanner) -> Result<Command> {
     let d = parse_date(s)?;
     consume_space1(s)?;
     match s.current() {
@@ -78,7 +77,7 @@ pub fn parse_command<R: Read>(s: &mut Scanner<R>) -> Result<Command> {
     }
 }
 
-fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
+fn parse_account_type(s: &mut Scanner) -> Result<AccountType> {
     let str = read_identifier(s)?;
     match str.as_str() {
         "Assets" => Ok(AccountType::Assets),
@@ -93,7 +92,7 @@ fn parse_account_type<R: Read>(s: &mut Scanner<R>) -> Result<AccountType> {
     }
 }
 
-fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
+fn parse_date(s: &mut Scanner) -> Result<NaiveDate> {
     let b = read_string(s, 10)?;
     match NaiveDate::parse_from_str(b.as_str(), "%Y-%m-%d") {
         Ok(d) => Ok(d),
@@ -104,7 +103,7 @@ fn parse_date<R: Read>(s: &mut Scanner<R>) -> Result<NaiveDate> {
     }
 }
 
-fn parse_account<R: Read>(s: &mut Scanner<R>) -> Result<Account> {
+fn parse_account(s: &mut Scanner) -> Result<Account> {
     let account_type = parse_account_type(s)?;
     let mut segments = Vec::new();
     while let Some(':') = s.current() {
@@ -114,7 +113,7 @@ fn parse_account<R: Read>(s: &mut Scanner<R>) -> Result<Account> {
     Ok(Account::new(account_type, segments))
 }
 
-fn parse_open<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Open> {
+fn parse_open(d: NaiveDate, s: &mut Scanner) -> Result<Open> {
     consume_string(s, "open")?;
     consume_space1(s)?;
     let a = parse_account(s)?;
@@ -126,7 +125,7 @@ fn parse_open<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Open> {
     })
 }
 
-fn parse_close<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Close> {
+fn parse_close(d: NaiveDate, s: &mut Scanner) -> Result<Close> {
     consume_string(s, "close")?;
     consume_space1(s)?;
     let a = parse_account(s)?;
@@ -138,7 +137,7 @@ fn parse_close<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Close> {
     })
 }
 
-fn parse_transaction<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Transaction> {
+fn parse_transaction(d: NaiveDate, s: &mut Scanner) -> Result<Transaction> {
     let desc = read_quoted_string(s)?;
     consume_space1(s)?;
     let tags = parse_tags(s)?;
@@ -148,7 +147,7 @@ fn parse_transaction<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Transa
         .map_err(|e| ParserError::Unexpected(s.position(), e))
 }
 
-fn parse_tags<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Tag>> {
+fn parse_tags(s: &mut Scanner) -> Result<Vec<Tag>> {
     let mut v = Vec::new();
     while let Some('#') = s.current() {
         v.push(parse_tag(s)?);
@@ -157,22 +156,22 @@ fn parse_tags<R: Read>(s: &mut Scanner<R>) -> Result<Vec<Tag>> {
     Ok(v)
 }
 
-fn parse_tag<R: Read>(s: &mut Scanner<R>) -> Result<Tag> {
+fn parse_tag(s: &mut Scanner) -> Result<Tag> {
     consume_char(s, '#')?;
     Ok(Tag::new(read_identifier(s)?))
 }
 
-fn parse_decimal<R: Read>(s: &mut Scanner<R>) -> Result<Decimal> {
-    let t = read_while(s, |c| c == '-' || c == '.' || c.is_ascii_digit())?;
+fn parse_decimal(s: &mut Scanner) -> Result<Decimal> {
+    let t = read_while(s, |c| *c == '-' || *c == '.' || c.is_ascii_digit())?;
     Decimal::from_str(&t)
         .map_err(|e| ParserError::Unexpected(s.position(), format!("Error parsing decimal: {}", e)))
 }
 
-fn parse_commodity<R: Read>(s: &mut Scanner<R>) -> Result<Commodity> {
+fn parse_commodity(s: &mut Scanner) -> Result<Commodity> {
     Ok(Commodity::new(read_identifier(s)?))
 }
 
-fn parse_lot<R: Read>(s: &mut Scanner<R>, d: NaiveDate) -> Result<Lot> {
+fn parse_lot(s: &mut Scanner, d: NaiveDate) -> Result<Lot> {
     consume_char(s, '{')?;
     consume_space1(s)?;
     let price = parse_decimal(s)?;
@@ -211,10 +210,7 @@ fn parse_lot<R: Read>(s: &mut Scanner<R>, d: NaiveDate) -> Result<Lot> {
     Ok(Lot::new(price, commodity, date, label))
 }
 
-fn parse_postings<R: Read>(
-    s: &mut Scanner<R>,
-    d: NaiveDate,
-) -> Result<(Vec<Posting>, Option<Account>)> {
+fn parse_postings(s: &mut Scanner, d: NaiveDate) -> Result<(Vec<Posting>, Option<Account>)> {
     let mut postings = Vec::new();
     let mut wildcard = None;
     while s
@@ -261,7 +257,7 @@ fn parse_postings<R: Read>(
     Ok((postings, wildcard))
 }
 
-fn parse_price<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Price> {
+fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Price> {
     consume_string(s, "price")?;
     consume_space1(s)?;
     let source = parse_commodity(s)?;
@@ -274,7 +270,7 @@ fn parse_price<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Price> {
     Ok(Price::new(d, price, target, source))
 }
 
-fn parse_assertion<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Assertion> {
+fn parse_assertion(d: NaiveDate, s: &mut Scanner) -> Result<Assertion> {
     consume_string(s, "balance")?;
     consume_space1(s)?;
     let account = parse_account(s)?;
@@ -287,7 +283,7 @@ fn parse_assertion<R: Read>(d: NaiveDate, s: &mut Scanner<R>) -> Result<Assertio
     Ok(Assertion::new(d, account, price, commodity))
 }
 
-fn parse_include<R: Read>(s: &mut Scanner<R>) -> Result<Directive> {
+fn parse_include(s: &mut Scanner) -> Result<Directive> {
     consume_string(s, "include")?;
     consume_space1(s)?;
     let directive = read_quoted_string(s)
@@ -305,8 +301,7 @@ mod tests {
 
     #[test]
     fn test_parse_account_type() -> Result<()> {
-        let mut s = Scanner::new(&b"Assets"[..]);
-        s.advance()?;
+        let mut s = Scanner::new("Assets".into());
         assert_eq!(parse_account_type(&mut s)?, AccountType::Assets);
         Ok(())
     }
@@ -318,8 +313,7 @@ mod tests {
             ("2020-09-15 ", chrono::NaiveDate::from_ymd(2020, 9, 15), " "),
         ];
         for (test, expected, remainder) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(parse_date(&mut s)?, *expected);
             assert_eq!(read_all(&mut s)?, *remainder)
         }
@@ -339,8 +333,7 @@ mod tests {
             ),
         ];
         for (test, expected) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(parse_account(&mut s)?, *expected);
         }
         Ok(())
@@ -360,8 +353,7 @@ mod tests {
             },
         )];
         for (test, d, want) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(parse_open(*d, &mut s)?, *want)
         }
         Ok(())
@@ -381,8 +373,7 @@ mod tests {
             },
         )];
         for (test, d, want) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(parse_close(*d, &mut s)?, *want)
         }
         Ok(())
@@ -399,8 +390,7 @@ mod tests {
             ("", vec![], ""),
         ];
         for (test, want, remainder) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(parse_tags(&mut s)?, *want);
             assert_eq!(read_all(&mut s)?, *remainder)
         }
@@ -415,8 +405,7 @@ mod tests {
             ("3.14159265359", Decimal::new(314159265359, 11), ""),
         ];
         for (test, expected, remainder) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(parse_decimal(&mut s)?, *expected);
             assert_eq!(read_all(&mut s)?, *remainder)
         }
@@ -489,8 +478,7 @@ mod tests {
             ),
         ];
         for (test, date, expected) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             let exp = expected
                 .as_ref()
                 .map_err(|e| ParserError::Unexpected(s.position(), e.to_string()))?;
@@ -532,8 +520,7 @@ mod tests {
             ),
         ];
         for (test, expected) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(
                 parse_postings(&mut s, NaiveDate::from_ymd(2020, 2, 2))?,
                 *expected
@@ -567,8 +554,7 @@ mod tests {
             ),
         ];
         for (test, d, want) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(parse_price(*d, &mut s)?, *want)
         }
         Ok(())
@@ -599,8 +585,7 @@ mod tests {
             ),
         ];
         for (test, d, want) in tests.iter() {
-            let mut s = Scanner::new(test.as_bytes());
-            s.advance()?;
+            let mut s = Scanner::new(test.to_string());
             assert_eq!(parse_assertion(*d, &mut s)?, *want)
         }
         Ok(())
