@@ -23,10 +23,10 @@ pub struct Account {
 }
 
 impl Account {
-    pub fn new(account_type: AccountType, segments: Vec<String>) -> Account {
+    pub fn new(account_type: AccountType, segments: Vec<&str>) -> Account {
         Account {
             account_type,
-            segments,
+            segments: segments.iter().map(|s| s.to_string()).collect(),
         }
     }
 }

@@ -11,7 +11,7 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let text = fs::read_to_string(&self.journal)?;
-        let mut p = Scanner::new(text);
+        let mut p = Scanner::new(&text);
         let ds = parse(&mut p)?;
         for d in &ds {
             println!("{}", d);

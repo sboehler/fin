@@ -1,42 +1,8 @@
-use std::{iter::Peekable, vec::IntoIter};
-
-#[derive(Debug, Copy, Clone)]
-pub struct Position {
-    line: u64,
-    column: u64,
-}
-
-impl Position {
-    pub fn new() -> Self {
-        Position { line: 0, column: 0 }
-    }
-    pub fn update(&mut self, cur: Option<char>, new: Option<char>) {
-        match (cur, new) {
-            (Some(c), _) if c != '\n' => self.column += 1,
-            (_, Some(_)) => {
-                self.line += 1;
-                self.column = 1;
-            }
-            _ => {}
-        }
-    }
-}
-
-impl Default for Position {
-    fn default() -> Self {
-        Position::new()
-    }
-}
-
-impl std::fmt::Display for Position {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "(Line: {}, Column: {})", self.line, self.column)
-    }
-}
+use std::{iter::Peekable, str::CharIndices};
 
 #[derive(Debug)]
 pub enum ParserError {
-    Unexpected(Position, String),
+    Unexpected(usize, String),
 }
 
 impl std::fmt::Display for ParserError {
@@ -51,164 +17,146 @@ impl std::error::Error for ParserError {}
 
 pub type Result<T> = std::result::Result<T, ParserError>;
 
-pub struct Scanner {
-    chars: Peekable<IntoIter<char>>,
-    pos: Position,
+pub struct Scanner<'a> {
+    source: &'a str,
+    chars: Peekable<CharIndices<'a>>,
 }
 
-impl Scanner {
-    pub fn new(s: String) -> Scanner {
-        let c = s.chars().collect::<Vec<char>>().into_iter().peekable();
+impl<'a> Scanner<'a> {
+    pub fn new(s: &'a str) -> Scanner<'a> {
         Scanner {
-            chars: c,
-            pos: Position::new(),
+            source: &s,
+            chars: s.char_indices().peekable(),
         }
     }
 
     pub fn current(&mut self) -> Option<char> {
-        self.chars.peek().copied()
+        self.chars.peek().map(|t| t.1)
     }
 
-    pub fn advance(&mut self) -> Option<char> {
-        let cur = self.current();
-        self.chars.next();
-        let next = self.current();
-        self.pos.update(cur, next);
-        next
+    pub fn next(&mut self) -> Option<char> {
+        self.chars.next().map(|t| t.1)
     }
 
-    pub fn position(&self) -> Position {
-        self.pos
+    pub fn pos(&mut self) -> usize {
+        self.chars
+            .peek()
+            .map(|t| t.0)
+            .unwrap_or_else(|| self.source.as_bytes().len())
     }
-}
 
-pub fn read_while<P>(s: &mut Scanner, pred: P) -> Result<String>
-where
-    P: Fn(&char) -> bool,
-{
-    let mut b = String::new();
-    while let Some(c) = s.current() {
-        if pred(&c) {
-            b.push(c)
-        } else {
-            break;
+    pub fn skip_while<P>(&mut self, pred: P)
+    where
+        P: Fn(char) -> bool,
+    {
+        while self.current().map(&pred).unwrap_or(false) {
+            self.next();
         }
-        s.advance();
     }
-    Ok(b)
-}
 
-pub fn read_all(s: &mut Scanner) -> Result<String> {
-    let mut b = String::new();
-    while let Some(c) = s.current() {
-        b.push(c);
-        s.advance();
+    pub fn read_while<P>(&mut self, pred: P) -> Result<&'a str>
+    where
+        P: Fn(char) -> bool,
+    {
+        let start = self.pos();
+        self.skip_while(pred);
+        let end = self.pos();
+        Ok(&self.source[start..end])
     }
-    Ok(b)
-}
 
-pub fn consume_while<P>(s: &mut Scanner, pred: P) -> Result<()>
-where
-    P: Fn(&char) -> bool,
-{
-    while let Some(c) = s.current() {
-        if !pred(&c) {
-            break;
+    pub fn read_all(&mut self) -> Result<&'a str> {
+        let start = self.pos();
+        self.skip_while(|_| true);
+        Ok(&self.source[start..])
+    }
+
+    pub fn consume_char(&mut self, c: char) -> Result<()> {
+        match self.next() {
+            Some(d) if c == d => Ok(()),
+            Some(d) => Err(ParserError::Unexpected(
+                self.pos(),
+                format!("Expected {:?}, got {:?}", c, d),
+            )),
+            None => Err(ParserError::Unexpected(
+                self.pos(),
+                format!("Expected {:?}, got EOF", c),
+            )),
         }
-        s.advance();
     }
-    Ok(())
-}
 
-pub fn consume_char(s: &mut Scanner, c: char) -> Result<()> {
-    match s.current() {
-        Some(d) if c == d => {
-            s.advance();
-            Ok(())
+    pub fn consume_string(&mut self, str: &str) -> Result<()> {
+        for c in str.chars() {
+            println!("{}", c);
+            self.consume_char(c)?;
         }
-        Some(d) => Err(ParserError::Unexpected(
-            s.position(),
-            format!("Expected {:?}, got {:?}", c, d),
-        )),
-        None => Err(ParserError::Unexpected(
-            s.position(),
-            format!("Expected {:?}, got EOF", c),
-        )),
+        Ok(())
     }
-}
 
-pub fn consume_string(s: &mut Scanner, str: &str) -> Result<()> {
-    for c in str.chars() {
-        consume_char(s, c)?;
-    }
-    Ok(())
-}
-
-pub fn read_quoted_string(s: &mut Scanner) -> Result<String> {
-    consume_char(s, '"')?;
-    let res = read_while(s, |c| *c != '"')?;
-    consume_char(s, '"')?;
-    Ok(res)
-}
-
-pub fn read_identifier(s: &mut Scanner) -> Result<String> {
-    let res = read_while(s, |c| c.is_alphanumeric())?;
-    if res.is_empty() {
-        Err(ParserError::Unexpected(
-            s.position(),
-            "Expected identifier, got nothing".to_string(),
-        ))
-    } else {
+    pub fn read_quoted_string(&mut self) -> Result<&'a str> {
+        self.consume_char('"')?;
+        let res = self.read_while(|c| c != '"')?;
+        self.consume_char('"')?;
         Ok(res)
     }
-}
 
-pub fn read_string(s: &mut Scanner, n: usize) -> Result<String> {
-    let mut res = String::with_capacity(n);
-    for _ in 0..n {
-        match s.current() {
-            Some(d) => {
-                res.push(d);
-                s.advance();
-            }
-            None => {
+    pub fn read_identifier(&mut self) -> Result<&'a str> {
+        let res = self.read_while(|c| c.is_alphanumeric())?;
+        match res {
+            "" => Err(ParserError::Unexpected(
+                self.pos(),
+                "Expected identifier, got nothing".to_string(),
+            )),
+            _ => Ok(res),
+        }
+    }
+
+    pub fn read_1(&mut self) -> Result<char> {
+        self.chars.next().map(|t| t.1).ok_or_else(|| {
+            ParserError::Unexpected(self.pos(), "expected one character, got EOF".into())
+        })
+    }
+
+    pub fn read_n(&mut self, n: usize) -> Result<&'a str> {
+        let start = self.pos();
+        for _ in 0..n {
+            self.read_1()?;
+        }
+        Ok(&self.source[start..self.pos()])
+    }
+
+    pub fn consume_eol(&mut self) -> Result<()> {
+        match self.next() {
+            None => Ok(()),
+            Some('\n') => Ok(()),
+            Some(ch) => {
                 return Err(ParserError::Unexpected(
-                    s.position(),
-                    "Expected more input, got EOF".to_string(),
+                    self.pos(),
+                    format!("expected EOL, got '{}'", ch),
                 ))
             }
         }
     }
-    Ok(res)
-}
 
-pub fn consume_eol(s: &mut Scanner) -> Result<()> {
-    if s.current().is_none() {
-        Ok(())
-    } else {
-        consume_char(s, '\n')
-    }
-}
-
-pub fn consume_space1(s: &mut Scanner) -> Result<()> {
-    if let Some(c) = s.current() {
-        if !c.is_ascii_whitespace() {
-            return Err(ParserError::Unexpected(
-                s.position(),
-                format!("Expected white space, got {:?}", c),
-            ));
+    pub fn consume_space1(&mut self) -> Result<()> {
+        match self.current() {
+            Some(ch) if !ch.is_ascii_whitespace() => {
+                return Err(ParserError::Unexpected(
+                    self.pos(),
+                    format!("expected white space, got {:?}", ch),
+                ))
+            }
+            _ => Ok(self.consume_space()),
         }
     }
-    consume_space(s)
-}
 
-pub fn consume_space(s: &mut Scanner) -> Result<()> {
-    consume_while(s, |c| *c != '\n' && c.is_ascii_whitespace())
-}
+    pub fn consume_space(&mut self) {
+        self.skip_while(|c| c != '\n' && c.is_ascii_whitespace())
+    }
 
-pub fn consume_rest_of_line(s: &mut Scanner) -> Result<()> {
-    consume_while(s, |c| *c != '\n')?;
-    consume_eol(s)
+    pub fn consume_rest_of_line(&mut self) -> Result<()> {
+        self.skip_while(|c| c != '\n');
+        self.consume_eol()
+    }
 }
 
 #[cfg(test)]
@@ -217,16 +165,16 @@ mod tests {
 
     #[test]
     fn test_read_while() -> Result<()> {
-        let mut s = Scanner::new("asdf".into());
-        assert_eq!(read_while(&mut s, |c| *c != 'f')?, "asd");
+        let mut s = Scanner::new("asdf");
+        assert_eq!(s.read_while(|c| c != 'f')?, "asd");
         Ok(())
     }
 
     #[test]
     fn test_consume_while() -> Result<()> {
-        let mut s = Scanner::new("asdf".into());
-        consume_while(&mut s, |&c| c != 'f')?;
-        consume_char(&mut s, 'f')?;
+        let mut s = Scanner::new("asdf");
+        s.skip_while(|c| c != 'f');
+        s.consume_char('f')?;
         assert!(s.current().is_none());
         Ok(())
     }
@@ -234,9 +182,9 @@ mod tests {
     #[test]
     fn test_consume_char() -> Result<()> {
         let bs = "asdf";
-        let mut s = Scanner::new(bs.into());
+        let mut s = Scanner::new(bs);
         for cp in bs.chars() {
-            consume_char(&mut s, cp)?
+            s.consume_char(cp)?
         }
         Ok(())
     }
@@ -245,8 +193,8 @@ mod tests {
     fn test_consume_string() -> Result<()> {
         let tests = ["asdf"];
         for test in tests {
-            let mut s = Scanner::new(test.into());
-            consume_string(&mut s, test)?
+            let mut s = Scanner::new(test);
+            s.consume_string(test)?
         }
         Ok(())
     }
@@ -259,13 +207,13 @@ mod tests {
             ("\"a\"\"", "a"),
         ];
         for (test, expected) in tests {
-            let mut s = Scanner::new(test.into());
-            assert_eq!(read_quoted_string(&mut s)?, *expected);
+            let mut s = Scanner::new(test);
+            assert_eq!(s.read_quoted_string()?, expected);
         }
         let tests = ["\""];
         for test in tests {
-            let mut s = Scanner::new(test.into());
-            assert!(read_quoted_string(&mut s).is_err());
+            let mut s = Scanner::new(test);
+            assert!(s.read_quoted_string().is_err());
         }
         Ok(())
     }
@@ -278,13 +226,13 @@ mod tests {
             ("Foo Bar", "Foo"),
         ];
         for (test, expected) in tests {
-            let mut s = Scanner::new(test.into());
-            assert_eq!(read_identifier(&mut s)?, *expected);
+            let mut s = Scanner::new(test);
+            assert_eq!(s.read_identifier()?, expected);
         }
         let tests = [" "];
         for test in tests {
-            let mut s = Scanner::new(test.into());
-            assert!(read_identifier(&mut s).is_err())
+            let mut s = Scanner::new(test);
+            assert!(s.read_identifier().is_err())
         }
         Ok(())
     }
@@ -297,14 +245,14 @@ mod tests {
             ("Foo Bar", "Foo ", "Bar"),
         ];
         for (test, expected, remainder) in tests {
-            let mut s = Scanner::new(test.into());
-            assert_eq!(read_string(&mut s, 4)?, expected);
-            assert_eq!(read_all(&mut s)?.as_str(), remainder)
+            let mut s = Scanner::new(test);
+            assert_eq!(s.read_n(4)?, expected);
+            assert_eq!(s.read_all()?, remainder)
         }
         for (test, _, _) in tests {
-            let mut s = Scanner::new(test.into());
-            assert!(read_string(&mut s, test.len() + 1).is_err());
-            assert_eq!(read_all(&mut s)?.as_str(), "")
+            let mut s = Scanner::new(test);
+            assert!(s.read_n(test.len() + 1).is_err());
+            assert_eq!(s.read_all()?, "")
         }
         Ok(())
     }
@@ -313,13 +261,13 @@ mod tests {
     fn test_consume_eol() -> Result<()> {
         let tests = ["", "\n", "\na"];
         for test in tests {
-            let mut s = Scanner::new(test.into());
-            consume_eol(&mut s)?
+            let mut s = Scanner::new(test);
+            s.consume_eol()?
         }
         let tests = [" ", "not an eol", "na"];
         for test in tests {
-            let mut s = Scanner::new(test.into());
-            assert!(consume_eol(&mut s).is_err())
+            let mut s = Scanner::new(test);
+            assert!(s.consume_eol().is_err())
         }
         Ok(())
     }
@@ -328,13 +276,13 @@ mod tests {
     fn test_consume_space1() -> Result<()> {
         let tests = ["", "\n", "\t"];
         for test in tests {
-            let mut s = Scanner::new(test.into());
-            consume_space1(&mut s)?
+            let mut s = Scanner::new(test);
+            s.consume_space1()?
         }
         let tests = ["a\n", "n", "na"];
         for test in tests {
-            let mut s = Scanner::new(test.into());
-            assert!(consume_space1(&mut s).is_err())
+            let mut s = Scanner::new(test);
+            assert!(s.consume_space1().is_err())
         }
         Ok(())
     }
