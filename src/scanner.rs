@@ -236,6 +236,11 @@ impl<'a> Scanner<'a> {
             Some(ch) if !ch.is_ascii_whitespace() => {
                 return Err(self.error(None, Character::WhiteSpace, Character::Char(ch)))
             }
+            Some('\n') => {
+                self.next();
+                let res = self.consume_space();
+                self.annotate(res)
+            }
             _ => {
                 let res = self.consume_space();
                 self.annotate(res)
@@ -298,7 +303,7 @@ mod tests {
     fn test_consume_while() {
         let mut s = Scanner::new("asdf");
         s.skip_while(|c| c != 'f');
-        s.consume_char('f').unwrap();
+        assert_eq!(s.consume_char('f').unwrap(), Annotated((), (3, 4)));
         assert!(s.current().is_none());
     }
 
@@ -352,58 +357,56 @@ mod tests {
     fn test_read_n() {
         let mut s = Scanner::new("23asdflj");
         assert_eq!(s.read_n(4).unwrap(), Annotated("23as", (0, 4)));
+        assert_eq!(s.read_all().unwrap(), Annotated("dflj", (4, 8)));
 
-        let tests = [
-            ("23asdf 3asdf", "23as", "df 3asdf"),
-            ("foo bar", "foo ", "bar"),
-            ("Foo Bar", "Foo ", "Bar"),
-        ];
-        for (test, expected, remainder) in tests {
-            let mut s = Scanner::new(test);
-            assert_eq!(
-                s.read_n(4).unwrap(),
-                Annotated(expected, (0, expected.len()))
-            );
-            assert_eq!(
-                s.read_all().unwrap(),
-                Annotated(remainder, (expected.len(), test.len()))
-            )
-        }
-        for (test, _, _) in tests {
-            let mut s = Scanner::new(test);
-            assert!(s.read_n(test.len() + 1).is_err());
-            assert_eq!(
-                s.read_all().unwrap(),
-                Annotated("".into(), (test.len(), test.len()))
-            )
-        }
+        let mut s = Scanner::new("foo bar");
+        assert_eq!(s.read_n(4).unwrap(), Annotated("foo ", (0, 4)));
+        assert_eq!(s.read_all().unwrap(), Annotated("bar", (4, 7)));
+
+        let mut s = Scanner::new("foo");
+        assert_eq!(s.read_n(3).unwrap(), Annotated("foo", (0, 3)));
+        assert_eq!(s.read_all().unwrap(), Annotated("", (3, 3)));
+        assert_eq!(s.read_all().unwrap(), Annotated("", (3, 3)));
     }
 
     #[test]
     fn test_consume_eol() {
-        let tests = ["", "\n", "\na"];
-        for test in tests {
-            let mut s = Scanner::new(test);
-            assert!(s.consume_eol().is_ok());
-        }
-        let tests = [" ", "not an eol", "na"];
-        for test in tests {
-            let mut s = Scanner::new(test);
-            assert!(s.consume_eol().is_err())
-        }
+        assert_eq!(
+            Scanner::new("").consume_eol().unwrap(),
+            Annotated((), (0, 0))
+        );
+        assert_eq!(
+            Scanner::new("\n").consume_eol().unwrap(),
+            Annotated((), (0, 1))
+        );
+        assert_eq!(
+            Scanner::new("\na").consume_eol().unwrap(),
+            Annotated((), (0, 1))
+        );
+        assert!(Scanner::new(" ").consume_eol().is_err());
+        assert!(Scanner::new("not eol").consume_eol().is_err())
     }
 
     #[test]
     fn test_consume_space1() {
-        let tests = ["", "\n", "\t"];
-        for test in tests {
-            let mut s = Scanner::new(test);
-            s.consume_space1().unwrap();
-        }
-        let tests = ["a\n", "n", "na"];
-        for test in tests {
-            let mut s = Scanner::new(test);
-            assert!(s.consume_space1().is_err())
-        }
+        assert_eq!(
+            Scanner::new("").consume_space1().unwrap(),
+            Annotated((), (0, 0))
+        );
+        assert_eq!(
+            Scanner::new("\n").consume_space1().unwrap(),
+            Annotated((), (0, 1))
+        );
+        assert_eq!(
+            Scanner::new("\n\n").consume_space1().unwrap(),
+            Annotated((), (0, 1))
+        );
+        assert_eq!(
+            Scanner::new("\t").consume_space1().unwrap(),
+            Annotated((), (0, 1))
+        );
+        assert!(Scanner::new("a\n").consume_space1().is_err());
+        assert!(Scanner::new("n").consume_space1().is_err());
+        assert!(Scanner::new("na").consume_space1().is_err());
     }
 }
