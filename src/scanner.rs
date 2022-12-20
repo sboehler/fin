@@ -236,11 +236,6 @@ impl<'a> Scanner<'a> {
             Some(ch) if !ch.is_ascii_whitespace() => {
                 return Err(self.error(None, Character::WhiteSpace, Character::Char(ch)))
             }
-            Some('\n') => {
-                self.next();
-                let res = self.consume_space();
-                self.annotate(res)
-            }
             _ => {
                 let res = self.consume_space();
                 self.annotate(res)
@@ -395,11 +390,11 @@ mod tests {
         );
         assert_eq!(
             Scanner::new("\n").consume_space1().unwrap(),
-            Annotated((), (0, 1))
+            Annotated((), (0, 0))
         );
         assert_eq!(
             Scanner::new("\n\n").consume_space1().unwrap(),
-            Annotated((), (0, 1))
+            Annotated((), (0, 0))
         );
         assert_eq!(
             Scanner::new("\t").consume_space1().unwrap(),

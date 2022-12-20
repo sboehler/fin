@@ -327,31 +327,28 @@ fn parse_include(s: &mut Scanner) -> Result<Directive> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scanner::Result;
 
     #[test]
-    fn test_parse_account_type() -> Result<()> {
+    fn test_parse_account_type() {
         let mut s = Scanner::new("Assets");
-        assert_eq!(parse_account_type(&mut s)?.0, AccountType::Assets);
-        Ok(())
+        assert_eq!(parse_account_type(&mut s).unwrap().0, AccountType::Assets);
     }
 
     #[test]
-    fn test_parse_date() -> Result<()> {
+    fn test_parse_date() {
         let tests = [
             ("0202-02-02", chrono::NaiveDate::from_ymd(202, 2, 2), ""),
             ("2020-09-15 ", chrono::NaiveDate::from_ymd(2020, 9, 15), " "),
         ];
         for (test, expected, remainder) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_date(&mut s)?.0, expected);
-            assert_eq!(s.read_all()?.0, remainder)
+            assert_eq!(parse_date(&mut s).unwrap().0, expected);
+            assert_eq!(s.read_all().unwrap().0, remainder)
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_account() -> Result<()> {
+    fn test_parse_account() {
         let tests = [
             ("Assets", Account::new(AccountType::Assets, Vec::new())),
             (
@@ -364,13 +361,12 @@ mod tests {
         ];
         for (test, expected) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_account(&mut s)?.0, expected);
+            assert_eq!(parse_account(&mut s).unwrap().0, expected);
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_open() -> Result<()> {
+    fn test_parse_open() {
         let tests = [(
             "open Assets:Account",
             NaiveDate::from_ymd(2020, 2, 2),
@@ -384,13 +380,12 @@ mod tests {
         )];
         for (test, d, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_open(d, &mut s)?, want)
+            assert_eq!(parse_open(d, &mut s).unwrap(), want)
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_close() -> Result<()> {
+    fn test_parse_close() {
         let tests = [(
             "close Assets:Account",
             NaiveDate::from_ymd(2020, 2, 2),
@@ -404,13 +399,12 @@ mod tests {
         )];
         for (test, d, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_close(d, &mut s)?, want)
+            assert_eq!(parse_close(d, &mut s).unwrap(), want)
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_tags() -> Result<()> {
+    fn test_parse_tags() {
         let tests = [
             (
                 "#tag1 #1tag   no more tags",
@@ -421,14 +415,13 @@ mod tests {
         ];
         for (test, want, remainder) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_tags(&mut s)?, want);
-            assert_eq!(s.read_all()?.0, remainder)
+            assert_eq!(parse_tags(&mut s).unwrap(), want);
+            assert_eq!(s.read_all().unwrap().0, remainder)
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_decimal() -> Result<()> {
+    fn test_parse_decimal() {
         let tests = [
             ("3.14", Decimal::new(314, 2), ""),
             ("-3.141", Decimal::new(-3141, 3), ""),
@@ -436,14 +429,13 @@ mod tests {
         ];
         for (test, expected, remainder) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_decimal(&mut s)?, expected);
-            assert_eq!(s.read_all()?.0, remainder)
+            assert_eq!(parse_decimal(&mut s).unwrap(), expected);
+            assert_eq!(s.read_all().unwrap().0, remainder)
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_transaction() -> Result<()> {
+    fn test_parse_transaction() {
         let posting = Posting {
             account: Account::new(AccountType::Assets, vec!["Account1".into()]),
             amount: Decimal::new(24545, 2),
@@ -509,13 +501,12 @@ mod tests {
         ];
         for (test, date, expected) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_transaction(date, &mut s)?, expected);
+            assert_eq!(parse_transaction(date, &mut s).unwrap(), expected);
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_postings() -> Result<()> {
+    fn test_parse_postings() {
         let posting = Posting {
             account: Account::new(AccountType::Assets, vec!["Account1".into()]),
             amount: Decimal::new(24545, 2),
@@ -549,15 +540,14 @@ mod tests {
         for (test, expected) in tests {
             let mut s = Scanner::new(test);
             assert_eq!(
-                parse_postings(&mut s, NaiveDate::from_ymd(2020, 2, 2))?,
+                parse_postings(&mut s, NaiveDate::from_ymd(2020, 2, 2)).unwrap(),
                 expected
             );
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_price() -> Result<()> {
+    fn test_parse_price() {
         let tests = [
             (
                 "price USD 0.901 CHF",
@@ -582,13 +572,12 @@ mod tests {
         ];
         for (test, d, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_price(d, &mut s)?, want)
+            assert_eq!(parse_price(d, &mut s).unwrap(), want)
         }
-        Ok(())
     }
 
     #[test]
-    fn test_parse_assertion() -> Result<()> {
+    fn test_parse_assertion() {
         let tests = [
             (
                 "balance Assets:MyAccount 0.901 USD",
@@ -613,8 +602,7 @@ mod tests {
         ];
         for (test, d, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_assertion(d, &mut s)?, want)
+            assert_eq!(parse_assertion(d, &mut s).unwrap(), want)
         }
-        Ok(())
     }
 }
