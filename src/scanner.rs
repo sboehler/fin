@@ -79,10 +79,18 @@ impl std::fmt::Display for Character {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct Annotated<T> {
+    pub t: T,
+    pub start: usize,
+    pub end: usize,
+}
+
 pub struct Scanner<'a> {
     source: &'a str,
     filename: Option<PathBuf>,
     chars: Peekable<CharIndices<'a>>,
+    positions: Vec<usize>,
 }
 
 impl<'a> Scanner<'a> {
@@ -91,7 +99,21 @@ impl<'a> Scanner<'a> {
             source: &s,
             filename,
             chars: s.char_indices().peekable(),
+            positions: Vec::new(),
         }
+    }
+
+    pub fn annotate<T>(&mut self, t: T) -> Result<Annotated<T>> {
+        Ok(Annotated {
+            t,
+            start: self.positions.pop().unwrap(),
+            end: self.pos(),
+        })
+    }
+
+    pub fn mark_position(&mut self) {
+        let pos = self.pos();
+        self.positions.push(pos)
     }
 
     pub fn current(&mut self) -> Option<char> {
@@ -118,58 +140,63 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_while<P>(&mut self, pred: P) -> Result<&'a str>
+    pub fn read_while<P>(&mut self, pred: P) -> Result<Annotated<&'a str>>
     where
         P: Fn(char) -> bool,
     {
+        self.mark_position();
         let start = self.pos();
         self.skip_while(pred);
         let end = self.pos();
-        Ok(&self.source[start..end])
+        self.annotate(&self.source[start..end])
     }
 
-    pub fn read_until<P>(&mut self, pred: P) -> Result<&'a str>
+    pub fn read_until<P>(&mut self, pred: P) -> Result<Annotated<&'a str>>
     where
         P: Fn(char) -> bool,
     {
+        self.mark_position();
         let start = self.pos();
         self.skip_while(|v| !pred(v));
         let end = self.pos();
-        Ok(&self.source[start..end])
+        self.annotate(&self.source[start..end])
     }
 
-    pub fn read_all(&mut self) -> Result<&'a str> {
+    pub fn read_all(&mut self) -> Result<Annotated<&'a str>> {
+        self.mark_position();
         let start = self.pos();
         self.skip_while(|_| true);
-        Ok(&self.source[start..])
+        self.annotate(&self.source[start..])
     }
 
-    pub fn consume_char(&mut self, c: char) -> Result<()> {
+    pub fn consume_char(&mut self, c: char) -> Result<Annotated<()>> {
+        self.mark_position();
         match self.next() {
-            Some(d) if c == d => Ok(()),
-            Some(d) => Err(self.error(None, Character::Char(c), Character::Char(d))),
-            None => Err(self.error(None, Character::Char(c), Character::EOF)),
+            Some(d) if c == d => self.annotate(()),
+            o => Err(self.error(None, Character::Char(c), Character::from_char(o))),
         }
     }
 
-    pub fn consume_string(&mut self, str: &str) -> Result<()> {
+    pub fn consume_string(&mut self, str: &str) -> Result<Annotated<()>> {
+        self.mark_position();
         for c in str.chars() {
             self.consume_char(c)?;
         }
-        Ok(())
+        self.annotate(())
     }
 
-    pub fn read_quoted_string(&mut self) -> Result<&'a str> {
+    pub fn read_quoted_string(&mut self) -> Result<Annotated<&'a str>> {
+        self.mark_position();
         self.consume_char('"')?;
         let res = self.read_while(|c| c != '"')?;
         self.consume_char('"')?;
-        Ok(res)
+        self.annotate(res.t)
     }
 
-    pub fn read_identifier(&mut self) -> Result<&'a str> {
+    pub fn read_identifier(&mut self) -> Result<Annotated<&'a str>> {
         let res = self.read_while(|c| c.is_alphanumeric())?;
         match res {
-            "" => {
+            Annotated { t: "", .. } => {
                 let got = Character::from_char(self.current());
                 Err(self.error(
                     Some("error while parsing identifier".into()),
@@ -181,33 +208,42 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_1(&mut self) -> Result<char> {
-        self.next()
-            .ok_or_else(|| self.error(None, Character::Any, Character::EOF))
+    pub fn read_1(&mut self) -> Result<Annotated<char>> {
+        self.mark_position();
+        match self.next() {
+            Some(c) => self.annotate(c),
+            None => Err(self.error(None, Character::Any, Character::EOF)),
+        }
     }
 
-    pub fn read_n(&mut self, n: usize) -> Result<&'a str> {
+    pub fn read_n(&mut self, n: usize) -> Result<Annotated<&'a str>> {
+        self.mark_position();
         let start = self.pos();
         for _ in 0..n {
             self.read_1()?;
         }
-        Ok(&self.source[start..self.pos()])
+        let res = &self.source[start..self.pos()];
+        self.annotate(res)
     }
 
-    pub fn consume_eol(&mut self) -> Result<()> {
+    pub fn consume_eol(&mut self) -> Result<Annotated<()>> {
+        self.mark_position();
         match self.next() {
-            None => Ok(()),
-            Some('\n') => Ok(()),
+            None | Some('\n') => self.annotate(()),
             Some(ch) => return Err(self.error(None, Character::Char('\n'), Character::Char(ch))),
         }
     }
 
-    pub fn consume_space1(&mut self) -> Result<()> {
+    pub fn consume_space1(&mut self) -> Result<Annotated<()>> {
+        self.mark_position();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
                 return Err(self.error(None, Character::WhiteSpace, Character::Char(ch)))
             }
-            _ => Ok(self.consume_space()),
+            _ => {
+                let res = self.consume_space();
+                self.annotate(res)
+            }
         }
     }
 
@@ -215,7 +251,7 @@ impl<'a> Scanner<'a> {
         self.skip_while(|c| c != '\n' && c.is_ascii_whitespace())
     }
 
-    pub fn consume_rest_of_line(&mut self) -> Result<()> {
+    pub fn consume_rest_of_line(&mut self) -> Result<Annotated<()>> {
         self.skip_while(|c| c != '\n');
         self.consume_eol()
     }
@@ -251,17 +287,26 @@ impl<'a> Scanner<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+
     use super::*;
 
     #[test]
-    fn test_read_while() -> Result<()> {
+    fn test_read_while() -> std::result::Result<(), Box<dyn Error>> {
         let mut s = Scanner::new("asdf", None);
-        assert_eq!(s.read_while(|c| c != 'f')?, "asd");
+        assert_eq!(
+            s.read_while(|c| c != 'f')?,
+            Annotated {
+                t: "asd",
+                start: 0,
+                end: 3
+            }
+        );
         Ok(())
     }
 
     #[test]
-    fn test_consume_while() -> Result<()> {
+    fn test_consume_while() -> std::result::Result<(), Box<dyn Error>> {
         let mut s = Scanner::new("asdf", None);
         s.skip_while(|c| c != 'f');
         s.consume_char('f')?;
@@ -270,27 +315,27 @@ mod tests {
     }
 
     #[test]
-    fn test_consume_char() -> Result<()> {
+    fn test_consume_char() -> std::result::Result<(), Box<dyn Error>> {
         let bs = "asdf";
         let mut s = Scanner::new(bs, None);
         for cp in bs.chars() {
-            s.consume_char(cp)?
+            assert!(s.consume_char(cp).is_ok());
         }
         Ok(())
     }
 
     #[test]
-    fn test_consume_string() -> Result<()> {
+    fn test_consume_string() -> std::result::Result<(), Box<dyn Error>> {
         let tests = ["asdf"];
         for test in tests {
             let mut s = Scanner::new(test, None);
-            s.consume_string(test)?
+            assert!(s.consume_string(test).is_ok());
         }
         Ok(())
     }
 
     #[test]
-    fn test_read_quoted_string() -> Result<()> {
+    fn test_read_quoted_string() -> std::result::Result<(), Box<dyn Error>> {
         let tests = [
             ("\"\"", ""),
             ("\"A String \"", "A String "),
@@ -298,7 +343,14 @@ mod tests {
         ];
         for (test, expected) in tests {
             let mut s = Scanner::new(test, None);
-            assert_eq!(s.read_quoted_string()?, expected);
+            assert_eq!(
+                s.read_quoted_string()?,
+                Annotated {
+                    t: expected,
+                    start: 0,
+                    end: expected.len() + 2
+                }
+            );
         }
         let tests = ["\""];
         for test in tests {
@@ -309,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_identifier() -> Result<()> {
+    fn test_read_identifier() -> std::result::Result<(), Box<dyn Error>> {
         let tests = [
             ("23asdf 3asdf", "23asdf"),
             ("foo bar", "foo"),
@@ -317,7 +369,14 @@ mod tests {
         ];
         for (test, expected) in tests {
             let mut s = Scanner::new(test, None);
-            assert_eq!(s.read_identifier()?, expected);
+            assert_eq!(
+                s.read_identifier()?,
+                Annotated {
+                    t: expected,
+                    start: 0,
+                    end: expected.len(),
+                }
+            );
         }
         let tests = [" "];
         for test in tests {
@@ -328,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_string() -> Result<()> {
+    fn test_read_n() -> std::result::Result<(), Box<dyn Error>> {
         let tests = [
             ("23asdf 3asdf", "23as", "df 3asdf"),
             ("foo bar", "foo ", "bar"),
@@ -336,23 +395,44 @@ mod tests {
         ];
         for (test, expected, remainder) in tests {
             let mut s = Scanner::new(test, None);
-            assert_eq!(s.read_n(4)?, expected);
-            assert_eq!(s.read_all()?, remainder)
+            assert_eq!(
+                s.read_n(4)?,
+                Annotated {
+                    t: expected,
+                    start: 0,
+                    end: expected.len()
+                }
+            );
+            assert_eq!(
+                s.read_all()?,
+                Annotated {
+                    t: remainder,
+                    start: expected.len(),
+                    end: test.len()
+                }
+            )
         }
         for (test, _, _) in tests {
             let mut s = Scanner::new(test, None);
             assert!(s.read_n(test.len() + 1).is_err());
-            assert_eq!(s.read_all()?, "")
+            assert_eq!(
+                s.read_all()?,
+                Annotated {
+                    t: "".into(),
+                    start: test.len(),
+                    end: test.len()
+                }
+            )
         }
         Ok(())
     }
 
     #[test]
-    fn test_consume_eol() -> Result<()> {
+    fn test_consume_eol() -> std::result::Result<(), Box<dyn Error>> {
         let tests = ["", "\n", "\na"];
         for test in tests {
             let mut s = Scanner::new(test, None);
-            s.consume_eol()?
+            s.consume_eol()?;
         }
         let tests = [" ", "not an eol", "na"];
         for test in tests {
@@ -363,11 +443,11 @@ mod tests {
     }
 
     #[test]
-    fn test_consume_space1() -> Result<()> {
+    fn test_consume_space1() -> std::result::Result<(), Box<dyn Error>> {
         let tests = ["", "\n", "\t"];
         for test in tests {
             let mut s = Scanner::new(test, None);
-            s.consume_space1()?
+            s.consume_space1()?;
         }
         let tests = ["a\n", "n", "na"];
         for test in tests {
