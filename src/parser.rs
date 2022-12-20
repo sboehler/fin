@@ -168,7 +168,7 @@ fn parse_tag(s: &mut Scanner) -> Result<Tag> {
 }
 
 fn parse_decimal(s: &mut Scanner) -> Result<Decimal> {
-    let t = s.read_while(|c| c == '-' || c == '.' || c.is_ascii_digit())?;
+    let t = s.read_until(|c| c.is_whitespace())?;
     t.parse::<Decimal>().map_err(|_| {
         s.error(
             Some("error parsing decimal".into()),
@@ -317,7 +317,7 @@ mod tests {
 
     #[test]
     fn test_parse_account_type() -> Result<()> {
-        let mut s = Scanner::new("Assets");
+        let mut s = Scanner::new("Assets", None);
         assert_eq!(parse_account_type(&mut s)?, AccountType::Assets);
         Ok(())
     }
@@ -329,7 +329,7 @@ mod tests {
             ("2020-09-15 ", chrono::NaiveDate::from_ymd(2020, 9, 15), " "),
         ];
         for (test, expected, remainder) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_date(&mut s)?, *expected);
             assert_eq!(s.read_all()?, *remainder)
         }
@@ -349,7 +349,7 @@ mod tests {
             ),
         ];
         for (test, expected) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_account(&mut s)?, *expected);
         }
         Ok(())
@@ -369,7 +369,7 @@ mod tests {
             },
         )];
         for (test, d, want) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_open(*d, &mut s)?, *want)
         }
         Ok(())
@@ -389,7 +389,7 @@ mod tests {
             },
         )];
         for (test, d, want) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_close(*d, &mut s)?, *want)
         }
         Ok(())
@@ -406,7 +406,7 @@ mod tests {
             ("", vec![], ""),
         ];
         for (test, want, remainder) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_tags(&mut s)?, *want);
             assert_eq!(s.read_all()?, *remainder)
         }
@@ -421,7 +421,7 @@ mod tests {
             ("3.14159265359", Decimal::new(314159265359, 11), ""),
         ];
         for (test, expected, remainder) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_decimal(&mut s)?, *expected);
             assert_eq!(s.read_all()?, *remainder)
         }
@@ -494,7 +494,7 @@ mod tests {
             ),
         ];
         for (test, date, expected) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_transaction(*date, &mut s)?, *expected);
         }
         Ok(())
@@ -533,7 +533,7 @@ mod tests {
             ),
         ];
         for (test, expected) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(
                 parse_postings(&mut s, NaiveDate::from_ymd(2020, 2, 2))?,
                 *expected
@@ -567,7 +567,7 @@ mod tests {
             ),
         ];
         for (test, d, want) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_price(*d, &mut s)?, *want)
         }
         Ok(())
@@ -598,7 +598,7 @@ mod tests {
             ),
         ];
         for (test, d, want) in tests.iter() {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(parse_assertion(*d, &mut s)?, *want)
         }
         Ok(())

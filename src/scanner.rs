@@ -1,18 +1,19 @@
-use std::{iter::Peekable, str::CharIndices};
+use std::{iter::Peekable, path::PathBuf, str::CharIndices};
 
 #[derive(Debug)]
 pub struct ParserError {
     got: Character,
-    expected: Character,
+    want: Character,
     msg: Option<String>,
     file: String,
     line: usize,
     col: usize,
-    context: Vec<String>,
+    context: Vec<(usize, String)>,
 }
 
 impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f)?;
         write!(
             f,
             "{file}:{line}:{col}:",
@@ -21,15 +22,17 @@ impl std::fmt::Display for ParserError {
             col = self.col,
         )?;
         if let Some(ref s) = self.msg {
-            writeln!(f, "{}", s)?;
+            writeln!(f, " {}", s)?;
         } else {
-            writeln!(f, "")?;
+            writeln!(f)?;
         }
-        writeln!(f, "got: {}", self.got)?;
-        writeln!(f, "expected: {:?}", self.expected)?;
-        for line in &self.context {
-            writeln!(f, "{}", line)?;
+        writeln!(f, "-> got:  {}", self.got)?;
+        writeln!(f, "-> want: {}", self.want)?;
+        writeln!(f, "")?;
+        for (n, line) in &self.context {
+            writeln!(f, "{:03}: {}", n, line)?;
         }
+        writeln!(f, "     {}{}", "_".repeat(self.col), "^")?;
         Ok(())
     }
 }
@@ -78,13 +81,15 @@ impl std::fmt::Display for Character {
 
 pub struct Scanner<'a> {
     source: &'a str,
+    filename: Option<PathBuf>,
     chars: Peekable<CharIndices<'a>>,
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new(s: &'a str) -> Scanner<'a> {
+    pub fn new(s: &'a str, filename: Option<PathBuf>) -> Scanner<'a> {
         Scanner {
             source: &s,
+            filename,
             chars: s.char_indices().peekable(),
         }
     }
@@ -119,6 +124,16 @@ impl<'a> Scanner<'a> {
     {
         let start = self.pos();
         self.skip_while(pred);
+        let end = self.pos();
+        Ok(&self.source[start..end])
+    }
+
+    pub fn read_until<P>(&mut self, pred: P) -> Result<&'a str>
+    where
+        P: Fn(char) -> bool,
+    {
+        let start = self.pos();
+        self.skip_while(|v| !pred(v));
         let end = self.pos();
         Ok(&self.source[start..end])
     }
@@ -206,14 +221,30 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn error(&mut self, msg: Option<String>, want: Character, got: Character) -> ParserError {
+        let lines: Vec<_> = self.source[..self.pos()].lines().collect();
+        let line = lines.len().checked_sub(1).unwrap_or(0);
+        let col = lines.last().map(|s| s.len()).unwrap_or(0);
+        let rng = lines.len().checked_sub(2).unwrap_or(0)..=lines.len();
+        let file = self
+            .filename
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or("<stream>".into());
+        let context = self
+            .source
+            .lines()
+            .enumerate()
+            .filter(|t| rng.contains(&t.0))
+            .map(|(i, l)| (i, l.into()))
+            .collect();
         return ParserError {
-            file: String::new(),
-            line: 0,
-            col: 0,
-            context: Vec::new(),
-            msg: msg,
-            expected: want,
-            got: got,
+            file,
+            line,
+            col,
+            context,
+            msg,
+            want,
+            got,
         };
     }
 }
@@ -224,14 +255,14 @@ mod tests {
 
     #[test]
     fn test_read_while() -> Result<()> {
-        let mut s = Scanner::new("asdf");
+        let mut s = Scanner::new("asdf", None);
         assert_eq!(s.read_while(|c| c != 'f')?, "asd");
         Ok(())
     }
 
     #[test]
     fn test_consume_while() -> Result<()> {
-        let mut s = Scanner::new("asdf");
+        let mut s = Scanner::new("asdf", None);
         s.skip_while(|c| c != 'f');
         s.consume_char('f')?;
         assert!(s.current().is_none());
@@ -241,7 +272,7 @@ mod tests {
     #[test]
     fn test_consume_char() -> Result<()> {
         let bs = "asdf";
-        let mut s = Scanner::new(bs);
+        let mut s = Scanner::new(bs, None);
         for cp in bs.chars() {
             s.consume_char(cp)?
         }
@@ -252,7 +283,7 @@ mod tests {
     fn test_consume_string() -> Result<()> {
         let tests = ["asdf"];
         for test in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             s.consume_string(test)?
         }
         Ok(())
@@ -266,12 +297,12 @@ mod tests {
             ("\"a\"\"", "a"),
         ];
         for (test, expected) in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(s.read_quoted_string()?, expected);
         }
         let tests = ["\""];
         for test in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert!(s.read_quoted_string().is_err());
         }
         Ok(())
@@ -285,12 +316,12 @@ mod tests {
             ("Foo Bar", "Foo"),
         ];
         for (test, expected) in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(s.read_identifier()?, expected);
         }
         let tests = [" "];
         for test in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert!(s.read_identifier().is_err())
         }
         Ok(())
@@ -304,12 +335,12 @@ mod tests {
             ("Foo Bar", "Foo ", "Bar"),
         ];
         for (test, expected, remainder) in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert_eq!(s.read_n(4)?, expected);
             assert_eq!(s.read_all()?, remainder)
         }
         for (test, _, _) in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert!(s.read_n(test.len() + 1).is_err());
             assert_eq!(s.read_all()?, "")
         }
@@ -320,12 +351,12 @@ mod tests {
     fn test_consume_eol() -> Result<()> {
         let tests = ["", "\n", "\na"];
         for test in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             s.consume_eol()?
         }
         let tests = [" ", "not an eol", "na"];
         for test in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert!(s.consume_eol().is_err())
         }
         Ok(())
@@ -335,12 +366,12 @@ mod tests {
     fn test_consume_space1() -> Result<()> {
         let tests = ["", "\n", "\t"];
         for test in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             s.consume_space1()?
         }
         let tests = ["a\n", "n", "na"];
         for test in tests {
-            let mut s = Scanner::new(test);
+            let mut s = Scanner::new(test, None);
             assert!(s.consume_space1().is_err())
         }
         Ok(())

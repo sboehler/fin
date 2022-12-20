@@ -11,11 +11,19 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let text = fs::read_to_string(&self.journal)?;
-        let mut p = Scanner::new(&text);
-        let ds = parse(&mut p)?;
-        for d in &ds {
-            println!("{}", d);
-            println!();
+        let mut p = Scanner::new(&text, Some(self.journal.clone()));
+        let res = parse(&mut p);
+        match res {
+            Ok(ds) => {
+                for d in &ds {
+                    println!("{}", d);
+                    println!();
+                }
+            }
+            Err(e) => {
+                println!("{}", e);
+                std::process::exit(1);
+            }
         }
         Ok(())
     }
