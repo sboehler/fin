@@ -2,13 +2,12 @@ use crate::model::{
     Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting, Price, Tag,
     Transaction,
 };
-use crate::scanner::{ParserError, Result, Scanner};
+use crate::scanner::{Character, Result, Scanner};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use std::fmt;
 use std::fmt::Display;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 #[derive(Debug)]
 pub enum Directive {
@@ -42,9 +41,10 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
                     parse_include(s)?;
                 }
                 _ => {
-                    return Err(ParserError::Unexpected(
-                        s.pos(),
-                        format!("Expected a directive, got {:?}", c),
+                    return Err(s.error(
+                        Some("unexpected character".into()),
+                        Character::Custom("directive or comment".into()),
+                        Character::Char(c),
                     ))
                 }
             };
@@ -62,13 +62,10 @@ pub fn parse_command(s: &mut Scanner) -> Result<Command> {
         Some('o') => Ok(Command::Open(parse_open(d, s)?)),
         Some('b') => Ok(Command::Assertion(parse_assertion(d, s)?)),
         Some('c') => Ok(Command::Close(parse_close(d, s)?)),
-        Some(c) => Err(ParserError::Unexpected(
-            s.pos(),
-            format!("Expected directive, found {:?}", c),
-        )),
-        None => Err(ParserError::Unexpected(
-            s.pos(),
-            "Expected directive, found EOF".into(),
+        c => Err(s.error(
+            Some("error parsing directive".into()),
+            Character::Custom("directive".into()),
+            Character::from_char(c),
         )),
     }
 }
@@ -81,9 +78,16 @@ fn parse_account_type(s: &mut Scanner) -> Result<AccountType> {
         "Equity" => Ok(AccountType::Equity),
         "Income" => Ok(AccountType::Income),
         "Expenses" => Ok(AccountType::Expenses),
-        _ => Err(ParserError::Unexpected(
-            s.pos(),
-            format!("Expected account type, got {:?}", str),
+        _ => Err(s.error(
+            Some("error parsing account type".into()),
+            Character::Either(vec![
+                Character::Custom("Assets".into()),
+                Character::Custom("Liabilities".into()),
+                Character::Custom("Equity".into()),
+                Character::Custom("Income".into()),
+                Character::Custom("Expenses".into()),
+            ]),
+            Character::Custom(str.into()),
         )),
     }
 }
@@ -92,10 +96,11 @@ fn parse_date(s: &mut Scanner) -> Result<NaiveDate> {
     let b = s.read_n(10)?;
     match NaiveDate::parse_from_str(b, "%Y-%m-%d") {
         Ok(d) => Ok(d),
-        Err(_) => {
-            let msg = format!("Invalid date {:?}", b);
-            Err(ParserError::Unexpected(s.pos(), msg))
-        }
+        Err(_) => Err(s.error(
+            Some("error parsing date".into()),
+            Character::Custom("date (YYYY-MM-DD)".into()),
+            Character::Custom(b.to_string()),
+        )),
     }
 }
 
@@ -139,8 +144,13 @@ fn parse_transaction(d: NaiveDate, s: &mut Scanner) -> Result<Transaction> {
     let tags = parse_tags(s)?;
     s.consume_eol()?;
     let (postings, account) = parse_postings(s, d)?;
-    Transaction::new(d, desc.into(), tags, postings, account)
-        .map_err(|e| ParserError::Unexpected(s.pos(), e))
+    Transaction::new(d, desc.into(), tags, postings, account).map_err(|e| {
+        s.error(
+            Some("error parsing transaction".into()),
+            Character::Custom("a transaction".into()),
+            Character::Custom(e.to_string()),
+        )
+    })
 }
 
 fn parse_tags(s: &mut Scanner) -> Result<Vec<Tag>> {
@@ -159,8 +169,13 @@ fn parse_tag(s: &mut Scanner) -> Result<Tag> {
 
 fn parse_decimal(s: &mut Scanner) -> Result<Decimal> {
     let t = s.read_while(|c| c == '-' || c == '.' || c.is_ascii_digit())?;
-    Decimal::from_str(&t)
-        .map_err(|e| ParserError::Unexpected(s.pos(), format!("Error parsing decimal: {}", e)))
+    t.parse::<Decimal>().map_err(|_| {
+        s.error(
+            Some("error parsing decimal".into()),
+            Character::Custom("a decimal value".into()),
+            Character::Custom(t.to_string()),
+        )
+    })
 }
 
 fn parse_commodity(s: &mut Scanner) -> Result<Commodity> {
@@ -188,16 +203,14 @@ fn parse_lot(s: &mut Scanner, d: NaiveDate) -> Result<Lot> {
                 date = parse_date(s)?;
                 s.consume_space();
             }
-            Some(c) => {
-                return Err(ParserError::Unexpected(
-                    s.pos(),
-                    format!("Expected label or date, got {}", c),
-                ))
-            }
-            None => {
-                return Err(ParserError::Unexpected(
-                    s.pos(),
-                    "Expected label or date, got EOF".into(),
+            c => {
+                return Err(s.error(
+                    Some("error parsing lot".into()),
+                    Character::Either(vec![
+                        Character::Custom("label".into()),
+                        Character::Custom("date (YYYY-MM-DD)".into()),
+                    ]),
+                    Character::from_char(c),
                 ))
             }
         }
@@ -229,9 +242,10 @@ fn parse_postings(s: &mut Scanner, d: NaiveDate) -> Result<(Vec<Posting>, Option
                 s.consume_eol()?;
                 continue;
             }
-            return Err(ParserError::Unexpected(
-                s.pos(),
-                "Duplicate wildcard".into(),
+            return Err(s.error(
+                Some("duplicate wildcard".into()),
+                Character::Custom("".into()),
+                Character::Custom("".into()),
             ));
         }
         let amount = parse_decimal(s)?;
@@ -440,7 +454,7 @@ mod tests {
                         },
                     ],
                     None,
-                ),
+                ).unwrap(),
             ),
             (
                 "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1 -245.45 CHF",
@@ -458,7 +472,7 @@ mod tests {
                         },
                     ],
                     None,
-                ),
+                ).unwrap(),
             ),
             (
                 "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1",
@@ -476,15 +490,12 @@ mod tests {
                         },
                     ],
                     None,
-                ),
+                ).unwrap(),
             ),
         ];
         for (test, date, expected) in tests.iter() {
             let mut s = Scanner::new(test);
-            let exp = expected
-                .as_ref()
-                .map_err(|e| ParserError::Unexpected(s.pos(), e.to_string()))?;
-            assert_eq!(parse_transaction(*date, &mut s)?, *exp);
+            assert_eq!(parse_transaction(*date, &mut s)?, *expected);
         }
         Ok(())
     }

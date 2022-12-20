@@ -1,21 +1,80 @@
 use std::{iter::Peekable, str::CharIndices};
 
 #[derive(Debug)]
-pub enum ParserError {
-    Unexpected(usize, String),
+pub struct ParserError {
+    got: Character,
+    expected: Character,
+    msg: Option<String>,
+    file: String,
+    line: usize,
+    col: usize,
+    context: Vec<String>,
 }
 
 impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ParserError::Unexpected(pos, msg) => write!(f, "{}: Error: {}", pos, msg),
+        write!(
+            f,
+            "{file}:{line}:{col}:",
+            file = self.file,
+            line = self.line,
+            col = self.col,
+        )?;
+        if let Some(ref s) = self.msg {
+            writeln!(f, "{}", s)?;
+        } else {
+            writeln!(f, "")?;
         }
+        writeln!(f, "got: {}", self.got)?;
+        writeln!(f, "expected: {:?}", self.expected)?;
+        for line in &self.context {
+            writeln!(f, "{}", line)?;
+        }
+        Ok(())
     }
 }
 
 impl std::error::Error for ParserError {}
 
 pub type Result<T> = std::result::Result<T, ParserError>;
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Character {
+    EOF,
+    Char(char),
+    Either(Vec<Character>),
+    Any,
+    WhiteSpace,
+    Custom(String),
+}
+
+impl Character {
+    pub fn from_char(ch: Option<char>) -> Self {
+        match ch {
+            None => Self::EOF,
+            Some(c) => Self::Char(c),
+        }
+    }
+}
+
+impl std::fmt::Display for Character {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::EOF => write!(f, "EOF"),
+            Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
+            Self::Any => write!(f, "any character"),
+            Self::WhiteSpace => write!(f, "whitespace"),
+            Self::Custom(s) => write!(f, "{}", s),
+            Self::Either(chars) => {
+                for ch in chars {
+                    write!(f, "{},", ch)?;
+                }
+                writeln!(f, "")?;
+                Ok(())
+            }
+        }
+    }
+}
 
 pub struct Scanner<'a> {
     source: &'a str,
@@ -73,20 +132,13 @@ impl<'a> Scanner<'a> {
     pub fn consume_char(&mut self, c: char) -> Result<()> {
         match self.next() {
             Some(d) if c == d => Ok(()),
-            Some(d) => Err(ParserError::Unexpected(
-                self.pos(),
-                format!("Expected {:?}, got {:?}", c, d),
-            )),
-            None => Err(ParserError::Unexpected(
-                self.pos(),
-                format!("Expected {:?}, got EOF", c),
-            )),
+            Some(d) => Err(self.error(None, Character::Char(c), Character::Char(d))),
+            None => Err(self.error(None, Character::Char(c), Character::EOF)),
         }
     }
 
     pub fn consume_string(&mut self, str: &str) -> Result<()> {
         for c in str.chars() {
-            println!("{}", c);
             self.consume_char(c)?;
         }
         Ok(())
@@ -102,18 +154,21 @@ impl<'a> Scanner<'a> {
     pub fn read_identifier(&mut self) -> Result<&'a str> {
         let res = self.read_while(|c| c.is_alphanumeric())?;
         match res {
-            "" => Err(ParserError::Unexpected(
-                self.pos(),
-                "Expected identifier, got nothing".to_string(),
-            )),
+            "" => {
+                let got = Character::from_char(self.current());
+                Err(self.error(
+                    Some("error while parsing identifier".into()),
+                    Character::Any,
+                    got,
+                ))
+            }
             _ => Ok(res),
         }
     }
 
     pub fn read_1(&mut self) -> Result<char> {
-        self.chars.next().map(|t| t.1).ok_or_else(|| {
-            ParserError::Unexpected(self.pos(), "expected one character, got EOF".into())
-        })
+        self.next()
+            .ok_or_else(|| self.error(None, Character::Any, Character::EOF))
     }
 
     pub fn read_n(&mut self, n: usize) -> Result<&'a str> {
@@ -128,22 +183,14 @@ impl<'a> Scanner<'a> {
         match self.next() {
             None => Ok(()),
             Some('\n') => Ok(()),
-            Some(ch) => {
-                return Err(ParserError::Unexpected(
-                    self.pos(),
-                    format!("expected EOL, got '{}'", ch),
-                ))
-            }
+            Some(ch) => return Err(self.error(None, Character::Char('\n'), Character::Char(ch))),
         }
     }
 
     pub fn consume_space1(&mut self) -> Result<()> {
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
-                return Err(ParserError::Unexpected(
-                    self.pos(),
-                    format!("expected white space, got {:?}", ch),
-                ))
+                return Err(self.error(None, Character::WhiteSpace, Character::Char(ch)))
             }
             _ => Ok(self.consume_space()),
         }
@@ -156,6 +203,18 @@ impl<'a> Scanner<'a> {
     pub fn consume_rest_of_line(&mut self) -> Result<()> {
         self.skip_while(|c| c != '\n');
         self.consume_eol()
+    }
+
+    pub fn error(&mut self, msg: Option<String>, want: Character, got: Character) -> ParserError {
+        return ParserError {
+            file: String::new(),
+            line: 0,
+            col: 0,
+            context: Vec::new(),
+            msg: msg,
+            expected: want,
+            got: got,
+        };
     }
 }
 
