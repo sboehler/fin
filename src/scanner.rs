@@ -30,9 +30,15 @@ impl std::fmt::Display for ParserError {
         writeln!(f, "-> want: {}", self.want)?;
         writeln!(f, "")?;
         for (n, line) in &self.context {
-            writeln!(f, "{:03}: {}", n, line)?;
+            writeln!(f, "{:5}:  {}", n, line)?;
         }
-        writeln!(f, "     {}{}", "_".repeat(self.col), "^")?;
+        writeln!(
+            f,
+            "{}{} want: {}",
+            " ".repeat(self.col + 8),
+            "^^^",
+            self.want
+        )?;
         Ok(())
     }
 }
@@ -190,9 +196,10 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn read_identifier(&mut self) -> Result<Annotated<&'a str>> {
-        let res = self.read_while(|c| c.is_alphanumeric())?;
+        self.mark_position();
+        let res = self.read_while(|c| c.is_alphanumeric())?.0;
         match res {
-            Annotated("", _) => {
+            "" => {
                 let got = Character::from_char(self.current());
                 Err(self.error(
                     Some("error while parsing identifier".into()),
@@ -200,7 +207,7 @@ impl<'a> Scanner<'a> {
                     got,
                 ))
             }
-            _ => Ok(res),
+            _ => self.annotate(res),
         }
     }
 
@@ -253,10 +260,11 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn error(&mut self, msg: Option<String>, want: Character, got: Character) -> ParserError {
-        let lines: Vec<_> = self.source[..self.pos()].lines().collect();
+        let pos = self.positions.pop().unwrap_or(self.pos());
+        let lines: Vec<_> = self.source[..pos].lines().collect();
         let line = lines.len().checked_sub(1).unwrap_or(0);
         let col = lines.last().map(|s| s.len()).unwrap_or(0);
-        let rng = lines.len().checked_sub(2).unwrap_or(0)..=lines.len();
+        let rng = lines.len().checked_sub(5).unwrap_or(0)..=lines.len().checked_sub(1).unwrap_or(0);
         let file = self
             .filename
             .as_ref()

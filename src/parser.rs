@@ -59,10 +59,10 @@ pub fn parse_command(s: &mut Scanner) -> Result<Command> {
     s.consume_space1()?;
     match s.current() {
         Some('p') => Ok(Command::Price(parse_price(d, s)?)),
-        Some('"') => Ok(Command::Trx(parse_transaction(d, s)?)),
-        Some('o') => Ok(Command::Open(parse_open(d, s)?)),
+        Some('"') => Ok(Command::Trx(parse_transaction(d, s)?.0)),
+        Some('o') => Ok(Command::Open(parse_open(d, s)?.0)),
         Some('b') => Ok(Command::Assertion(parse_assertion(d, s)?)),
-        Some('c') => Ok(Command::Close(parse_close(d, s)?)),
+        Some('c') => Ok(Command::Close(parse_close(d, s)?.0)),
         c => Err(s.error(
             Some("error parsing directive".into()),
             Character::Custom("directive".into()),
@@ -127,68 +127,77 @@ fn parse_account(s: &mut Scanner) -> Result<Annotated<Account>> {
     s.annotate(Account::new(account_type, segments))
 }
 
-fn parse_open(d: NaiveDate, s: &mut Scanner) -> Result<Open> {
+fn parse_open(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Open>> {
+    s.mark_position();
     s.consume_string("open")?.0;
     s.consume_space1()?;
     let a = parse_account(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
-    Ok(Open {
+    s.annotate(Open {
         date: d,
         account: a,
     })
 }
 
-fn parse_close(d: NaiveDate, s: &mut Scanner) -> Result<Close> {
+fn parse_close(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Close>> {
+    s.mark_position();
     s.consume_string("close")?.0;
     s.consume_space1()?;
     let a = parse_account(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
-    Ok(Close {
+    s.annotate(Close {
         date: d,
         account: a,
     })
 }
 
-fn parse_transaction(d: NaiveDate, s: &mut Scanner) -> Result<Transaction> {
+fn parse_transaction(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Transaction>> {
+    s.mark_position();
     let desc = s.read_quoted_string()?.0;
     s.consume_space1()?;
-    let tags = parse_tags(s)?;
+    let tags = parse_tags(s)?.0;
     s.consume_eol()?;
-    let (postings, account) = parse_postings(s, d)?;
-    Transaction::new(d, desc.into(), tags, postings, account).map_err(|e| {
+    let (postings, account) = parse_postings(s, d)?.0;
+    let t = Transaction::new(d, desc.into(), tags, postings, account).map_err(|e| {
         s.error(
             Some("error parsing transaction".into()),
             Character::Custom("a transaction".into()),
             Character::Custom(e.to_string()),
         )
-    })
+    })?;
+    s.annotate(t)
 }
 
-fn parse_tags(s: &mut Scanner) -> Result<Vec<Tag>> {
+fn parse_tags(s: &mut Scanner) -> Result<Annotated<Vec<Tag>>> {
+    s.mark_position();
     let mut v = Vec::new();
     while let Some('#') = s.current() {
-        v.push(parse_tag(s)?);
+        v.push(parse_tag(s)?.0);
         s.consume_space1()?.0
     }
-    Ok(v)
+    s.annotate(v)
 }
 
-fn parse_tag(s: &mut Scanner) -> Result<Tag> {
+fn parse_tag(s: &mut Scanner) -> Result<Annotated<Tag>> {
+    s.mark_position();
     s.consume_char('#')?;
-    Ok(Tag::new(s.read_identifier()?.0.into()))
+    let tag = s.read_identifier()?.0;
+    s.annotate(Tag::new(tag.into()))
 }
 
-fn parse_decimal(s: &mut Scanner) -> Result<Decimal> {
+fn parse_decimal(s: &mut Scanner) -> Result<Annotated<Decimal>> {
+    s.mark_position();
     let t = s.read_until(|c| c.is_whitespace())?.0;
-    t.parse::<Decimal>().map_err(|_| {
-        s.error(
+    match t.parse::<Decimal>() {
+        Ok(d) => s.annotate(d),
+        Err(_) => Err(s.error(
             Some("error parsing decimal".into()),
             Character::Custom("a decimal value".into()),
             Character::Custom(t.to_string()),
-        )
-    })
+        )),
+    }
 }
 
 fn parse_commodity(s: &mut Scanner) -> Result<Commodity> {
@@ -198,7 +207,7 @@ fn parse_commodity(s: &mut Scanner) -> Result<Commodity> {
 fn parse_lot(s: &mut Scanner, d: NaiveDate) -> Result<Lot> {
     s.consume_char('{')?;
     s.consume_space1()?;
-    let price = parse_decimal(s)?;
+    let price = parse_decimal(s)?.0;
     s.consume_space1()?;
     let commodity = parse_commodity(s)?;
     let mut label = None;
@@ -237,7 +246,11 @@ fn parse_lot(s: &mut Scanner, d: NaiveDate) -> Result<Lot> {
     ))
 }
 
-fn parse_postings(s: &mut Scanner, d: NaiveDate) -> Result<(Vec<Posting>, Option<Account>)> {
+fn parse_postings(
+    s: &mut Scanner,
+    d: NaiveDate,
+) -> Result<Annotated<(Vec<Posting>, Option<Account>)>> {
+    s.mark_position();
     let mut postings = Vec::new();
     let mut wildcard = None;
     while s
@@ -248,6 +261,7 @@ fn parse_postings(s: &mut Scanner, d: NaiveDate) -> Result<(Vec<Posting>, Option
         let mut lot = None;
         let mut tag = None;
         let account = parse_account(s)?.0;
+
         s.consume_space1()?;
         if s.current().map_or(true, |c| c == '\n') {
             if wildcard.is_none() {
@@ -261,7 +275,7 @@ fn parse_postings(s: &mut Scanner, d: NaiveDate) -> Result<(Vec<Posting>, Option
                 Character::Custom("".into()),
             ));
         }
-        let amount = parse_decimal(s)?;
+        let amount = parse_decimal(s)?.0;
         s.consume_space1()?;
         let commodity = parse_commodity(s)?;
         s.consume_space1()?;
@@ -270,7 +284,7 @@ fn parse_postings(s: &mut Scanner, d: NaiveDate) -> Result<(Vec<Posting>, Option
             s.consume_space1()?;
         }
         if let Some('#') = s.current() {
-            tag = Some(parse_tag(s)?);
+            tag = Some(parse_tag(s)?.0);
             s.consume_space1()?;
         }
         postings.push(Posting {
@@ -282,7 +296,7 @@ fn parse_postings(s: &mut Scanner, d: NaiveDate) -> Result<(Vec<Posting>, Option
         });
         s.consume_eol()?;
     }
-    Ok((postings, wildcard))
+    s.annotate((postings, wildcard))
 }
 
 fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Price> {
@@ -290,7 +304,7 @@ fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Price> {
     s.consume_space1()?;
     let source = parse_commodity(s)?;
     s.consume_space1()?;
-    let price = parse_decimal(s)?;
+    let price = parse_decimal(s)?.0;
     s.consume_space1()?;
     let target = parse_commodity(s)?;
     s.consume_space1()?;
@@ -303,7 +317,7 @@ fn parse_assertion(d: NaiveDate, s: &mut Scanner) -> Result<Assertion> {
     s.consume_space1()?;
     let account = parse_account(s)?.0;
     s.consume_space1()?;
-    let price = parse_decimal(s)?;
+    let price = parse_decimal(s)?.0;
     s.consume_space1()?;
     let commodity = parse_commodity(s)?;
     s.consume_space1()?;
@@ -367,40 +381,38 @@ mod tests {
 
     #[test]
     fn test_parse_open() {
-        let tests = [(
-            "open Assets:Account",
-            NaiveDate::from_ymd(2020, 2, 2),
-            Open {
-                date: NaiveDate::from_ymd(2020, 2, 2),
-                account: Account {
-                    account_type: AccountType::Assets,
-                    segments: vec!["Account".into()],
+        let mut s = Scanner::new("open Assets:Account");
+        assert_eq!(
+            parse_open(NaiveDate::from_ymd(2020, 2, 2), &mut s).unwrap(),
+            Annotated(
+                Open {
+                    date: NaiveDate::from_ymd(2020, 2, 2),
+                    account: Account {
+                        account_type: AccountType::Assets,
+                        segments: vec!["Account".into()],
+                    },
                 },
-            },
-        )];
-        for (test, d, want) in tests {
-            let mut s = Scanner::new(test);
-            assert_eq!(parse_open(d, &mut s).unwrap(), want)
-        }
+                (0, 19)
+            )
+        )
     }
 
     #[test]
     fn test_parse_close() {
-        let tests = [(
-            "close Assets:Account",
-            NaiveDate::from_ymd(2020, 2, 2),
-            Close {
-                date: NaiveDate::from_ymd(2020, 2, 2),
-                account: Account {
-                    account_type: AccountType::Assets,
-                    segments: vec!["Account".into()],
+        let mut s = Scanner::new("close Assets:Account");
+        assert_eq!(
+            parse_close(NaiveDate::from_ymd(2020, 2, 2), &mut s).unwrap(),
+            Annotated(
+                Close {
+                    date: NaiveDate::from_ymd(2020, 2, 2),
+                    account: Account {
+                        account_type: AccountType::Assets,
+                        segments: vec!["Account".into()],
+                    },
                 },
-            },
-        )];
-        for (test, d, want) in tests {
-            let mut s = Scanner::new(test);
-            assert_eq!(parse_close(d, &mut s).unwrap(), want)
-        }
+                (0, 20)
+            )
+        )
     }
 
     #[test]
@@ -415,7 +427,7 @@ mod tests {
         ];
         for (test, want, remainder) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_tags(&mut s).unwrap(), want);
+            assert_eq!(parse_tags(&mut s).unwrap().0, want);
             assert_eq!(s.read_all().unwrap().0, remainder)
         }
     }
@@ -429,7 +441,10 @@ mod tests {
         ];
         for (test, expected, remainder) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_decimal(&mut s).unwrap(), expected);
+            assert_eq!(
+                parse_decimal(&mut s).unwrap(),
+                Annotated(expected, (0, test.len()))
+            );
             assert_eq!(s.read_all().unwrap().0, remainder)
         }
     }
@@ -447,7 +462,7 @@ mod tests {
             (
                 "\"some description\"\nAssets:Account1 245.45 CHF\nIncome:Gains1 -245.45 CHF",
                 NaiveDate::from_ymd(2020, 1, 30),
-                Transaction::new(
+                Annotated(Transaction::new(
                     NaiveDate::from_ymd(2020, 1, 30),
                     "some description".into(),
                     vec![],
@@ -460,12 +475,12 @@ mod tests {
                         },
                     ],
                     None,
-                ).unwrap(),
+                ).unwrap(), (0, 71)),
             ),
             (
                 "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1 -245.45 CHF",
                 NaiveDate::from_ymd(2020, 1, 30),
-                Transaction::new(
+                Annotated(Transaction::new(
                     NaiveDate::from_ymd(2020, 1, 30),
                     "some description".into(),
                     vec![Tag::new("tag1".into()), Tag::new("tag2".into())],
@@ -478,12 +493,12 @@ mod tests {
                         },
                     ],
                     None,
-                ).unwrap(),
+                ).unwrap(), (0, 84)),
             ),
             (
                 "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1",
                 NaiveDate::from_ymd(2020, 1, 30),
-                Transaction::new(
+                Annotated(Transaction::new(
                     NaiveDate::from_ymd(2020, 1, 30),
                     "some description".into(),
                     vec![Tag::new("tag1".into()), Tag::new("tag2".into())],
@@ -496,7 +511,7 @@ mod tests {
                         },
                     ],
                     None,
-                ).unwrap(),
+                ).unwrap(), (0, 72)),
             ),
         ];
         for (test, date, expected) in tests {
@@ -517,23 +532,29 @@ mod tests {
         let tests = [
             (
                 "Assets:Account1 245.45 CHF\nIncome:Gains1 -245.45 CHF",
-                (
-                    vec![
-                        posting.clone(),
-                        Posting {
-                            amount: Decimal::new(-24545, 2),
-                            account: Account::new(AccountType::Income, vec!["Gains1".into()]),
-                            ..(posting.clone())
-                        },
-                    ],
-                    None,
+                Annotated(
+                    (
+                        vec![
+                            posting.clone(),
+                            Posting {
+                                amount: Decimal::new(-24545, 2),
+                                account: Account::new(AccountType::Income, vec!["Gains1".into()]),
+                                ..(posting.clone())
+                            },
+                        ],
+                        None,
+                    ),
+                    (0, 52),
                 ),
             ),
             (
                 "Assets:Account1 245.45 CHF\nIncome:Gains1",
-                (
-                    vec![posting],
-                    Some(Account::new(AccountType::Income, vec!["Gains1".into()])),
+                Annotated(
+                    (
+                        vec![posting],
+                        Some(Account::new(AccountType::Income, vec!["Gains1".into()])),
+                    ),
+                    (0, 40),
                 ),
             ),
         ];
