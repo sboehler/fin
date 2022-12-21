@@ -1,6 +1,6 @@
 use crate::model::{
-    Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting, Price, Tag,
-    Transaction,
+    Account, AccountType, Accrual, Assertion, Close, Command, Commodity, Interval, Lot, Open,
+    Period, Posting, Price, Tag, Transaction,
 };
 use crate::scanner::{Annotated, Character, Result, Scanner};
 use chrono::NaiveDate;
@@ -34,6 +34,13 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
                     let c = parse_command(s)?;
                     result.push(Directive::Command(c.0))
                 }
+                '@' => {
+                    let a = parse_accrual(s)?.0;
+                    let d = parse_date(s)?.0;
+                    s.consume_space1()?;
+                    let t = parse_transaction(s, d, Some(a))?.0;
+                    result.push(Directive::Command(Command::Trx(t)))
+                }
                 '*' | '#' => {
                     s.consume_rest_of_line()?;
                 }
@@ -61,7 +68,7 @@ pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
     s.consume_space1()?;
     let cmd = match s.current() {
         Some('p') => Command::Price(parse_price(d, s)?.0),
-        Some('"') => Command::Trx(parse_transaction(d, s)?.0),
+        Some('"') => Command::Trx(parse_transaction(s, d, None)?.0),
         Some('o') => Command::Open(parse_open(d, s)?.0),
         Some('b') => Command::Assertion(parse_assertion(d, s)?.0),
         Some('c') => Command::Close(parse_close(d, s)?.0),
@@ -75,6 +82,55 @@ pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
         }
     };
     s.annotate(pos, cmd)
+}
+
+fn parse_accrual(s: &mut Scanner) -> Result<Annotated<Accrual>> {
+    let pos = s.pos();
+    s.consume_string("@accrue")?;
+    s.consume_space1()?;
+    let interval = parse_interval(s)?.0;
+    s.consume_space1()?;
+    let start = parse_date(s)?.0;
+    s.consume_space1()?;
+    let end = parse_date(s)?.0;
+    s.consume_space1()?;
+    let account = parse_account(s)?.0;
+    s.consume_space1()?;
+    s.consume_eol()?;
+    s.annotate(
+        pos,
+        Accrual {
+            period: Period { start, end },
+            interval,
+            account,
+        },
+    )
+}
+
+fn parse_interval(s: &mut Scanner) -> Result<Annotated<Interval>> {
+    let pos = s.pos();
+    let str = s.read_identifier()?.0;
+    match str.to_lowercase().as_str() {
+        "once" => s.annotate(pos, Interval::Once),
+        "daily" => s.annotate(pos, Interval::Daily),
+        "weekly" => s.annotate(pos, Interval::Weekly),
+        "monthly" => s.annotate(pos, Interval::Monthly),
+        "quarterly" => s.annotate(pos, Interval::Quarterly),
+        "yearly" => s.annotate(pos, Interval::Yearly),
+        _ => Err(s.error(
+            pos,
+            Some("error parsing interval".into()),
+            Character::Either(vec![
+                Character::Custom("once".into()),
+                Character::Custom("daily".into()),
+                Character::Custom("weekly".into()),
+                Character::Custom("monthly".into()),
+                Character::Custom("quarterly".into()),
+                Character::Custom("yearly".into()),
+            ]),
+            Character::Custom(str.into()),
+        )),
+    }
 }
 
 fn parse_account_type(s: &mut Scanner) -> Result<Annotated<AccountType>> {
@@ -168,14 +224,18 @@ fn parse_close(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Close>> {
     )
 }
 
-fn parse_transaction(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Transaction>> {
+fn parse_transaction(
+    s: &mut Scanner,
+    d: NaiveDate,
+    acc: Option<Accrual>,
+) -> Result<Annotated<Transaction>> {
     let pos = s.pos();
     let desc = s.read_quoted_string()?.0;
     s.consume_space1()?;
     let tags = parse_tags(s)?.0;
     s.consume_eol()?;
     let postings = parse_postings(s)?.0;
-    let t = Transaction::new(d, desc.into(), tags, postings);
+    let t = Transaction::new(d, desc.into(), tags, postings, acc);
     s.annotate(pos, t)
 }
 
@@ -513,6 +573,7 @@ mod tests {
                             targets:None,
                         },
                     ],
+                    None,
                 ), (0, 105)),
             ),
             (
@@ -539,14 +600,69 @@ mod tests {
                             lot: None,
                             targets:None,
                          },
-                    ],), (0, 115)),
+                        
+                    ],None), (0, 115)),
             ),
         ];
         for (test, date, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_transaction(date, &mut s).unwrap(), want);
+            assert_eq!(parse_transaction(&mut s, date,None).unwrap(), want);
         }
     }
+
+    #[test]
+    fn test_parse_accrual() {
+        let tests = [
+            (
+                "@accrue daily 2022-04-03 2022-05-05 Liabilities:Accruals",
+                Annotated(Accrual{
+                    account:                        Account::new(AccountType::Liabilities, vec!["Accruals"]),
+                    interval: Interval::Daily,
+                    period: Period{
+                        start: NaiveDate::from_ymd( 2022, 4, 3),
+                    end: NaiveDate::from_ymd( 2022, 5, 5),
+                    },
+                
+
+                }, (0, 56)),
+            ),
+            (
+                "@accrue monthly 2022-04-03     2022-05-05     Liabilities:Bank    ",
+                Annotated(Accrual{
+                    account:                        Account::new(AccountType::Liabilities, vec!["Bank"]),
+                    interval: Interval::Monthly,
+                    period: Period{
+                        start: NaiveDate::from_ymd( 2022, 4, 3),
+                    end: NaiveDate::from_ymd( 2022, 5, 5),
+                    },
+                
+
+                }, (0, 66)),
+            ),
+           
+        ];
+        for (input, want) in tests {
+            let mut s = Scanner::new(input);
+            assert_eq!(parse_accrual(&mut s).unwrap(), want);
+        }
+    }
+
+    #[test]
+    fn test_parse_interval() {
+            let mut s = Scanner::new("daily");
+            assert_eq!(parse_interval(&mut s).unwrap(), Annotated(Interval::Daily, (0, 5)));
+            let mut s = Scanner::new("weekly");
+            assert_eq!(parse_interval(&mut s).unwrap(), Annotated(Interval::Weekly, (0, 6)));
+            let mut s = Scanner::new("monthly");
+            assert_eq!(parse_interval(&mut s).unwrap(), Annotated(Interval::Monthly, (0, 7)));
+            let mut s = Scanner::new("quarterly");
+            assert_eq!(parse_interval(&mut s).unwrap(), Annotated(Interval::Quarterly, (0, 9)));
+            let mut s = Scanner::new("yearly");
+            assert_eq!(parse_interval(&mut s).unwrap(), Annotated(Interval::Yearly, (0, 6)));
+            let mut s = Scanner::new("once");
+            assert_eq!(parse_interval(&mut s).unwrap(), Annotated(Interval::Once, (0, 4)));
+    }
+
 
     #[test]
     fn test_parse_postings() {

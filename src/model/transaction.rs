@@ -2,7 +2,7 @@ use chrono::prelude::NaiveDate;
 use std::fmt;
 use std::fmt::Display;
 
-use super::{Posting, Tag};
+use super::{Account, Interval, Period, Posting, Tag};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Transaction {
@@ -10,21 +10,39 @@ pub struct Transaction {
     pub description: String,
     pub tags: Vec<Tag>,
     pub postings: Vec<Posting>,
+    pub accrual: Option<Accrual>,
 }
 
 impl Transaction {
-    pub fn new(d: NaiveDate, desc: String, tags: Vec<Tag>, postings: Vec<Posting>) -> Transaction {
+    pub fn new(
+        d: NaiveDate,
+        desc: String,
+        tags: Vec<Tag>,
+        postings: Vec<Posting>,
+        accrual: Option<Accrual>,
+    ) -> Transaction {
         Transaction {
             date: d,
             description: desc,
             tags,
             postings,
+            accrual,
         }
     }
 }
 
 impl Display for Transaction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(ref acc) = self.accrual {
+            writeln!(
+                f,
+                "@accrue {interval} {start} {end} {account}",
+                interval = acc.interval,
+                start = acc.period.start,
+                end = acc.period.end,
+                account = acc.account
+            )?;
+        }
         write!(
             f,
             "{} \"{}\"",
@@ -40,4 +58,11 @@ impl Display for Transaction {
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Accrual {
+    pub interval: Interval,
+    pub period: Period,
+    pub account: Account,
 }
