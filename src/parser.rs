@@ -41,11 +41,13 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
                     parse_include(s)?;
                 }
                 _ => {
+                    let pos = s.pos();
                     return Err(s.error(
+                        pos,
                         Some("unexpected character".into()),
                         Character::Custom("directive or comment".into()),
                         Character::Char(c),
-                    ))
+                    ));
                 }
             };
         }
@@ -54,7 +56,7 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
 }
 
 pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
-    s.mark_position();
+    let pos = s.pos();
     let d = parse_date(s)?.0;
     s.consume_space1()?;
     let cmd = match s.current() {
@@ -65,25 +67,27 @@ pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
         Some('c') => Command::Close(parse_close(d, s)?.0),
         c => {
             return Err(s.error(
+                pos,
                 Some("error parsing directive".into()),
                 Character::Custom("directive".into()),
                 Character::from_char(c),
             ))
         }
     };
-    s.annotate(cmd)
+    s.annotate(pos, cmd)
 }
 
 fn parse_account_type(s: &mut Scanner) -> Result<Annotated<AccountType>> {
-    s.mark_position();
+    let pos = s.pos();
     let str = s.read_identifier()?.0;
     match str {
-        "Assets" => s.annotate(AccountType::Assets),
-        "Liabilities" => s.annotate(AccountType::Liabilities),
-        "Equity" => s.annotate(AccountType::Equity),
-        "Income" => s.annotate(AccountType::Income),
-        "Expenses" => s.annotate(AccountType::Expenses),
+        "Assets" => s.annotate(pos, AccountType::Assets),
+        "Liabilities" => s.annotate(pos, AccountType::Liabilities),
+        "Equity" => s.annotate(pos, AccountType::Equity),
+        "Income" => s.annotate(pos, AccountType::Income),
+        "Expenses" => s.annotate(pos, AccountType::Expenses),
         _ => Err(s.error(
+            pos,
             Some("error parsing account type".into()),
             Character::Either(vec![
                 Character::Custom("Assets".into()),
@@ -98,11 +102,12 @@ fn parse_account_type(s: &mut Scanner) -> Result<Annotated<AccountType>> {
 }
 
 fn parse_date(s: &mut Scanner) -> Result<Annotated<NaiveDate>> {
-    s.mark_position();
+    let pos = s.pos();
     let b = s.read_n(10)?;
     match NaiveDate::parse_from_str(b.0, "%Y-%m-%d") {
-        Ok(d) => s.annotate(d),
+        Ok(d) => s.annotate(pos, d),
         Err(_) => Err(s.error(
+            pos,
             Some("error parsing date".into()),
             Character::Custom("date (YYYY-MM-DD)".into()),
             Character::Custom(b.0.into()),
@@ -111,7 +116,7 @@ fn parse_date(s: &mut Scanner) -> Result<Annotated<NaiveDate>> {
 }
 
 fn parse_account(s: &mut Scanner) -> Result<Annotated<Account>> {
-    s.mark_position();
+    let pos = s.pos();
     let account_type = parse_account_type(s)?.0;
     let mut segments = Vec::new();
     while let Some(':') = s.current() {
@@ -120,6 +125,7 @@ fn parse_account(s: &mut Scanner) -> Result<Annotated<Account>> {
             Ok(Annotated(t, _)) => segments.push(t),
             Err(e) => {
                 return Err(s.error(
+                    pos,
                     Some("error parsing account".into()),
                     Character::Custom("account".into()),
                     Character::Custom(format!("{}", e)),
@@ -127,69 +133,76 @@ fn parse_account(s: &mut Scanner) -> Result<Annotated<Account>> {
             }
         }
     }
-    s.annotate(Account::new(account_type, segments))
+    s.annotate(pos, Account::new(account_type, segments))
 }
 
 fn parse_open(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Open>> {
-    s.mark_position();
+    let pos = s.pos();
     s.consume_string("open")?;
     s.consume_space1()?;
     let a = parse_account(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
-    s.annotate(Open {
-        date: d,
-        account: a,
-    })
+    s.annotate(
+        pos,
+        Open {
+            date: d,
+            account: a,
+        },
+    )
 }
 
 fn parse_close(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Close>> {
-    s.mark_position();
+    let pos = s.pos();
     s.consume_string("close")?;
     s.consume_space1()?;
     let a = parse_account(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
-    s.annotate(Close {
-        date: d,
-        account: a,
-    })
+    s.annotate(
+        pos,
+        Close {
+            date: d,
+            account: a,
+        },
+    )
 }
 
 fn parse_transaction(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Transaction>> {
-    s.mark_position();
+    let pos = s.pos();
     let desc = s.read_quoted_string()?.0;
     s.consume_space1()?;
     let tags = parse_tags(s)?.0;
     s.consume_eol()?;
     let postings = parse_postings(s)?.0;
     let t = Transaction::new(d, desc.into(), tags, postings);
-    s.annotate(t)
+    s.annotate(pos, t)
 }
 
 fn parse_tags(s: &mut Scanner) -> Result<Annotated<Vec<Tag>>> {
-    s.mark_position();
+    let pos = s.pos();
     let mut v = Vec::new();
     while let Some('#') = s.current() {
         v.push(parse_tag(s)?.0);
         s.consume_space1()?.0
     }
-    s.annotate(v)
+    s.annotate(pos, v)
 }
 
 fn parse_tag(s: &mut Scanner) -> Result<Annotated<Tag>> {
-    s.mark_position();
+    let pos = s.pos();
     s.consume_char('#')?;
     let tag = s.read_identifier()?.0;
-    s.annotate(Tag::new(tag.into()))
+    s.annotate(pos, Tag::new(tag.into()))
 }
 
 fn parse_decimal(s: &mut Scanner) -> Result<Annotated<Decimal>> {
-    s.mark_position();
+    let pos = s.pos();
     let t = s.read_until(|c| c.is_whitespace())?.0;
     match t.parse::<Decimal>() {
-        Ok(d) => s.annotate(d),
+        Ok(d) => s.annotate(pos, d),
         Err(_) => Err(s.error(
+            pos,
             Some("error parsing decimal".into()),
             Character::Custom("a decimal value".into()),
             Character::Custom(t.to_string()),
@@ -198,12 +211,13 @@ fn parse_decimal(s: &mut Scanner) -> Result<Annotated<Decimal>> {
 }
 
 fn parse_commodity(s: &mut Scanner) -> Result<Annotated<Commodity>> {
-    s.mark_position();
+    let pos = s.pos();
     let c = Commodity::new(s.read_identifier()?.0.into());
-    s.annotate(c)
+    s.annotate(pos, c)
 }
 
 fn parse_lot(s: &mut Scanner) -> Result<Lot> {
+    let pos = s.pos();
     s.consume_char('{')?;
     s.consume_space1()?;
     let price = parse_decimal(s)?.0;
@@ -226,6 +240,7 @@ fn parse_lot(s: &mut Scanner) -> Result<Lot> {
             }
             c => {
                 return Err(s.error(
+                    pos,
                     Some("error parsing lot".into()),
                     Character::Either(vec![
                         Character::Custom("label".into()),
@@ -246,7 +261,7 @@ fn parse_lot(s: &mut Scanner) -> Result<Lot> {
 }
 
 fn parse_postings(s: &mut Scanner) -> Result<Annotated<Vec<Posting>>> {
-    s.mark_position();
+    let pos = s.pos();
     let mut postings = Vec::new();
     postings.push(parse_posting(s)?.0);
     while s
@@ -256,11 +271,11 @@ fn parse_postings(s: &mut Scanner) -> Result<Annotated<Vec<Posting>>> {
     {
         postings.push(parse_posting(s)?.0)
     }
-    s.annotate(postings)
+    s.annotate(pos, postings)
 }
 
 fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting>> {
-    s.mark_position();
+    let pos = s.pos();
     let mut lot = None;
     let mut targets = None;
     let credit = parse_account(s)?.0;
@@ -279,20 +294,23 @@ fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting>> {
     if let Some('(') = s.current() {
         targets = Some(parse_targets(s)?.0);
     }
-    let posting = s.annotate(Posting {
-        credit,
-        debit,
-        commodity,
-        amount,
-        lot,
-        targets,
-    });
+    let posting = s.annotate(
+        pos,
+        Posting {
+            credit,
+            debit,
+            commodity,
+            amount,
+            lot,
+            targets,
+        },
+    );
     s.consume_eol()?;
     posting
 }
 
 fn parse_targets(s: &mut Scanner) -> Result<Annotated<Vec<Commodity>>> {
-    s.mark_position();
+    let pos = s.pos();
     let mut targets = Vec::new();
     s.consume_char('(')?;
     loop {
@@ -303,10 +321,11 @@ fn parse_targets(s: &mut Scanner) -> Result<Annotated<Vec<Commodity>>> {
             Some(',') => s.consume_char(',')?.0,
             Some(')') => {
                 s.consume_char(')')?;
-                return s.annotate(targets);
+                return s.annotate(pos, targets);
             }
             c => {
                 return Err(s.error(
+                    pos,
                     Some("error parsing target commodities".into()),
                     Character::Either(vec![Character::Char(')'), Character::Char(',')]),
                     Character::from_char(c),
@@ -317,7 +336,7 @@ fn parse_targets(s: &mut Scanner) -> Result<Annotated<Vec<Commodity>>> {
 }
 
 fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Price>> {
-    s.mark_position();
+    let pos = s.pos();
     s.consume_string("price")?;
     s.consume_space1()?;
     let source = parse_commodity(s)?.0;
@@ -327,11 +346,11 @@ fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Price>> {
     let target = parse_commodity(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
-    s.annotate(Price::new(d, price, target, source))
+    s.annotate(pos, Price::new(d, price, target, source))
 }
 
 fn parse_assertion(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Assertion>> {
-    s.mark_position();
+    let pos = s.pos();
     s.consume_string("balance")?;
     s.consume_space1()?;
     let account = parse_account(s)?.0;
@@ -341,11 +360,11 @@ fn parse_assertion(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Assertion>
     let commodity = parse_commodity(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
-    s.annotate(Assertion::new(d, account, price, commodity))
+    s.annotate(pos, Assertion::new(d, account, price, commodity))
 }
 
 fn parse_include(s: &mut Scanner) -> Result<Annotated<Directive>> {
-    s.mark_position();
+    let pos = s.pos();
     s.consume_string("include")?;
     s.consume_space1()?;
     let directive = s
@@ -355,7 +374,7 @@ fn parse_include(s: &mut Scanner) -> Result<Annotated<Directive>> {
         .map(Directive::Include)?;
     s.consume_space1()?;
     s.consume_eol()?;
-    s.annotate(directive)
+    s.annotate(pos, directive)
 }
 
 #[cfg(test)]

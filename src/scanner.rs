@@ -87,7 +87,6 @@ pub struct Scanner<'a> {
     source: &'a str,
     filename: Option<PathBuf>,
     chars: Peekable<CharIndices<'a>>,
-    positions: Vec<usize>,
 }
 
 impl<'a> Scanner<'a> {
@@ -96,7 +95,6 @@ impl<'a> Scanner<'a> {
             source: s,
             filename,
             chars: s.char_indices().peekable(),
-            positions: Vec::new(),
         }
     }
 
@@ -104,13 +102,8 @@ impl<'a> Scanner<'a> {
         Scanner::new_from_file(s, None)
     }
 
-    pub fn annotate<T>(&mut self, t: T) -> Result<Annotated<T>> {
-        Ok(Annotated(t, (self.positions.pop().unwrap(), self.pos())))
-    }
-
-    pub fn mark_position(&mut self) {
-        let pos = self.pos();
-        self.positions.push(pos)
+    pub fn annotate<T>(&mut self, prev: usize, t: T) -> Result<Annotated<T>> {
+        Ok(Annotated(t, (prev, self.pos())))
     }
 
     pub fn current(&mut self) -> Option<char> {
@@ -141,106 +134,107 @@ impl<'a> Scanner<'a> {
     where
         P: Fn(char) -> bool,
     {
-        self.mark_position();
+        let pos = self.pos();
         let start = self.pos();
         self.skip_while(pred);
         let end = self.pos();
-        self.annotate(&self.source[start..end])
+        self.annotate(pos, &self.source[start..end])
     }
 
     pub fn read_until<P>(&mut self, pred: P) -> Result<Annotated<&'a str>>
     where
         P: Fn(char) -> bool,
     {
-        self.mark_position();
+        let pos = self.pos();
         let start = self.pos();
         self.skip_while(|v| !pred(v));
         let end = self.pos();
-        self.annotate(&self.source[start..end])
+        self.annotate(pos, &self.source[start..end])
     }
 
     pub fn read_all(&mut self) -> Result<Annotated<&'a str>> {
-        self.mark_position();
+        let pos = self.pos();
         let start = self.pos();
         self.skip_while(|_| true);
-        self.annotate(&self.source[start..])
+        self.annotate(pos, &self.source[start..])
     }
 
     pub fn consume_char(&mut self, c: char) -> Result<Annotated<()>> {
-        self.mark_position();
+        let pos = self.pos();
         match self.advance() {
-            Some(d) if c == d => self.annotate(()),
-            o => Err(self.error(None, Character::Char(c), Character::from_char(o))),
+            Some(d) if c == d => self.annotate(pos, ()),
+            o => Err(self.error(pos, None, Character::Char(c), Character::from_char(o))),
         }
     }
 
     pub fn consume_string(&mut self, str: &str) -> Result<Annotated<()>> {
-        self.mark_position();
+        let pos = self.pos();
         for c in str.chars() {
             self.consume_char(c)?;
         }
-        self.annotate(())
+        self.annotate(pos, ())
     }
 
     pub fn read_quoted_string(&mut self) -> Result<Annotated<&'a str>> {
-        self.mark_position();
+        let pos = self.pos();
         self.consume_char('"')?;
         let res = self.read_while(|c| c != '"')?;
         self.consume_char('"')?;
-        self.annotate(res.0)
+        self.annotate(pos, res.0)
     }
 
     pub fn read_identifier(&mut self) -> Result<Annotated<&'a str>> {
-        self.mark_position();
+        let pos = self.pos();
         let res = self.read_while(|c| c.is_alphanumeric())?.0;
         match res {
             "" => {
                 let got = Character::from_char(self.current());
                 Err(self.error(
+                    pos,
                     Some("error while parsing identifier".into()),
                     Character::Custom("alphanumeric character to start the identifier".into()),
                     got,
                 ))
             }
-            _ => self.annotate(res),
+            _ => self.annotate(pos, res),
         }
     }
 
     pub fn read_1(&mut self) -> Result<Annotated<char>> {
-        self.mark_position();
+        let pos = self.pos();
         match self.advance() {
-            Some(c) => self.annotate(c),
-            None => Err(self.error(None, Character::Any, Character::EOF)),
+            Some(c) => self.annotate(pos, c),
+            None => Err(self.error(pos, None, Character::Any, Character::EOF)),
         }
     }
 
     pub fn read_n(&mut self, n: usize) -> Result<Annotated<&'a str>> {
-        self.mark_position();
+        let pos = self.pos();
         let start = self.pos();
         for _ in 0..n {
             self.read_1()?;
         }
         let res = &self.source[start..self.pos()];
-        self.annotate(res)
+        self.annotate(pos, res)
     }
 
     pub fn consume_eol(&mut self) -> Result<Annotated<()>> {
-        self.mark_position();
+        let pos = self.pos();
         match self.advance() {
-            None | Some('\n') => self.annotate(()),
-            Some(ch) => Err(self.error(None, Character::Char('\n'), Character::Char(ch))),
+            None | Some('\n') => self.annotate(pos, ()),
+            Some(ch) => Err(self.error(pos, None, Character::Char('\n'), Character::Char(ch))),
         }
     }
 
     pub fn consume_space1(&mut self) -> Result<Annotated<()>> {
-        self.mark_position();
+        let pos = self.pos();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
-                Err(self.error(None, Character::WhiteSpace, Character::Char(ch)))
+                Err(self.error(pos, None, Character::WhiteSpace, Character::Char(ch)))
             }
             _ => {
                 self.consume_space();
-                self.annotate(())
+                self.annotate(pos, ())
             }
         }
     }
@@ -254,8 +248,13 @@ impl<'a> Scanner<'a> {
         self.consume_eol()
     }
 
-    pub fn error(&mut self, msg: Option<String>, want: Character, got: Character) -> ParserError {
-        let pos = self.positions.pop().unwrap_or_else(|| self.pos());
+    pub fn error(
+        &mut self,
+        pos: usize,
+        msg: Option<String>,
+        want: Character,
+        got: Character,
+    ) -> ParserError {
         let lines: Vec<_> = self.source[..pos + 1].lines().collect();
         let line = lines.len().saturating_sub(1);
         let col = lines.last().map(|s| s.len().saturating_sub(1)).unwrap_or(0);
