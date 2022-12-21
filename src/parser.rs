@@ -76,8 +76,8 @@ pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
 
 fn parse_account_type(s: &mut Scanner) -> Result<Annotated<AccountType>> {
     s.mark_position();
-    let str = s.read_identifier()?;
-    match str.0 {
+    let str = s.read_identifier()?.0;
+    match str {
         "Assets" => s.annotate(AccountType::Assets),
         "Liabilities" => s.annotate(AccountType::Liabilities),
         "Equity" => s.annotate(AccountType::Equity),
@@ -92,7 +92,7 @@ fn parse_account_type(s: &mut Scanner) -> Result<Annotated<AccountType>> {
                 Character::Custom("Income".into()),
                 Character::Custom("Expenses".into()),
             ]),
-            Character::Custom(str.0.into()),
+            Character::Custom(str.into()),
         )),
     }
 }
@@ -248,6 +248,7 @@ fn parse_lot(s: &mut Scanner) -> Result<Lot> {
 fn parse_postings(s: &mut Scanner) -> Result<Annotated<Vec<Posting>>> {
     s.mark_position();
     let mut postings = Vec::new();
+    postings.push(parse_posting(s)?.0);
     while s
         .current()
         .map(|c| c.is_ascii_alphanumeric())

@@ -55,6 +55,7 @@ impl Character {
     pub fn from_char(ch: Option<char>) -> Self {
         match ch {
             None => Self::EOF,
+            Some(c) if c.is_whitespace() => Self::WhiteSpace,
             Some(c) => Self::Char(c),
         }
     }
@@ -197,7 +198,7 @@ impl<'a> Scanner<'a> {
                 let got = Character::from_char(self.current());
                 Err(self.error(
                     Some("error while parsing identifier".into()),
-                    Character::Any,
+                    Character::Custom("alphanumeric character to start the identifier".into()),
                     got,
                 ))
             }
@@ -254,11 +255,10 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn error(&mut self, msg: Option<String>, want: Character, got: Character) -> ParserError {
-        println!("{:?}", self.positions);
         let pos = self.positions.pop().unwrap_or_else(|| self.pos());
-        let lines: Vec<_> = self.source[..pos].lines().collect();
+        let lines: Vec<_> = self.source[..pos + 1].lines().collect();
         let line = lines.len().saturating_sub(1);
-        let col = lines.last().map(|s| s.len()).unwrap_or(0);
+        let col = lines.last().map(|s| s.len().saturating_sub(1)).unwrap_or(0);
         let rng = lines.len().saturating_sub(5)..=lines.len().saturating_sub(1);
         let file = self
             .filename
