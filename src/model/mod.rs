@@ -10,6 +10,7 @@ mod posting;
 mod price;
 mod tag;
 mod transaction;
+mod value;
 
 pub use account::{Account, AccountType};
 pub use assertion::Assertion;
@@ -25,3 +26,4 @@ pub use price::Price;
 pub use tag::Tag;
 pub use transaction::Accrual;
 pub use transaction::Transaction;
+pub use value::Value;

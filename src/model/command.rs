@@ -1,4 +1,4 @@
-use super::{Assertion, Close, Open, Price, Transaction};
+use super::{Assertion, Close, Open, Price, Transaction, Value};
 use std::fmt;
 use std::fmt::Display;
 
@@ -9,6 +9,7 @@ pub enum Command {
     Trx(Transaction),
     Price(Price),
     Assertion(Assertion),
+    Value(Value),
 }
 
 impl Display for Command {
@@ -19,6 +20,7 @@ impl Display for Command {
             Command::Trx(t) => write!(f, "{}", t),
             Command::Price(p) => write!(f, "{}", p),
             Command::Assertion(a) => write!(f, "{}", a),
+            Command::Value(v) => write!(f, "{}", v),
         }
     }
 }
