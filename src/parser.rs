@@ -1,5 +1,5 @@
 use crate::model::{
-    Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting, Posting2,
+    Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting,
     Price, Tag, Transaction,
 };
 use crate::scanner::{Annotated, Character, Result, Scanner};
@@ -159,14 +159,8 @@ fn parse_transaction(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Transact
     s.consume_space1()?;
     let tags = parse_tags(s)?.0;
     s.consume_eol()?;
-    let (postings, account) = parse_postings(s)?.0;
-    let t = Transaction::new(d, desc.into(), tags, postings, account).map_err(|e| {
-        s.error(
-            Some("error parsing transaction".into()),
-            Character::Custom("a transaction".into()),
-            Character::Custom(e.to_string()),
-        )
-    })?;
+    let postings = parse_postings(s)?.0;
+    let t = Transaction::new(d, desc.into(), tags, postings);
     s.annotate(t)
 }
 
@@ -246,57 +240,9 @@ fn parse_lot(s: &mut Scanner) -> Result<Lot> {
     ))
 }
 
-fn parse_postings(s: &mut Scanner) -> Result<Annotated<(Vec<Posting>, Option<Account>)>> {
-    s.mark_position();
-    let mut postings = Vec::new();
-    let mut wildcard = None;
-    while s
-        .current()
-        .map(|c| c.is_ascii_alphanumeric())
-        .unwrap_or(false)
-    {
-        let mut lot = None;
-        let mut tag = None;
-        let account = parse_account(s)?.0;
 
-        s.consume_space1()?;
-        if s.current().map_or(true, |c| c == '\n') {
-            if wildcard.is_none() {
-                wildcard = Some(account);
-                s.consume_eol()?;
-                continue;
-            }
-            return Err(s.error(
-                Some("duplicate wildcard".into()),
-                Character::Custom("".into()),
-                Character::Custom("".into()),
-            ));
-        }
-        let amount = parse_decimal(s)?.0;
-        s.consume_space1()?;
-        let commodity = parse_commodity(s)?;
-        s.consume_space1()?;
-        if let Some('{') = s.current() {
-            lot = Some(parse_lot(s)?);
-            s.consume_space1()?;
-        }
-        if let Some('#') = s.current() {
-            tag = Some(parse_tag(s)?.0);
-            s.consume_space1()?;
-        }
-        postings.push(Posting {
-            account,
-            commodity,
-            amount,
-            lot,
-            tag,
-        });
-        s.consume_eol()?;
-    }
-    s.annotate((postings, wildcard))
-}
 
-fn parse_postings2(s: &mut Scanner) -> Result<Annotated<Vec<Posting2>>> {
+fn parse_postings(s: &mut Scanner) -> Result<Annotated<Vec<Posting>>> {
     s.mark_position();
     let mut postings = Vec::new();
     while s
@@ -309,7 +255,7 @@ fn parse_postings2(s: &mut Scanner) -> Result<Annotated<Vec<Posting2>>> {
     s.annotate(postings)
 }
 
-fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting2>> {
+fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting>> {
     s.mark_position();
     let mut lot = None;
     let credit = parse_account(s)?.0;
@@ -325,7 +271,7 @@ fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting2>> {
         lot = Some(parse_lot(s)?);
         s.consume_space1()?;
     }
-    let posting = s.annotate(Posting2 {
+    let posting = s.annotate(Posting {
         credit,
         debit,
         commodity,
@@ -488,67 +434,55 @@ mod tests {
 
     #[test]
     fn test_parse_transaction() {
-        let posting = Posting {
-            account: Account::new(AccountType::Assets, vec!["Account1".into()]),
-            amount: Decimal::new(24545, 2),
-            commodity: Commodity::new("CHF".into()),
-            lot: None,
-            tag: None,
-        };
         let tests = [
             (
-                "\"some description\"\nAssets:Account1 245.45 CHF\nIncome:Gains1 -245.45 CHF",
+                "\"some description\"\nAssets:Account1 Expenses:Trading 245.45 CHF\nIncome:Gains1 Assets:Foo -245.45 CHF",
                 NaiveDate::from_ymd(2020, 1, 30),
                 Annotated(Transaction::new(
                     NaiveDate::from_ymd(2020, 1, 30),
                     "some description".into(),
                     vec![],
                     vec![
-                        posting.clone(),
                         Posting {
-                            account: Account::new(AccountType::Income, vec!["Gains1".into()]),
+                            credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
+                            debit: Account::new(AccountType::Expenses, vec!["Trading".into()]),
+                            amount: Decimal::new(24545, 2),
+                            commodity:             Commodity::new("CHF".into()),
+                            lot: None,
+                        },
+                        Posting {
+                            credit: Account::new(AccountType::Income, vec!["Gains1".into()]),
+                            debit: Account::new(AccountType::Assets, vec!["Foo".into()]),
                             amount: Decimal::new(-24545, 2),
-                            ..(posting.clone())
+                            commodity:             Commodity::new("CHF".into()),
+                            lot: None,
                         },
                     ],
-                    None,
-                ).unwrap(), (0, 71)),
+                ), (0, 99)),
             ),
             (
-                "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1 -245.45 CHF",
+                "\"some description\" #tag1 #tag2 \nAssets:Account1 Assets:Account2   245.45 CHF\nIncome:Gains Assets:Account2 10000 USD",
                 NaiveDate::from_ymd(2020, 1, 30),
                 Annotated(Transaction::new(
                     NaiveDate::from_ymd(2020, 1, 30),
                     "some description".into(),
                     vec![Tag::new("tag1".into()), Tag::new("tag2".into())],
                     vec![
-                        posting.clone(),
                         Posting {
-                            account: Account::new(AccountType::Income, vec!["Gains1".into()]),
-                            amount: Decimal::new(-24545, 2),
-                            ..(posting.clone())
-                        },
-                    ],
-                    None,
-                ).unwrap(), (0, 84)),
-            ),
-            (
-                "\"some description\" #tag1 #tag2 \nAssets:Account1 245.45 CHF\nIncome:Gains1",
-                NaiveDate::from_ymd(2020, 1, 30),
-                Annotated(Transaction::new(
-                    NaiveDate::from_ymd(2020, 1, 30),
-                    "some description".into(),
-                    vec![Tag::new("tag1".into()), Tag::new("tag2".into())],
-                    vec![
-                        posting.clone(),
-                        Posting {
-                            account: Account::new(AccountType::Income, vec!["Gains1".into()]),
-                            amount: Decimal::new(-24545, 2),
-                            ..posting
-                        },
-                    ],
-                    None,
-                ).unwrap(), (0, 72)),
+                            credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
+                            debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                            amount: Decimal::new(24_545, 2),
+                            commodity: Commodity::new("CHF".into()),
+                            lot: None,
+                         },
+                         Posting {
+                            credit: Account::new(AccountType::Income, vec!["Gains".into()]),
+                            debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                            amount: Decimal::new(1_000_000, 2),
+                            commodity: Commodity::new("USD".into()),
+                            lot: None,
+                         },
+                    ],), (0, 115)),
             ),
         ];
         for (test, date, want) in tests {
@@ -558,62 +492,18 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_postings() {
-        let posting = Posting {
-            account: Account::new(AccountType::Assets, vec!["Account1".into()]),
-            amount: Decimal::new(24545, 2),
-            commodity: Commodity::new("CHF".into()),
-            lot: None,
-            tag: None,
-        };
-        let tests = [
-            (
-                "Assets:Account1 245.45 CHF\nIncome:Gains1 -245.45 CHF",
-                Annotated(
-                    (
-                        vec![
-                            posting.clone(),
-                            Posting {
-                                amount: Decimal::new(-24545, 2),
-                                account: Account::new(AccountType::Income, vec!["Gains1".into()]),
-                                ..(posting.clone())
-                            },
-                        ],
-                        None,
-                    ),
-                    (0, 52),
-                ),
-            ),
-            (
-                "Assets:Account1 245.45 CHF\nIncome:Gains1",
-                Annotated(
-                    (
-                        vec![posting],
-                        Some(Account::new(AccountType::Income, vec!["Gains1".into()])),
-                    ),
-                    (0, 40),
-                ),
-            ),
-        ];
-        for (test, want) in tests {
-            let mut s = Scanner::new(test);
-            assert_eq!(parse_postings(&mut s).unwrap(), want);
-        }
-    }
-
-    #[test]
     fn test_parse_postings2() {
         let tests = [(
             "Assets:Account1    Assets:Account2   4.00    CHF\nAssets:Account2    Assets:Account1   3.00 USD",
             Annotated(vec![
-                Posting2 {
+                Posting {
                     credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
                     debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
                     amount: Decimal::new(400, 2),
                     commodity: Commodity::new("CHF".into()),
                     lot: None,
                 },
-                Posting2 {
+                Posting {
                     credit: Account::new(AccountType::Assets, vec!["Account2".into()]),
                     debit: Account::new(AccountType::Assets, vec!["Account1".into()]),
                     amount: Decimal::new(300, 2),
@@ -626,7 +516,7 @@ mod tests {
         )];
         for (test, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_postings2(&mut s).unwrap(), want);
+            assert_eq!(parse_postings(&mut s).unwrap(), want);
         }
     }
 
@@ -635,7 +525,7 @@ mod tests {
         let tests = [(
             "Assets:Account1    Assets:Account2   4.00    CHF",
             Annotated(
-                Posting2 {
+                Posting {
                     credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
                     debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
                     amount: Decimal::new(400, 2),
