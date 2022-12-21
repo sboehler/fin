@@ -32,7 +32,7 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
             match c {
                 '0'..='9' => {
                     let c = parse_command(s)?;
-                    result.push(Directive::Command(c))
+                    result.push(Directive::Command(c.0))
                 }
                 '*' | '#' => {
                     s.consume_rest_of_line()?;
@@ -53,22 +53,25 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
     Ok(result)
 }
 
-pub fn parse_command(s: &mut Scanner) -> Result<Command> {
+pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
     s.mark_position();
     let d = parse_date(s)?.0;
     s.consume_space1()?;
-    match s.current() {
-        Some('p') => Ok(Command::Price(parse_price(d, s)?)),
-        Some('"') => Ok(Command::Trx(parse_transaction(d, s)?.0)),
-        Some('o') => Ok(Command::Open(parse_open(d, s)?.0)),
-        Some('b') => Ok(Command::Assertion(parse_assertion(d, s)?)),
-        Some('c') => Ok(Command::Close(parse_close(d, s)?.0)),
-        c => Err(s.error(
-            Some("error parsing directive".into()),
-            Character::Custom("directive".into()),
-            Character::from_char(c),
-        )),
-    }
+    let cmd = match s.current() {
+        Some('p') => Command::Price(parse_price(d, s)?.0),
+        Some('"') => Command::Trx(parse_transaction(d, s)?.0),
+        Some('o') => Command::Open(parse_open(d, s)?.0),
+        Some('b') => Command::Assertion(parse_assertion(d, s)?.0),
+        Some('c') => Command::Close(parse_close(d, s)?.0),
+        c => {
+            return Err(s.error(
+                Some("error parsing directive".into()),
+                Character::Custom("directive".into()),
+                Character::from_char(c),
+            ))
+        }
+    };
+    s.annotate(cmd)
 }
 
 fn parse_account_type(s: &mut Scanner) -> Result<Annotated<AccountType>> {
@@ -312,7 +315,8 @@ fn parse_targets(s: &mut Scanner) -> Result<Annotated<Vec<Commodity>>> {
     }
 }
 
-fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Price> {
+fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Price>> {
+    s.mark_position();
     s.consume_string("price")?;
     s.consume_space1()?;
     let source = parse_commodity(s)?.0;
@@ -322,10 +326,11 @@ fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Price> {
     let target = parse_commodity(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
-    Ok(Price::new(d, price, target, source))
+    s.annotate(Price::new(d, price, target, source))
 }
 
-fn parse_assertion(d: NaiveDate, s: &mut Scanner) -> Result<Assertion> {
+fn parse_assertion(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Assertion>> {
+    s.mark_position();
     s.consume_string("balance")?;
     s.consume_space1()?;
     let account = parse_account(s)?.0;
@@ -335,10 +340,11 @@ fn parse_assertion(d: NaiveDate, s: &mut Scanner) -> Result<Assertion> {
     let commodity = parse_commodity(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
-    Ok(Assertion::new(d, account, price, commodity))
+    s.annotate(Assertion::new(d, account, price, commodity))
 }
 
-fn parse_include(s: &mut Scanner) -> Result<Directive> {
+fn parse_include(s: &mut Scanner) -> Result<Annotated<Directive>> {
+    s.mark_position();
     s.consume_string("include")?;
     s.consume_space1()?;
     let directive = s
@@ -348,7 +354,7 @@ fn parse_include(s: &mut Scanner) -> Result<Directive> {
         .map(Directive::Include)?;
     s.consume_space1()?;
     s.consume_eol()?;
-    Ok(directive)
+    s.annotate(directive)
 }
 
 #[cfg(test)]
@@ -380,10 +386,7 @@ mod tests {
             ("Assets", Account::new(AccountType::Assets, Vec::new())),
             (
                 "Liabilities:CreditCards:Visa",
-                Account::new(
-                    AccountType::Liabilities,
-                    vec!["CreditCards", "Visa"],
-                ),
+                Account::new(AccountType::Liabilities, vec!["CreditCards", "Visa"]),
             ),
         ];
         for (test, want) in tests {
@@ -600,21 +603,27 @@ mod tests {
             (
                 "price USD 0.901 CHF",
                 NaiveDate::from_ymd(2020, 2, 2),
-                Price::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
-                    Decimal::new(901, 3),
-                    Commodity::new("CHF".into()),
-                    Commodity::new("USD".into()),
+                Annotated(
+                    Price::new(
+                        NaiveDate::from_ymd(2020, 2, 2),
+                        Decimal::new(901, 3),
+                        Commodity::new("CHF".into()),
+                        Commodity::new("USD".into()),
+                    ),
+                    (0, 19),
                 ),
             ),
             (
                 "price 1MDB 1000000000 USD",
                 NaiveDate::from_ymd(2020, 2, 2),
-                Price::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
-                    Decimal::new(1000000000, 0),
-                    Commodity::new("USD".into()),
-                    Commodity::new("1MDB".into()),
+                Annotated(
+                    Price::new(
+                        NaiveDate::from_ymd(2020, 2, 2),
+                        Decimal::new(1000000000, 0),
+                        Commodity::new("USD".into()),
+                        Commodity::new("1MDB".into()),
+                    ),
+                    (0, 25),
                 ),
             ),
         ];
@@ -630,21 +639,27 @@ mod tests {
             (
                 "balance Assets:MyAccount 0.901 USD",
                 NaiveDate::from_ymd(2020, 2, 2),
-                Assertion::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
-                    Account::new(AccountType::Assets, vec!["MyAccount"]),
-                    Decimal::new(901, 3),
-                    Commodity::new("USD".into()),
+                Annotated(
+                    Assertion::new(
+                        NaiveDate::from_ymd(2020, 2, 2),
+                        Account::new(AccountType::Assets, vec!["MyAccount"]),
+                        Decimal::new(901, 3),
+                        Commodity::new("USD".into()),
+                    ),
+                    (0, 34),
                 ),
             ),
             (
                 "balance Liabilities:123foo 100 1CT",
                 NaiveDate::from_ymd(2020, 2, 2),
-                Assertion::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
-                    Account::new(AccountType::Liabilities, vec!["123foo"]),
-                    Decimal::new(100, 0),
-                    Commodity::new("1CT".into()),
+                Annotated(
+                    Assertion::new(
+                        NaiveDate::from_ymd(2020, 2, 2),
+                        Account::new(AccountType::Liabilities, vec!["123foo"]),
+                        Decimal::new(100, 0),
+                        Commodity::new("1CT".into()),
+                    ),
+                    (0, 34),
                 ),
             ),
         ];

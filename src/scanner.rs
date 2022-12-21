@@ -254,6 +254,7 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn error(&mut self, msg: Option<String>, want: Character, got: Character) -> ParserError {
+        println!("{:?}", self.positions);
         let pos = self.positions.pop().unwrap_or_else(|| self.pos());
         let lines: Vec<_> = self.source[..pos].lines().collect();
         let line = lines.len().saturating_sub(1);
