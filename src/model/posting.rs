@@ -10,6 +10,7 @@ pub struct Posting {
     pub commodity: Commodity,
     pub amount: Decimal,
     pub lot: Option<Lot>,
+    pub targets: Option<Vec<Commodity>>,
 }
 
 impl Display for Posting {
@@ -21,6 +22,16 @@ impl Display for Posting {
         )?;
         if let Some(l) = &self.lot {
             write!(f, " {}", l)?
+        }
+        if let Some(ts) = &self.targets {
+            write!(f, "(")?;
+            for t in ts.iter().enumerate() {
+                write!(f, "{}", t.1)?;
+                if t.0 < ts.len() {
+                    write!(f, ",")?;
+                }
+            }
+            write!(f, ")")?;
         }
         writeln!(f)
     }

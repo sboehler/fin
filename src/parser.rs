@@ -1,6 +1,6 @@
 use crate::model::{
-    Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting,
-    Price, Tag, Transaction,
+    Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting, Price, Tag,
+    Transaction,
 };
 use crate::scanner::{Annotated, Character, Result, Scanner};
 use chrono::NaiveDate;
@@ -194,8 +194,10 @@ fn parse_decimal(s: &mut Scanner) -> Result<Annotated<Decimal>> {
     }
 }
 
-fn parse_commodity(s: &mut Scanner) -> Result<Commodity> {
-    Ok(Commodity::new(s.read_identifier()?.0.into()))
+fn parse_commodity(s: &mut Scanner) -> Result<Annotated<Commodity>> {
+    s.mark_position();
+    let c = Commodity::new(s.read_identifier()?.0.into());
+    s.annotate(c)
 }
 
 fn parse_lot(s: &mut Scanner) -> Result<Lot> {
@@ -203,7 +205,7 @@ fn parse_lot(s: &mut Scanner) -> Result<Lot> {
     s.consume_space1()?;
     let price = parse_decimal(s)?.0;
     s.consume_space1()?;
-    let commodity = parse_commodity(s)?;
+    let commodity = parse_commodity(s)?.0;
     let mut label = None;
     let mut date = None;
     s.consume_space();
@@ -240,8 +242,6 @@ fn parse_lot(s: &mut Scanner) -> Result<Lot> {
     ))
 }
 
-
-
 fn parse_postings(s: &mut Scanner) -> Result<Annotated<Vec<Posting>>> {
     s.mark_position();
     let mut postings = Vec::new();
@@ -258,6 +258,7 @@ fn parse_postings(s: &mut Scanner) -> Result<Annotated<Vec<Posting>>> {
 fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting>> {
     s.mark_position();
     let mut lot = None;
+    let mut targets = None;
     let credit = parse_account(s)?.0;
 
     s.consume_space1()?;
@@ -265,11 +266,14 @@ fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting>> {
     s.consume_space1()?;
     let amount = parse_decimal(s)?.0;
     s.consume_space1()?;
-    let commodity = parse_commodity(s)?;
+    let commodity = parse_commodity(s)?.0;
     s.consume_space1()?;
     if let Some('{') = s.current() {
         lot = Some(parse_lot(s)?);
         s.consume_space1()?;
+    }
+    if let Some('(') = s.current() {
+        targets = Some(parse_targets(s)?.0);
     }
     let posting = s.annotate(Posting {
         credit,
@@ -277,20 +281,46 @@ fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting>> {
         commodity,
         amount,
         lot,
+        targets,
     });
     s.consume_eol()?;
     posting
 }
 
+fn parse_targets(s: &mut Scanner) -> Result<Annotated<Vec<Commodity>>> {
+    s.mark_position();
+    let mut targets = Vec::new();
+    s.consume_char('(')?;
+    loop {
+        s.consume_space();
+        targets.push(parse_commodity(s)?.0);
+        s.consume_space();
+        match s.current() {
+            Some(',') => s.consume_char(',')?.0,
+            Some(')') => {
+                s.consume_char(')')?;
+                return s.annotate(targets);
+            }
+            c => {
+                return Err(s.error(
+                    Some("error parsing target commodities".into()),
+                    Character::Either(vec![Character::Char(')'), Character::Char(',')]),
+                    Character::from_char(c),
+                ))
+            }
+        }
+    }
+}
+
 fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Price> {
     s.consume_string("price")?;
     s.consume_space1()?;
-    let source = parse_commodity(s)?;
-    s.consume_space1()?;
+    let source = parse_commodity(s)?.0;
+    s.consume_space1()?.0;
     let price = parse_decimal(s)?.0;
     s.consume_space1()?;
-    let target = parse_commodity(s)?;
-    s.consume_space1()?;
+    let target = parse_commodity(s)?.0;
+    s.consume_space1()?.0;
     s.consume_eol()?;
     Ok(Price::new(d, price, target, source))
 }
@@ -302,7 +332,7 @@ fn parse_assertion(d: NaiveDate, s: &mut Scanner) -> Result<Assertion> {
     s.consume_space1()?;
     let price = parse_decimal(s)?.0;
     s.consume_space1()?;
-    let commodity = parse_commodity(s)?;
+    let commodity = parse_commodity(s)?.0;
     s.consume_space1()?;
     s.consume_eol()?;
     Ok(Assertion::new(d, account, price, commodity))
@@ -436,7 +466,7 @@ mod tests {
     fn test_parse_transaction() {
         let tests = [
             (
-                "\"some description\"\nAssets:Account1 Expenses:Trading 245.45 CHF\nIncome:Gains1 Assets:Foo -245.45 CHF",
+                "\"some description\"\nAssets:Account1 Expenses:Trading 245.45 CHF (ABC)\nIncome:Gains1 Assets:Foo -245.45 CHF",
                 NaiveDate::from_ymd(2020, 1, 30),
                 Annotated(Transaction::new(
                     NaiveDate::from_ymd(2020, 1, 30),
@@ -447,8 +477,9 @@ mod tests {
                             credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
                             debit: Account::new(AccountType::Expenses, vec!["Trading".into()]),
                             amount: Decimal::new(24545, 2),
-                            commodity:             Commodity::new("CHF".into()),
+                            commodity: Commodity::new("CHF".into()),
                             lot: None,
+                            targets: Some(vec![Commodity::new("ABC".into())]),
                         },
                         Posting {
                             credit: Account::new(AccountType::Income, vec!["Gains1".into()]),
@@ -456,9 +487,10 @@ mod tests {
                             amount: Decimal::new(-24545, 2),
                             commodity:             Commodity::new("CHF".into()),
                             lot: None,
+                            targets:None,
                         },
                     ],
-                ), (0, 99)),
+                ), (0, 105)),
             ),
             (
                 "\"some description\" #tag1 #tag2 \nAssets:Account1 Assets:Account2   245.45 CHF\nIncome:Gains Assets:Account2 10000 USD",
@@ -474,6 +506,7 @@ mod tests {
                             amount: Decimal::new(24_545, 2),
                             commodity: Commodity::new("CHF".into()),
                             lot: None,
+                            targets:None,
                          },
                          Posting {
                             credit: Account::new(AccountType::Income, vec!["Gains".into()]),
@@ -481,6 +514,7 @@ mod tests {
                             amount: Decimal::new(1_000_000, 2),
                             commodity: Commodity::new("USD".into()),
                             lot: None,
+                            targets:None,
                          },
                     ],), (0, 115)),
             ),
@@ -492,7 +526,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_postings2() {
+    fn test_parse_postings() {
         let tests = [(
             "Assets:Account1    Assets:Account2   4.00    CHF\nAssets:Account2    Assets:Account1   3.00 USD",
             Annotated(vec![
@@ -502,6 +536,7 @@ mod tests {
                     amount: Decimal::new(400, 2),
                     commodity: Commodity::new("CHF".into()),
                     lot: None,
+                    targets:None,
                 },
                 Posting {
                     credit: Account::new(AccountType::Assets, vec!["Account2".into()]),
@@ -509,8 +544,8 @@ mod tests {
                     amount: Decimal::new(300, 2),
                     commodity: Commodity::new("USD".into()),
                     lot: None,
-                }                
-                ],
+                    targets:None,
+                }],
                 (0, 94),
             ),
         )];
@@ -518,6 +553,23 @@ mod tests {
             let mut s = Scanner::new(test);
             assert_eq!(parse_postings(&mut s).unwrap(), want);
         }
+    }
+
+    #[test]
+    fn test_parse_targets() {
+        let mut s = Scanner::new("(A,B,  C   )");
+        let got = parse_targets(&mut s).unwrap();
+        assert_eq!(
+            got,
+            Annotated(
+                vec![
+                    Commodity::new("A".into()),
+                    Commodity::new("B".into()),
+                    Commodity::new("C".into())
+                ],
+                (0, 12)
+            )
+        );
     }
 
     #[test]
@@ -531,6 +583,7 @@ mod tests {
                     amount: Decimal::new(400, 2),
                     commodity: Commodity::new("CHF".into()),
                     lot: None,
+                    targets: None,
                 },
                 (0, 48),
             ),
