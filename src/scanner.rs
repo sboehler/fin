@@ -309,14 +309,18 @@ mod tests {
     #[test]
     fn test_consume_char() {
         let mut s = Scanner::new("asdf");
-        for cp in "asdf".chars() {
-            assert!(s.consume_char(cp).is_ok());
-        }
+        assert_eq!(s.consume_char('a').unwrap(), Annotated((), (0, 1)));
+        assert_eq!(s.consume_char('s').unwrap(), Annotated((), (1, 2)));
+        assert_eq!(s.consume_char('d').unwrap(), Annotated((), (2, 3)));
+        assert_eq!(s.consume_char('f').unwrap(), Annotated((), (3, 4)));
     }
 
     #[test]
     fn test_consume_string() {
-        assert!(Scanner::new("asdf").consume_string("asdf").is_ok())
+        assert_eq!(
+            Scanner::new("asdf").consume_string("asdf").unwrap(),
+            Annotated((), (0, 4))
+        )
     }
 
     #[test]
