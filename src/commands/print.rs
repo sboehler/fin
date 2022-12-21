@@ -17,7 +17,6 @@ impl Command {
             Ok(ds) => {
                 for d in &ds {
                     println!("{}", d);
-                    println!();
                 }
             }
             Err(e) => {

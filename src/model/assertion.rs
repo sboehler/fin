@@ -31,7 +31,7 @@ impl Assertion {
 
 impl Display for Assertion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
+        writeln!(
             f,
             "{} balance {} {} {}",
             self.date.format("%Y-%m-%d"),

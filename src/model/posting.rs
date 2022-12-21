@@ -24,10 +24,10 @@ impl Display for Posting {
             write!(f, " {}", l)?
         }
         if let Some(ts) = &self.targets {
-            write!(f, "(")?;
+            write!(f, " (")?;
             for t in ts.iter().enumerate() {
                 write!(f, "{}", t.1)?;
-                if t.0 < ts.len() {
+                if t.0 < ts.len() - 1 {
                     write!(f, ",")?;
                 }
             }

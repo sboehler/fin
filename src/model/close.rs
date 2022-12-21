@@ -11,6 +11,6 @@ pub struct Close {
 
 impl Display for Close {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} close {}", self.date.format("%Y-%m-%d"), self.account)
+        writeln!(f, "{} close {}", self.date.format("%Y-%m-%d"), self.account)
     }
 }

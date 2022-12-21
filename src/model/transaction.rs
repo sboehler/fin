@@ -34,8 +34,8 @@ impl Display for Transaction {
         for t in &self.tags {
             write!(f, " {}", t)?
         }
+        writeln!(f)?;
         for posting in &self.postings {
-            writeln!(f)?;
             write!(f, "{}", posting)?;
         }
         Ok(())

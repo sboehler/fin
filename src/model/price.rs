@@ -25,7 +25,7 @@ impl Price {
 
 impl Display for Price {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
+        writeln!(
             f,
             "{} price {} {} {}",
             self.date.format("%Y-%m-%d"),

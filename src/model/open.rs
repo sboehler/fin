@@ -11,6 +11,6 @@ pub struct Open {
 
 impl Display for Open {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} open {}", self.date.format("%Y-%m-%d"), self.account)
+        writeln!(f, "{} open {}", self.date.format("%Y-%m-%d"), self.account)
     }
 }
