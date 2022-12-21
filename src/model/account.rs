@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fmt::Display;
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum AccountType {
     Assets,
     Liabilities,
@@ -16,7 +16,7 @@ impl Display for AccountType {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Account {
     pub account_type: AccountType,
     pub segments: Vec<String>,
@@ -50,7 +50,7 @@ mod tests {
     fn test_fmt() {
         let tests = [
             (
-                Account::new(AccountType::Assets, vec!["Bank".into(), "Checking".into()]),
+                Account::new(AccountType::Assets, vec!["Bank", "Checking"]),
                 "Assets:Bank:Checking",
             ),
             (Account::new(AccountType::Expenses, vec![]), "Expenses"),

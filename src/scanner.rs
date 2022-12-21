@@ -28,17 +28,11 @@ impl std::fmt::Display for ParserError {
         }
         writeln!(f, "-> got:  {}", self.got)?;
         writeln!(f, "-> want: {}", self.want)?;
-        writeln!(f, "")?;
+        writeln!(f)?;
         for (n, line) in &self.context {
             writeln!(f, "{:5}:  {}", n, line)?;
         }
-        writeln!(
-            f,
-            "{}{} want: {}",
-            " ".repeat(self.col + 8),
-            "^^^",
-            self.want
-        )?;
+        writeln!(f, "{}^^^ want: {}", " ".repeat(self.col + 8), self.want)?;
         Ok(())
     }
 }
@@ -78,7 +72,7 @@ impl std::fmt::Display for Character {
                 for ch in chars {
                     write!(f, "{},", ch)?;
                 }
-                writeln!(f, "")?;
+                writeln!(f)?;
                 Ok(())
             }
         }
@@ -98,7 +92,7 @@ pub struct Scanner<'a> {
 impl<'a> Scanner<'a> {
     pub fn new_from_file(s: &'a str, filename: Option<PathBuf>) -> Scanner<'a> {
         Scanner {
-            source: &s,
+            source: s,
             filename,
             chars: s.char_indices().peekable(),
             positions: Vec::new(),
@@ -122,7 +116,7 @@ impl<'a> Scanner<'a> {
         self.chars.peek().map(|t| t.1)
     }
 
-    pub fn next(&mut self) -> Option<char> {
+    pub fn advance(&mut self) -> Option<char> {
         self.chars.next().map(|t| t.1)
     }
 
@@ -138,7 +132,7 @@ impl<'a> Scanner<'a> {
         P: Fn(char) -> bool,
     {
         while self.current().map(&pred).unwrap_or(false) {
-            self.next();
+            self.advance();
         }
     }
 
@@ -173,7 +167,7 @@ impl<'a> Scanner<'a> {
 
     pub fn consume_char(&mut self, c: char) -> Result<Annotated<()>> {
         self.mark_position();
-        match self.next() {
+        match self.advance() {
             Some(d) if c == d => self.annotate(()),
             o => Err(self.error(None, Character::Char(c), Character::from_char(o))),
         }
@@ -213,7 +207,7 @@ impl<'a> Scanner<'a> {
 
     pub fn read_1(&mut self) -> Result<Annotated<char>> {
         self.mark_position();
-        match self.next() {
+        match self.advance() {
             Some(c) => self.annotate(c),
             None => Err(self.error(None, Character::Any, Character::EOF)),
         }
@@ -231,9 +225,9 @@ impl<'a> Scanner<'a> {
 
     pub fn consume_eol(&mut self) -> Result<Annotated<()>> {
         self.mark_position();
-        match self.next() {
+        match self.advance() {
             None | Some('\n') => self.annotate(()),
-            Some(ch) => return Err(self.error(None, Character::Char('\n'), Character::Char(ch))),
+            Some(ch) => Err(self.error(None, Character::Char('\n'), Character::Char(ch))),
         }
     }
 
@@ -241,11 +235,11 @@ impl<'a> Scanner<'a> {
         self.mark_position();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
-                return Err(self.error(None, Character::WhiteSpace, Character::Char(ch)))
+                Err(self.error(None, Character::WhiteSpace, Character::Char(ch)))
             }
             _ => {
-                let res = self.consume_space();
-                self.annotate(res)
+                self.consume_space();
+                self.annotate(())
             }
         }
     }
@@ -260,16 +254,16 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn error(&mut self, msg: Option<String>, want: Character, got: Character) -> ParserError {
-        let pos = self.positions.pop().unwrap_or(self.pos());
+        let pos = self.positions.pop().unwrap_or_else(|| self.pos());
         let lines: Vec<_> = self.source[..pos].lines().collect();
-        let line = lines.len().checked_sub(1).unwrap_or(0);
+        let line = lines.len().saturating_sub(1);
         let col = lines.last().map(|s| s.len()).unwrap_or(0);
-        let rng = lines.len().checked_sub(5).unwrap_or(0)..=lines.len().checked_sub(1).unwrap_or(0);
+        let rng = lines.len().saturating_sub(5)..=lines.len().saturating_sub(1);
         let file = self
             .filename
             .as_ref()
             .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or("<stream>".into());
+            .unwrap_or_else(|| "<stream>".into());
         let context = self
             .source
             .lines()
@@ -277,7 +271,7 @@ impl<'a> Scanner<'a> {
             .filter(|t| rng.contains(&t.0))
             .map(|(i, l)| (i, l.into()))
             .collect();
-        return ParserError {
+        ParserError {
             file,
             line,
             col,
@@ -285,7 +279,7 @@ impl<'a> Scanner<'a> {
             msg,
             want,
             got,
-        };
+        }
     }
 }
 

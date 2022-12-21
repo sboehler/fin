@@ -2,7 +2,7 @@ use super::{Assertion, Close, Open, Price, Transaction};
 use std::fmt;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Open(Open),
     Close(Close),

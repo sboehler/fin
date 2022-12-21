@@ -4,7 +4,7 @@ use rust_decimal::prelude::Decimal;
 use std::fmt;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lot {
     price: Decimal,
     commodity: Commodity,

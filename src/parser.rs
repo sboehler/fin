@@ -26,7 +26,7 @@ impl Display for Directive {
 
 pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
     let mut result = Vec::new();
-    while let Some(_) = s.current() {
+    while s.current().is_some() {
         s.skip_while(|c| c.is_ascii_whitespace());
         if let Some(c) = s.current() {
             match c {
@@ -129,7 +129,7 @@ fn parse_account(s: &mut Scanner) -> Result<Annotated<Account>> {
 
 fn parse_open(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Open>> {
     s.mark_position();
-    s.consume_string("open")?.0;
+    s.consume_string("open")?;
     s.consume_space1()?;
     let a = parse_account(s)?.0;
     s.consume_space1()?;
@@ -142,7 +142,7 @@ fn parse_open(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Open>> {
 
 fn parse_close(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Close>> {
     s.mark_position();
-    s.consume_string("close")?.0;
+    s.consume_string("close")?;
     s.consume_space1()?;
     let a = parse_account(s)?.0;
     s.consume_space1()?;
@@ -316,11 +316,11 @@ fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Price> {
     s.consume_string("price")?;
     s.consume_space1()?;
     let source = parse_commodity(s)?.0;
-    s.consume_space1()?.0;
+    s.consume_space1()?;
     let price = parse_decimal(s)?.0;
     s.consume_space1()?;
     let target = parse_commodity(s)?.0;
-    s.consume_space1()?.0;
+    s.consume_space1()?;
     s.consume_eol()?;
     Ok(Price::new(d, price, target, source))
 }
@@ -382,7 +382,7 @@ mod tests {
                 "Liabilities:CreditCards:Visa",
                 Account::new(
                     AccountType::Liabilities,
-                    vec!["CreditCards".into(), "Visa".into()],
+                    vec!["CreditCards", "Visa"],
                 ),
             ),
         ];
@@ -474,16 +474,16 @@ mod tests {
                     vec![],
                     vec![
                         Posting {
-                            credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
-                            debit: Account::new(AccountType::Expenses, vec!["Trading".into()]),
+                            credit: Account::new(AccountType::Assets, vec!["Account1"]),
+                            debit: Account::new(AccountType::Expenses, vec!["Trading"]),
                             amount: Decimal::new(24545, 2),
                             commodity: Commodity::new("CHF".into()),
                             lot: None,
                             targets: Some(vec![Commodity::new("ABC".into())]),
                         },
                         Posting {
-                            credit: Account::new(AccountType::Income, vec!["Gains1".into()]),
-                            debit: Account::new(AccountType::Assets, vec!["Foo".into()]),
+                            credit: Account::new(AccountType::Income, vec!["Gains1"]),
+                            debit: Account::new(AccountType::Assets, vec!["Foo"]),
                             amount: Decimal::new(-24545, 2),
                             commodity:             Commodity::new("CHF".into()),
                             lot: None,
@@ -501,16 +501,16 @@ mod tests {
                     vec![Tag::new("tag1".into()), Tag::new("tag2".into())],
                     vec![
                         Posting {
-                            credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
-                            debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                            credit: Account::new(AccountType::Assets, vec!["Account1"]),
+                            debit: Account::new(AccountType::Assets, vec!["Account2"]),
                             amount: Decimal::new(24_545, 2),
                             commodity: Commodity::new("CHF".into()),
                             lot: None,
                             targets:None,
                          },
                          Posting {
-                            credit: Account::new(AccountType::Income, vec!["Gains".into()]),
-                            debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                            credit: Account::new(AccountType::Income, vec!["Gains"]),
+                            debit: Account::new(AccountType::Assets, vec!["Account2"]),
                             amount: Decimal::new(1_000_000, 2),
                             commodity: Commodity::new("USD".into()),
                             lot: None,
@@ -531,16 +531,16 @@ mod tests {
             "Assets:Account1    Assets:Account2   4.00    CHF\nAssets:Account2    Assets:Account1   3.00 USD",
             Annotated(vec![
                 Posting {
-                    credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
-                    debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                    credit: Account::new(AccountType::Assets, vec!["Account1"]),
+                    debit: Account::new(AccountType::Assets, vec!["Account2"]),
                     amount: Decimal::new(400, 2),
                     commodity: Commodity::new("CHF".into()),
                     lot: None,
                     targets:None,
                 },
                 Posting {
-                    credit: Account::new(AccountType::Assets, vec!["Account2".into()]),
-                    debit: Account::new(AccountType::Assets, vec!["Account1".into()]),
+                    credit: Account::new(AccountType::Assets, vec!["Account2"]),
+                    debit: Account::new(AccountType::Assets, vec!["Account1"]),
                     amount: Decimal::new(300, 2),
                     commodity: Commodity::new("USD".into()),
                     lot: None,
@@ -578,8 +578,8 @@ mod tests {
             "Assets:Account1    Assets:Account2   4.00    CHF",
             Annotated(
                 Posting {
-                    credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
-                    debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                    credit: Account::new(AccountType::Assets, vec!["Account1"]),
+                    debit: Account::new(AccountType::Assets, vec!["Account2"]),
                     amount: Decimal::new(400, 2),
                     commodity: Commodity::new("CHF".into()),
                     lot: None,
@@ -632,7 +632,7 @@ mod tests {
                 NaiveDate::from_ymd(2020, 2, 2),
                 Assertion::new(
                     NaiveDate::from_ymd(2020, 2, 2),
-                    Account::new(AccountType::Assets, vec!["MyAccount".into()]),
+                    Account::new(AccountType::Assets, vec!["MyAccount"]),
                     Decimal::new(901, 3),
                     Commodity::new("USD".into()),
                 ),
@@ -642,7 +642,7 @@ mod tests {
                 NaiveDate::from_ymd(2020, 2, 2),
                 Assertion::new(
                     NaiveDate::from_ymd(2020, 2, 2),
-                    Account::new(AccountType::Liabilities, vec!["123foo".into()]),
+                    Account::new(AccountType::Liabilities, vec!["123foo"]),
                     Decimal::new(100, 0),
                     Commodity::new("1CT".into()),
                 ),
