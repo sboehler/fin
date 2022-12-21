@@ -70,8 +70,11 @@ impl std::fmt::Display for Character {
             Self::WhiteSpace => write!(f, "whitespace"),
             Self::Custom(s) => write!(f, "{}", s),
             Self::Either(chars) => {
-                for ch in chars {
-                    write!(f, "{},", ch)?;
+                for (i, ch) in chars.iter().enumerate() {
+                    write!(f, "{}", ch)?;
+                    if i < chars.len().saturating_sub(1) {
+                        write!(f, ", ")?;
+                    }
                 }
                 writeln!(f)?;
                 Ok(())

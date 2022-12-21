@@ -63,9 +63,9 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
 }
 
 pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
-    let pos = s.pos();
     let d = parse_date(s)?.0;
     s.consume_space1()?;
+    let pos = s.pos();
     let cmd = match s.current() {
         Some('p') => Command::Price(parse_price(d, s)?.0),
         Some('"') => Command::Trx(parse_transaction(s, d, None)?.0),
@@ -76,7 +76,13 @@ pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
             return Err(s.error(
                 pos,
                 Some("error parsing directive".into()),
-                Character::Custom("directive".into()),
+                Character::Either(vec![
+                    Character::Custom("open".into()),
+                    Character::Custom("close".into()),
+                    Character::Custom("price".into()),
+                    Character::Custom("balance".into()),
+                    Character::Custom("<description>".into()),
+                    ]),
                 Character::from_char(c),
             ))
         }
