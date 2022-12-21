@@ -1,6 +1,6 @@
 use crate::model::{
-    Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting, Price, Tag,
-    Transaction,
+    Account, AccountType, Assertion, Close, Command, Commodity, Lot, Open, Posting, Posting2,
+    Price, Tag, Transaction,
 };
 use crate::scanner::{Annotated, Character, Result, Scanner};
 use chrono::NaiveDate;
@@ -159,7 +159,7 @@ fn parse_transaction(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Transact
     s.consume_space1()?;
     let tags = parse_tags(s)?.0;
     s.consume_eol()?;
-    let (postings, account) = parse_postings(s, d)?.0;
+    let (postings, account) = parse_postings(s)?.0;
     let t = Transaction::new(d, desc.into(), tags, postings, account).map_err(|e| {
         s.error(
             Some("error parsing transaction".into()),
@@ -204,14 +204,14 @@ fn parse_commodity(s: &mut Scanner) -> Result<Commodity> {
     Ok(Commodity::new(s.read_identifier()?.0.into()))
 }
 
-fn parse_lot(s: &mut Scanner, d: NaiveDate) -> Result<Lot> {
+fn parse_lot(s: &mut Scanner) -> Result<Lot> {
     s.consume_char('{')?;
     s.consume_space1()?;
     let price = parse_decimal(s)?.0;
     s.consume_space1()?;
     let commodity = parse_commodity(s)?;
     let mut label = None;
-    let mut date = d;
+    let mut date = None;
     s.consume_space();
     while let Some(',') = s.current() {
         s.consume_char(',')?;
@@ -222,7 +222,7 @@ fn parse_lot(s: &mut Scanner, d: NaiveDate) -> Result<Lot> {
                 s.consume_space();
             }
             Some(d) if d.is_ascii_digit() => {
-                date = parse_date(s)?.0;
+                date = Some(parse_date(s)?.0);
                 s.consume_space();
             }
             c => {
@@ -246,10 +246,7 @@ fn parse_lot(s: &mut Scanner, d: NaiveDate) -> Result<Lot> {
     ))
 }
 
-fn parse_postings(
-    s: &mut Scanner,
-    d: NaiveDate,
-) -> Result<Annotated<(Vec<Posting>, Option<Account>)>> {
+fn parse_postings(s: &mut Scanner) -> Result<Annotated<(Vec<Posting>, Option<Account>)>> {
     s.mark_position();
     let mut postings = Vec::new();
     let mut wildcard = None;
@@ -280,7 +277,7 @@ fn parse_postings(
         let commodity = parse_commodity(s)?;
         s.consume_space1()?;
         if let Some('{') = s.current() {
-            lot = Some(parse_lot(s, d)?);
+            lot = Some(parse_lot(s)?);
             s.consume_space1()?;
         }
         if let Some('#') = s.current() {
@@ -297,6 +294,46 @@ fn parse_postings(
         s.consume_eol()?;
     }
     s.annotate((postings, wildcard))
+}
+
+fn parse_postings2(s: &mut Scanner) -> Result<Annotated<Vec<Posting2>>> {
+    s.mark_position();
+    let mut postings = Vec::new();
+    while s
+        .current()
+        .map(|c| c.is_ascii_alphanumeric())
+        .unwrap_or(false)
+    {
+        postings.push(parse_posting(s)?.0)
+    }
+    s.annotate(postings)
+}
+
+fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting2>> {
+    s.mark_position();
+    let mut lot = None;
+    let credit = parse_account(s)?.0;
+
+    s.consume_space1()?;
+    let debit = parse_account(s)?.0;
+    s.consume_space1()?;
+    let amount = parse_decimal(s)?.0;
+    s.consume_space1()?;
+    let commodity = parse_commodity(s)?;
+    s.consume_space1()?;
+    if let Some('{') = s.current() {
+        lot = Some(parse_lot(s)?);
+        s.consume_space1()?;
+    }
+    let posting = s.annotate(Posting2 {
+        credit,
+        debit,
+        commodity,
+        amount,
+        lot,
+    });
+    s.consume_eol()?;
+    posting
 }
 
 fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Price> {
@@ -354,9 +391,9 @@ mod tests {
             ("0202-02-02", chrono::NaiveDate::from_ymd(202, 2, 2), ""),
             ("2020-09-15 ", chrono::NaiveDate::from_ymd(2020, 9, 15), " "),
         ];
-        for (test, expected, remainder) in tests {
+        for (test, want, remainder) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_date(&mut s).unwrap().0, expected);
+            assert_eq!(parse_date(&mut s).unwrap().0, want);
             assert_eq!(s.read_all().unwrap().0, remainder)
         }
     }
@@ -373,9 +410,9 @@ mod tests {
                 ),
             ),
         ];
-        for (test, expected) in tests {
+        for (test, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_account(&mut s).unwrap().0, expected);
+            assert_eq!(parse_account(&mut s).unwrap().0, want);
         }
     }
 
@@ -439,11 +476,11 @@ mod tests {
             ("-3.141", Decimal::new(-3141, 3), ""),
             ("3.14159265359", Decimal::new(314159265359, 11), ""),
         ];
-        for (test, expected, remainder) in tests {
+        for (test, want, remainder) in tests {
             let mut s = Scanner::new(test);
             assert_eq!(
                 parse_decimal(&mut s).unwrap(),
-                Annotated(expected, (0, test.len()))
+                Annotated(want, (0, test.len()))
             );
             assert_eq!(s.read_all().unwrap().0, remainder)
         }
@@ -514,9 +551,9 @@ mod tests {
                 ).unwrap(), (0, 72)),
             ),
         ];
-        for (test, date, expected) in tests {
+        for (test, date, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(parse_transaction(date, &mut s).unwrap(), expected);
+            assert_eq!(parse_transaction(date, &mut s).unwrap(), want);
         }
     }
 
@@ -558,12 +595,59 @@ mod tests {
                 ),
             ),
         ];
-        for (test, expected) in tests {
+        for (test, want) in tests {
             let mut s = Scanner::new(test);
-            assert_eq!(
-                parse_postings(&mut s, NaiveDate::from_ymd(2020, 2, 2)).unwrap(),
-                expected
-            );
+            assert_eq!(parse_postings(&mut s).unwrap(), want);
+        }
+    }
+
+    #[test]
+    fn test_parse_postings2() {
+        let tests = [(
+            "Assets:Account1    Assets:Account2   4.00    CHF\nAssets:Account2    Assets:Account1   3.00 USD",
+            Annotated(vec![
+                Posting2 {
+                    credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
+                    debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                    amount: Decimal::new(400, 2),
+                    commodity: Commodity::new("CHF".into()),
+                    lot: None,
+                },
+                Posting2 {
+                    credit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                    debit: Account::new(AccountType::Assets, vec!["Account1".into()]),
+                    amount: Decimal::new(300, 2),
+                    commodity: Commodity::new("USD".into()),
+                    lot: None,
+                }                
+                ],
+                (0, 94),
+            ),
+        )];
+        for (test, want) in tests {
+            let mut s = Scanner::new(test);
+            assert_eq!(parse_postings2(&mut s).unwrap(), want);
+        }
+    }
+
+    #[test]
+    fn test_parse_posting() {
+        let tests = [(
+            "Assets:Account1    Assets:Account2   4.00    CHF",
+            Annotated(
+                Posting2 {
+                    credit: Account::new(AccountType::Assets, vec!["Account1".into()]),
+                    debit: Account::new(AccountType::Assets, vec!["Account2".into()]),
+                    amount: Decimal::new(400, 2),
+                    commodity: Commodity::new("CHF".into()),
+                    lot: None,
+                },
+                (0, 48),
+            ),
+        )];
+        for (test, want) in tests {
+            let mut s = Scanner::new(test);
+            assert_eq!(parse_posting(&mut s).unwrap(), want);
         }
     }
 

@@ -18,6 +18,7 @@ pub use commodity::Commodity;
 pub use lot::Lot;
 pub use open::Open;
 pub use posting::Posting;
+pub use posting::Posting2;
 pub use price::Price;
 pub use tag::Tag;
 pub use transaction::Transaction;
