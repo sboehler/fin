@@ -292,9 +292,8 @@ mod tests {
 
     #[test]
     fn test_read_while() {
-        let mut s = Scanner::new("asdf");
         assert_eq!(
-            s.read_while(|c| c != 'f').unwrap(),
+            Scanner::new("asdf").read_while(|c| c != 'f').unwrap(),
             Annotated("asd", (0, 3))
         )
     }
@@ -321,7 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn read_quoted_string() {
+    fn test_read_quoted_string() {
         assert_eq!(
             Scanner::new("\"\"").read_quoted_string().unwrap(),
             Annotated("", (0, 2))
@@ -338,35 +337,34 @@ mod tests {
 
     #[test]
     fn test_read_identifier() {
-        let tests = [
-            ("23asdf 3asdf", "23asdf"),
-            ("foo bar", "foo"),
-            ("Foo Bar", "Foo"),
-        ];
-        for (test, expected) in tests {
-            let mut s = Scanner::new(test);
-            assert_eq!(
-                s.read_identifier().unwrap(),
-                Annotated(expected, (0, expected.len()))
-            );
-        }
-        assert!(Scanner::new(" ").read_identifier().is_err())
+        assert_eq!(
+            Scanner::new("23asdf 3asdf").read_identifier().unwrap(),
+            Annotated("23asdf", (0, 6))
+        );
+        assert_eq!(
+            Scanner::new("foo# bar").read_identifier().unwrap(),
+            Annotated("foo", (0, 3))
+        );
+        assert_eq!(
+            Scanner::new("Foo( Bar").read_identifier().unwrap(),
+            Annotated("Foo", (0, 3))
+        );
     }
 
     #[test]
     fn test_read_n() {
-        let mut s = Scanner::new("23asdflj");
-        assert_eq!(s.read_n(4).unwrap(), Annotated("23as", (0, 4)));
-        assert_eq!(s.read_all().unwrap(), Annotated("dflj", (4, 8)));
-
-        let mut s = Scanner::new("foo bar");
-        assert_eq!(s.read_n(4).unwrap(), Annotated("foo ", (0, 4)));
-        assert_eq!(s.read_all().unwrap(), Annotated("bar", (4, 7)));
-
-        let mut s = Scanner::new("foo");
-        assert_eq!(s.read_n(3).unwrap(), Annotated("foo", (0, 3)));
-        assert_eq!(s.read_all().unwrap(), Annotated("", (3, 3)));
-        assert_eq!(s.read_all().unwrap(), Annotated("", (3, 3)));
+        assert_eq!(
+            Scanner::new("23asdflj").read_n(4).unwrap(),
+            Annotated("23as", (0, 4))
+        );
+        assert_eq!(
+            Scanner::new("foo bar").read_n(4).unwrap(),
+            Annotated("foo ", (0, 4))
+        );
+        assert_eq!(
+            Scanner::new("foo").read_n(3).unwrap(),
+            Annotated("foo", (0, 3))
+        );
     }
 
     #[test]
