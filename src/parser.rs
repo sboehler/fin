@@ -31,16 +31,9 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
         s.skip_while(|c| c.is_ascii_whitespace());
         if let Some(c) = s.current() {
             match c {
-                '0'..='9' => {
+                '0'..='9' | '@' => {
                     let c = parse_command(s)?;
                     result.push(Directive::Command(c.0))
-                }
-                '@' => {
-                    let a = parse_accrual(s)?.0;
-                    let d = parse_date(s)?.0;
-                    s.consume_space1()?;
-                    let t = parse_transaction(s, d, Some(a))?.0;
-                    result.push(Directive::Command(Command::Trx(t)))
                 }
                 '*' | '#' => {
                     s.consume_rest_of_line()?;
@@ -64,32 +57,40 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
 }
 
 pub fn parse_command(s: &mut Scanner) -> Result<Annotated<Command>> {
-    let d = parse_date(s)?.0;
-    s.consume_space1()?;
     let pos = s.pos();
-    let cmd = match s.current() {
-        Some('p') => Command::Price(parse_price(d, s)?.0),
-        Some('"') => Command::Trx(parse_transaction(s, d, None)?.0),
-        Some('o') => Command::Open(parse_open(d, s)?.0),
-        Some('b') => Command::Assertion(parse_assertion(d, s)?.0),
-        Some('c') => Command::Close(parse_close(d, s)?.0),
-        Some('v') => Command::Value(parse_value(d, s)?.0),
-        c => {
-            return Err(s.error(
-                pos,
-                Some("error parsing directive".into()),
-                Character::Either(vec![
-                    Character::Custom("open".into()),
-                    Character::Custom("close".into()),
-                    Character::Custom("price".into()),
-                    Character::Custom("balance".into()),
-                    Character::Custom("value".into()),
-                    Character::Custom("<description>".into()),
-                ]),
-                Character::from_char(c),
-            ))
-        }
-    };
+    let cmd;
+    if let Some('@') = s.current() {
+        let a = parse_accrual(s)?.0;
+        let d = parse_date(s)?.0;
+        s.consume_space1()?;
+        cmd = Command::Trx(parse_transaction(s, d, Some(a))?.0);
+    } else {
+        let d = parse_date(s)?.0;
+        s.consume_space1()?;
+        cmd = match s.current() {
+            Some('p') => Command::Price(parse_price(d, s)?.0),
+            Some('"') => Command::Trx(parse_transaction(s, d, None)?.0),
+            Some('o') => Command::Open(parse_open(d, s)?.0),
+            Some('b') => Command::Assertion(parse_assertion(d, s)?.0),
+            Some('c') => Command::Close(parse_close(d, s)?.0),
+            Some('v') => Command::Value(parse_value(d, s)?.0),
+            c => {
+                return Err(s.error(
+                    pos,
+                    Some("error parsing directive".into()),
+                    Character::Either(vec![
+                        Character::Custom("open".into()),
+                        Character::Custom("close".into()),
+                        Character::Custom("price".into()),
+                        Character::Custom("balance".into()),
+                        Character::Custom("value".into()),
+                        Character::Custom("<description>".into()),
+                    ]),
+                    Character::from_char(c),
+                ))
+            }
+        };
+    }
     s.annotate(pos, cmd)
 }
 
