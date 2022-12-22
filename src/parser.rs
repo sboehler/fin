@@ -17,8 +17,9 @@ pub enum Directive {
 
 impl Display for Directive {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Directive::Command(c) = &self {
-            write!(f, "{}", c)?;
+        match self {
+            Directive::Command(c) => write!(f, "{}", c)?,
+            Directive::Include(p) => write!(f, "include \"{}\"", p.display())?,
         }
         Ok(())
     }
@@ -45,7 +46,7 @@ pub fn parse(s: &mut Scanner) -> Result<Vec<Directive>> {
                     s.consume_rest_of_line()?;
                 }
                 'i' => {
-                    parse_include(s)?;
+                    result.push(parse_include(s)?.0);
                 }
                 _ => {
                     let pos = s.pos();
