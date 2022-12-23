@@ -371,12 +371,13 @@ fn parse_posting(s: &mut Scanner) -> Result<Annotated<Posting>> {
     s.consume_space1()?;
     let commodity = parse_commodity(s)?.0;
     s.consume_space1()?;
+    if let Some('(') = s.current() {
+        targets = Some(parse_targets(s)?.0);
+        s.consume_space1()?;
+    }
     if let Some('{') = s.current() {
         lot = Some(parse_lot(s)?);
         s.consume_space1()?;
-    }
-    if let Some('(') = s.current() {
-        targets = Some(parse_targets(s)?.0);
     }
     let posting = s.annotate(
         pos,
@@ -397,26 +398,19 @@ fn parse_targets(s: &mut Scanner) -> Result<Annotated<Vec<Commodity>>> {
     let pos = s.pos();
     let mut targets = Vec::new();
     s.consume_char('(')?;
-    loop {
+    s.consume_space();
+    if Some(')') != s.current() {
+        targets.push(parse_commodity(s)?.0);
+        s.consume_space();
+    }
+    while let Some(',') = s.current() {
+        s.consume_char(',')?;
         s.consume_space();
         targets.push(parse_commodity(s)?.0);
         s.consume_space();
-        match s.current() {
-            Some(',') => s.consume_char(',')?.0,
-            Some(')') => {
-                s.consume_char(')')?;
-                return s.annotate(pos, targets);
-            }
-            c => {
-                return Err(s.error(
-                    pos,
-                    Some("error parsing target commodities".into()),
-                    Character::Either(vec![Character::Char(')'), Character::Char(',')]),
-                    Character::from_char(c),
-                ))
-            }
-        }
     }
+    s.consume_char(')')?;
+    s.annotate(pos, targets)
 }
 
 fn parse_price(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Price>> {
