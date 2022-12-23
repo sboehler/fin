@@ -41,14 +41,15 @@ pub fn parse_spawn(p: PathBuf, snd: mpsc::Sender<Result<Vec<Command>>>) {
     match parse_and_separate(p) {
         Ok((commands, includes)) => {
             snd.send(Ok(commands)).unwrap();
-            let v = includes
+            includes
                 .into_iter()
                 .map(|i| {
                     let snd_t = snd.clone();
                     thread::spawn(move || parse_spawn(i, snd_t))
                 })
-                .collect::<Vec<_>>();
-            v.into_iter().for_each(|t| t.join().unwrap());
+                .collect::<Vec<_>>()
+                .into_iter()
+                .for_each(|t| t.join().unwrap());
         }
         Err(e) => {
             snd.send(Err(e)).unwrap();
