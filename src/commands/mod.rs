@@ -1,8 +1,10 @@
 use clap::Subcommand;
 
-pub mod print;
+mod parse;
+mod print;
 
 #[derive(Subcommand)]
 pub enum Commands {
     Print(print::Command),
+    Parse(parse::Command),
 }
