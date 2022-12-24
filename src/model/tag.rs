@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Tag {
     tag: String,
 }

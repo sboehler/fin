@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fmt::Display;
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub enum AccountType {
     Assets,
     Liabilities,
@@ -16,7 +16,7 @@ impl Display for AccountType {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Account {
     pub account_type: AccountType,
     pub segments: Vec<String>,

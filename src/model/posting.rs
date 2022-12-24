@@ -3,7 +3,7 @@ use rust_decimal::prelude::Decimal;
 use std::fmt;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Posting {
     pub credit: Account,
     pub debit: Account,

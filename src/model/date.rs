@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use chrono::NaiveDate;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub enum Interval {
     Once,
     Daily,
@@ -26,7 +26,7 @@ impl Display for Interval {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub struct Period {
     pub start: NaiveDate,
     pub end: NaiveDate,

@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct Commodity {
     name: String,
 }

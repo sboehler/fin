@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 use super::{Account, Interval, Period, Posting, Tag};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Transaction {
     pub date: NaiveDate,
     pub description: String,
@@ -60,7 +60,7 @@ impl Display for Transaction {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Accrual {
     pub interval: Interval,
     pub period: Period,
