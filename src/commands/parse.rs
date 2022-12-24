@@ -9,13 +9,14 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        let ch = journal::read_from_file(self.journal.clone());
+        let (ch, t) = journal::read_from_file(self.journal.clone());
         for v in ch {
             match v {
                 Err(e) => println!("{}", e),
                 Ok(_) => (),
             }
         }
+        t.join().unwrap();
         Ok(())
     }
 }

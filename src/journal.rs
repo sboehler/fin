@@ -3,7 +3,7 @@ use std::{
     fs, io,
     path::PathBuf,
     sync::mpsc,
-    thread::{self},
+    thread::{self, JoinHandle},
 };
 
 use crate::{
@@ -31,28 +31,27 @@ impl Error for JournalError {}
 
 pub type Result<T> = std::result::Result<T, JournalError>;
 
-pub fn read_from_file(p: PathBuf) -> mpsc::Receiver<Result<Vec<Command>>> {
-    let (cmd_tx, cmd_rx) = mpsc::channel::<Result<Vec<Command>>>();
-    thread::spawn(move || parse_spawn(p, cmd_tx));
-    cmd_rx
+pub fn read_from_file(p: PathBuf) -> (mpsc::Receiver<Result<Vec<Command>>>, JoinHandle<()>) {
+    let (tx, rx) = mpsc::channel();
+    (rx, thread::spawn(move || parse_spawn(p, tx)))
 }
 
-pub fn parse_spawn(p: PathBuf, snd: mpsc::Sender<Result<Vec<Command>>>) {
+pub fn parse_spawn(p: PathBuf, tx: mpsc::Sender<Result<Vec<Command>>>) {
     match parse_and_separate(p) {
         Ok((commands, includes)) => {
-            snd.send(Ok(commands)).unwrap();
+            tx.send(Ok(commands)).unwrap();
             includes
                 .into_iter()
                 .map(|i| {
-                    let snd_t = snd.clone();
-                    thread::spawn(move || parse_spawn(i, snd_t))
+                    let tx = tx.clone();
+                    thread::spawn(move || parse_spawn(i, tx))
                 })
                 .collect::<Vec<_>>()
                 .into_iter()
                 .for_each(|t| t.join().unwrap());
         }
         Err(e) => {
-            snd.send(Err(e)).unwrap();
+            tx.send(Err(e)).unwrap();
         }
     }
 }
