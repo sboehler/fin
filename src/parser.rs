@@ -199,7 +199,7 @@ fn parse_account(s: &mut Scanner) -> Result<Annotated<Account>> {
             }
         }
     }
-    s.annotate(pos, Account::new(account_type, segments))
+    s.annotate(pos, Account::new(account_type, &segments))
 }
 
 fn parse_open(d: NaiveDate, s: &mut Scanner) -> Result<Annotated<Open>> {
@@ -483,12 +483,12 @@ mod tests {
     fn test_parse_account() {
         assert_eq!(
             parse_account(&mut Scanner::new("Assets")).unwrap(),
-            Annotated(Account::new(AccountType::Assets, Vec::new()), (0, 6))
+            Annotated(Account::new(AccountType::Assets, &[]), (0, 6))
         );
         assert_eq!(
             parse_account(&mut Scanner::new("Liabilities:CreditCards:Visa")).unwrap(),
             Annotated(
-                Account::new(AccountType::Liabilities, vec!["CreditCards", "Visa"]),
+                Account::new(AccountType::Liabilities, &["CreditCards", "Visa"]),
                 (0, 28)
             )
         );
@@ -547,7 +547,7 @@ mod tests {
             Annotated(
                 Value::new(
                     NaiveDate::from_ymd(2020, 2, 2),
-                    Account::new(AccountType::Assets, vec!["Account".into()]),
+                    Account::new(AccountType::Assets, &["Account".into()]),
                     Decimal::new(10140, 2),
                     Commodity::new("KNUT".into()),
                 ),
@@ -595,16 +595,16 @@ mod tests {
                     vec![],
                     vec![
                         Posting {
-                            credit: Account::new(AccountType::Assets, vec!["Account1"]),
-                            debit: Account::new(AccountType::Expenses, vec!["Trading"]),
+                            credit: Account::new(AccountType::Assets, &["Account1"]),
+                            debit: Account::new(AccountType::Expenses, &["Trading"]),
                             amount: Decimal::new(24545, 2),
                             commodity: Commodity::new("CHF".into()),
                             lot: None,
                             targets: Some(vec![Commodity::new("ABC".into())]),
                         },
                         Posting {
-                            credit: Account::new(AccountType::Income, vec!["Gains1"]),
-                            debit: Account::new(AccountType::Assets, vec!["Foo"]),
+                            credit: Account::new(AccountType::Income, &["Gains1"]),
+                            debit: Account::new(AccountType::Assets, &["Foo"]),
                             amount: Decimal::new(-24545, 2),
                             commodity:             Commodity::new("CHF".into()),
                             lot: None,
@@ -623,16 +623,16 @@ mod tests {
                     vec![Tag::new("tag1".into()), Tag::new("tag2".into())],
                     vec![
                         Posting {
-                            credit: Account::new(AccountType::Assets, vec!["Account1"]),
-                            debit: Account::new(AccountType::Assets, vec!["Account2"]),
+                            credit: Account::new(AccountType::Assets, &["Account1"]),
+                            debit: Account::new(AccountType::Assets, &["Account2"]),
                             amount: Decimal::new(24_545, 2),
                             commodity: Commodity::new("CHF".into()),
                             lot: None,
                             targets:None,
                          },
                          Posting {
-                            credit: Account::new(AccountType::Income, vec!["Gains"]),
-                            debit: Account::new(AccountType::Assets, vec!["Account2"]),
+                            credit: Account::new(AccountType::Income, &["Gains"]),
+                            debit: Account::new(AccountType::Assets, &["Account2"]),
                             amount: Decimal::new(1_000_000, 2),
                             commodity: Commodity::new("USD".into()),
                             lot: None,
@@ -656,7 +656,7 @@ mod tests {
             .unwrap(),
             Annotated(
                 Accrual {
-                    account: Account::new(AccountType::Liabilities, vec!["Accruals"]),
+                    account: Account::new(AccountType::Liabilities, &["Accruals"]),
                     interval: Interval::Daily,
                     period: Period {
                         start: NaiveDate::from_ymd(2022, 4, 3),
@@ -673,7 +673,7 @@ mod tests {
             .unwrap(),
             Annotated(
                 Accrual {
-                    account: Account::new(AccountType::Liabilities, vec!["Bank"]),
+                    account: Account::new(AccountType::Liabilities, &["Bank"]),
                     interval: Interval::Monthly,
                     period: Period {
                         start: NaiveDate::from_ymd(2022, 4, 3),
@@ -721,16 +721,16 @@ mod tests {
             Annotated(
                 vec![
                     Posting {
-                        credit: Account::new(AccountType::Assets, vec!["Account1"]),
-                        debit: Account::new(AccountType::Assets, vec!["Account2"]),
+                        credit: Account::new(AccountType::Assets, &["Account1"]),
+                        debit: Account::new(AccountType::Assets, &["Account2"]),
                         amount: Decimal::new(400, 2),
                         commodity: Commodity::new("CHF".into()),
                         lot: None,
                         targets: None,
                     },
                     Posting {
-                        credit: Account::new(AccountType::Assets, vec!["Account2"]),
-                        debit: Account::new(AccountType::Assets, vec!["Account1"]),
+                        credit: Account::new(AccountType::Assets, &["Account2"]),
+                        debit: Account::new(AccountType::Assets, &["Account1"]),
                         amount: Decimal::new(300, 2),
                         commodity: Commodity::new("USD".into()),
                         lot: None,
@@ -766,8 +766,8 @@ mod tests {
             .unwrap(),
             Annotated(
                 Posting {
-                    credit: Account::new(AccountType::Assets, vec!["Account1"]),
-                    debit: Account::new(AccountType::Assets, vec!["Account2"]),
+                    credit: Account::new(AccountType::Assets, &["Account1"]),
+                    debit: Account::new(AccountType::Assets, &["Account2"]),
                     amount: Decimal::new(400, 2),
                     commodity: Commodity::new("CHF".into()),
                     lot: None,
@@ -815,7 +815,7 @@ mod tests {
             Annotated(
                 Assertion::new(
                     NaiveDate::from_ymd(2020, 2, 2),
-                    Account::new(AccountType::Assets, vec!["MyAccount"]),
+                    Account::new(AccountType::Assets, &["MyAccount"]),
                     Decimal::new(901, 3),
                     Commodity::new("USD".into()),
                 ),
@@ -827,7 +827,7 @@ mod tests {
             Annotated(
                 Assertion::new(
                     NaiveDate::from_ymd(2020, 2, 2),
-                    Account::new(AccountType::Liabilities, vec!["123foo"]),
+                    Account::new(AccountType::Liabilities, &["123foo"]),
                     Decimal::new(100, 0),
                     Commodity::new("1CT".into()),
                 ),
