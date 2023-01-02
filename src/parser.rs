@@ -471,11 +471,14 @@ mod tests {
     fn test_parse_date() {
         assert_eq!(
             parse_date(&mut Scanner::new("0202-02-02")).unwrap(),
-            Annotated(chrono::NaiveDate::from_ymd(202, 2, 2), (0, 10))
+            Annotated(chrono::NaiveDate::from_ymd_opt(202, 2, 2).unwrap(), (0, 10))
         );
         assert_eq!(
             parse_date(&mut Scanner::new("2020-09-15")).unwrap(),
-            Annotated(chrono::NaiveDate::from_ymd(2020, 9, 15), (0, 10))
+            Annotated(
+                chrono::NaiveDate::from_ymd_opt(2020, 9, 15).unwrap(),
+                (0, 10)
+            )
         );
     }
 
@@ -498,13 +501,13 @@ mod tests {
     fn test_parse_open() {
         assert_eq!(
             parse_open(
-                NaiveDate::from_ymd(2020, 2, 2),
+                NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                 &mut Scanner::new("open Assets:Account")
             )
             .unwrap(),
             Annotated(
                 Open {
-                    date: NaiveDate::from_ymd(2020, 2, 2),
+                    date: NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                     account: Account {
                         account_type: AccountType::Assets,
                         segments: vec!["Account".into()],
@@ -519,13 +522,13 @@ mod tests {
     fn test_parse_close() {
         assert_eq!(
             parse_close(
-                NaiveDate::from_ymd(2020, 2, 2),
+                NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                 &mut Scanner::new("close Assets:Account")
             )
             .unwrap(),
             Annotated(
                 Close {
-                    date: NaiveDate::from_ymd(2020, 2, 2),
+                    date: NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                     account: Account {
                         account_type: AccountType::Assets,
                         segments: vec!["Account".into()],
@@ -540,13 +543,13 @@ mod tests {
     fn test_parse_value() {
         assert_eq!(
             parse_value(
-                NaiveDate::from_ymd(2020, 2, 2),
+                NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                 &mut Scanner::new("value  Assets:Account  101.40 KNUT")
             )
             .unwrap(),
             Annotated(
                 Value::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
+                    NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                     Account::new(AccountType::Assets, &["Account".into()]),
                     Decimal::new(10140, 2),
                     Commodity::new("KNUT".into()),
@@ -588,9 +591,9 @@ mod tests {
         let tests = [
             (
                 "\"some description\"\nAssets:Account1 Expenses:Trading 245.45 CHF (ABC)\nIncome:Gains1 Assets:Foo -245.45 CHF",
-                NaiveDate::from_ymd(2020, 1, 30),
+                NaiveDate::from_ymd_opt(2020, 1, 30).unwrap(),
                 Annotated(Transaction::new(
-                    NaiveDate::from_ymd(2020, 1, 30),
+                    NaiveDate::from_ymd_opt(2020, 1, 30).unwrap(),
                     "some description".into(),
                     vec![],
                     vec![
@@ -616,9 +619,9 @@ mod tests {
             ),
             (
                 "\"some description\" #tag1 #tag2 \nAssets:Account1 Assets:Account2   245.45 CHF\nIncome:Gains Assets:Account2 10000 USD",
-                NaiveDate::from_ymd(2020, 1, 30),
+                NaiveDate::from_ymd_opt(2020, 1, 30).unwrap(),
                 Annotated(Transaction::new(
-                    NaiveDate::from_ymd(2020, 1, 30),
+                    NaiveDate::from_ymd_opt(2020, 1, 30).unwrap(),
                     "some description".into(),
                     vec![Tag::new("tag1".into()), Tag::new("tag2".into())],
                     vec![
@@ -659,8 +662,8 @@ mod tests {
                     account: Account::new(AccountType::Liabilities, &["Accruals"]),
                     interval: Interval::Daily,
                     period: Period {
-                        start: NaiveDate::from_ymd(2022, 4, 3),
-                        end: NaiveDate::from_ymd(2022, 5, 5),
+                        start: NaiveDate::from_ymd_opt(2022, 4, 3).unwrap(),
+                        end: NaiveDate::from_ymd_opt(2022, 5, 5).unwrap(),
                     },
                 },
                 (0, 56),
@@ -676,8 +679,8 @@ mod tests {
                     account: Account::new(AccountType::Liabilities, &["Bank"]),
                     interval: Interval::Monthly,
                     period: Period {
-                        start: NaiveDate::from_ymd(2022, 4, 3),
-                        end: NaiveDate::from_ymd(2022, 5, 5),
+                        start: NaiveDate::from_ymd_opt(2022, 4, 3).unwrap(),
+                        end: NaiveDate::from_ymd_opt(2022, 5, 5).unwrap(),
                     },
                 },
                 (0, 66),
@@ -780,12 +783,12 @@ mod tests {
 
     #[test]
     fn test_parse_price() {
-        let date = NaiveDate::from_ymd(2020, 2, 2);
+        let date = NaiveDate::from_ymd_opt(2020, 2, 2).unwrap();
         assert_eq!(
             parse_price(date, &mut Scanner::new("price USD 0.901 CHF")).unwrap(),
             Annotated(
                 Price::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
+                    NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                     Decimal::new(901, 3),
                     Commodity::new("CHF".into()),
                     Commodity::new("USD".into()),
@@ -797,7 +800,7 @@ mod tests {
             parse_price(date, &mut Scanner::new("price 1MDB 1000000000 USD")).unwrap(),
             Annotated(
                 Price::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
+                    NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                     Decimal::new(1000000000, 0),
                     Commodity::new("USD".into()),
                     Commodity::new("1MDB".into()),
@@ -809,12 +812,12 @@ mod tests {
 
     #[test]
     fn test_parse_assertion() {
-        let d = NaiveDate::from_ymd(2020, 2, 2);
+        let d = NaiveDate::from_ymd_opt(2020, 2, 2).unwrap();
         assert_eq!(
             parse_assertion(d, &mut Scanner::new("balance Assets:MyAccount 0.901 USD")).unwrap(),
             Annotated(
                 Assertion::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
+                    NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                     Account::new(AccountType::Assets, &["MyAccount"]),
                     Decimal::new(901, 3),
                     Commodity::new("USD".into()),
@@ -826,7 +829,7 @@ mod tests {
             parse_assertion(d, &mut Scanner::new("balance Liabilities:123foo 100 1CT")).unwrap(),
             Annotated(
                 Assertion::new(
-                    NaiveDate::from_ymd(2020, 2, 2),
+                    NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
                     Account::new(AccountType::Liabilities, &["123foo"]),
                     Decimal::new(100, 0),
                     Commodity::new("1CT".into()),
