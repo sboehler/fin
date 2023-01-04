@@ -56,7 +56,7 @@ impl<'a> Parser<'a> {
                         self.scanner.consume_rest_of_line()?;
                     }
                     'i' => {
-                        result.push(parse_include(&mut self.scanner)?.0);
+                        result.push(self.parse_include()?.0);
                     }
                     _ => {
                         let pos = self.scanner.pos();
@@ -77,20 +77,20 @@ impl<'a> Parser<'a> {
         let pos = self.scanner.pos();
         let cmd;
         if let Some('@') = self.scanner.current() {
-            let a = parse_accrual(&mut self.scanner)?.0;
-            let d = parse_date(&mut self.scanner)?.0;
+            let a = self.parse_accrual()?.0;
+            let d = self.parse_date()?.0;
             self.scanner.consume_space1()?;
-            cmd = Command::Trx(parse_transaction(&mut self.scanner, d, Some(a))?.0);
+            cmd = Command::Trx(self.parse_transaction(d, Some(a))?.0);
         } else {
-            let d = parse_date(&mut self.scanner)?.0;
+            let d = self.parse_date()?.0;
             self.scanner.consume_space1()?;
             cmd = match self.scanner.current() {
-                Some('p') => Command::Price(parse_price(d, &mut self.scanner)?.0),
-                Some('"') => Command::Trx(parse_transaction(&mut self.scanner, d, None)?.0),
-                Some('o') => Command::Open(parse_open(d, &mut self.scanner)?.0),
-                Some('b') => Command::Assertion(parse_assertion(d, &mut self.scanner)?.0),
-                Some('c') => Command::Close(parse_close(d, &mut self.scanner)?.0),
-                Some('v') => Command::Value(parse_value(d, &mut self.scanner)?.0),
+                Some('p') => Command::Price(self.parse_price(d)?.0),
+                Some('"') => Command::Trx(self.parse_transaction(d, None)?.0),
+                Some('o') => Command::Open(self.parse_open(d)?.0),
+                Some('b') => Command::Assertion(self.parse_assertion(d)?.0),
+                Some('c') => Command::Close(self.parse_close(d)?.0),
+                Some('v') => Command::Value(self.parse_value(d)?.0),
                 c => {
                     return Err(self.scanner.error(
                         pos,
@@ -110,367 +110,372 @@ impl<'a> Parser<'a> {
         }
         self.scanner.annotate(pos, cmd)
     }
-}
 
-fn parse_accrual(scanr: &mut Scanner) -> Result<Annotated<Accrual>> {
-    let pos = scanr.pos();
-    scanr.consume_string("@accrue")?;
-    scanr.consume_space1()?;
-    let interval = parse_interval(scanr)?.0;
-    scanr.consume_space1()?;
-    let start = parse_date(scanr)?.0;
-    scanr.consume_space1()?;
-    let end = parse_date(scanr)?.0;
-    scanr.consume_space1()?;
-    let account = parse_account(scanr)?.0;
-    scanr.consume_space1()?;
-    scanr.consume_eol()?;
-    scanr.annotate(
-        pos,
-        Accrual {
-            period: Period { start, end },
-            interval,
-            account,
-        },
-    )
-}
-
-fn parse_interval(scanr: &mut Scanner) -> Result<Annotated<Interval>> {
-    let pos = scanr.pos();
-    let str = scanr.read_identifier()?.0;
-    match str.to_lowercase().as_str() {
-        "once" => scanr.annotate(pos, Interval::Once),
-        "daily" => scanr.annotate(pos, Interval::Daily),
-        "weekly" => scanr.annotate(pos, Interval::Weekly),
-        "monthly" => scanr.annotate(pos, Interval::Monthly),
-        "quarterly" => scanr.annotate(pos, Interval::Quarterly),
-        "yearly" => scanr.annotate(pos, Interval::Yearly),
-        _ => Err(scanr.error(
+    fn parse_accrual(&mut self) -> Result<Annotated<Accrual>> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_string("@accrue")?;
+        self.scanner.consume_space1()?;
+        let interval = self.parse_interval()?.0;
+        self.scanner.consume_space1()?;
+        let start = self.parse_date()?.0;
+        self.scanner.consume_space1()?;
+        let end = self.parse_date()?.0;
+        self.scanner.consume_space1()?;
+        let account = self.parse_account()?.0;
+        self.scanner.consume_space1()?;
+        self.scanner.consume_eol()?;
+        self.scanner.annotate(
             pos,
-            Some("error parsing interval".into()),
-            Character::Either(vec![
-                Character::Custom("once".into()),
-                Character::Custom("daily".into()),
-                Character::Custom("weekly".into()),
-                Character::Custom("monthly".into()),
-                Character::Custom("quarterly".into()),
-                Character::Custom("yearly".into()),
-            ]),
-            Character::Custom(str.into()),
-        )),
+            Accrual {
+                period: Period { start, end },
+                interval,
+                account,
+            },
+        )
     }
-}
 
-fn parse_account_type(scanr: &mut Scanner) -> Result<Annotated<AccountType>> {
-    let pos = scanr.pos();
-    let str = scanr.read_identifier()?.0;
-    match str {
-        "Assets" => scanr.annotate(pos, AccountType::Assets),
-        "Liabilities" => scanr.annotate(pos, AccountType::Liabilities),
-        "Equity" => scanr.annotate(pos, AccountType::Equity),
-        "Income" => scanr.annotate(pos, AccountType::Income),
-        "Expenses" => scanr.annotate(pos, AccountType::Expenses),
-        _ => Err(scanr.error(
+    fn parse_open(&mut self, d: NaiveDate) -> Result<Annotated<Open>> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_string("open")?;
+        self.scanner.consume_space1()?;
+        let a = self.parse_account()?.0;
+        self.scanner.consume_space1()?;
+        self.scanner.consume_eol()?;
+        self.scanner.annotate(
             pos,
-            Some("error parsing account type".into()),
-            Character::Either(vec![
-                Character::Custom("Assets".into()),
-                Character::Custom("Liabilities".into()),
-                Character::Custom("Equity".into()),
-                Character::Custom("Income".into()),
-                Character::Custom("Expenses".into()),
-            ]),
-            Character::Custom(str.into()),
-        )),
+            Open {
+                date: d,
+                account: a,
+            },
+        )
     }
-}
 
-fn parse_date(scanr: &mut Scanner) -> Result<Annotated<NaiveDate>> {
-    let pos = scanr.pos();
-    let b = scanr.read_n(10)?;
-    match NaiveDate::parse_from_str(b.0, "%Y-%m-%d") {
-        Ok(d) => scanr.annotate(pos, d),
-        Err(_) => Err(scanr.error(
+    fn parse_close(&mut self, d: NaiveDate) -> Result<Annotated<Close>> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_string("close")?;
+        self.scanner.consume_space1()?;
+        let a = self.parse_account()?.0;
+        self.scanner.consume_space1()?;
+        self.scanner.consume_eol()?;
+        self.scanner.annotate(
             pos,
-            Some("error parsing date".into()),
-            Character::Custom("date (YYYY-MM-DD)".into()),
-            Character::Custom(b.0.into()),
-        )),
+            Close {
+                date: d,
+                account: a,
+            },
+        )
     }
-}
 
-fn parse_account(scanr: &mut Scanner) -> Result<Annotated<Account>> {
-    let pos = scanr.pos();
-    let account_type = parse_account_type(scanr)?.0;
-    let mut segments = Vec::new();
-    while let Some(':') = scanr.current() {
-        scanr.consume_char(':')?;
-        match scanr.read_identifier() {
-            Ok(Annotated(t, _)) => segments.push(t),
-            Err(e) => {
-                return Err(scanr.error(
-                    pos,
-                    Some("error parsing account".into()),
-                    Character::Custom("account".into()),
-                    Character::Custom(format!("{}", e)),
-                ))
+    fn parse_value(&mut self, d: NaiveDate) -> Result<Annotated<Value>> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_string("value")?;
+        self.scanner.consume_space1()?;
+        let acc = self.parse_account()?.0;
+        self.scanner.consume_space1()?;
+        let amt = self.parse_decimal()?.0;
+        self.scanner.consume_space1()?;
+        let com = self.parse_commodity()?.0;
+        self.scanner.consume_space1()?;
+        self.scanner.consume_eol()?;
+        self.scanner.annotate(pos, Value::new(d, acc, amt, com))
+    }
+
+    fn parse_transaction(
+        &mut self,
+        d: NaiveDate,
+        acc: Option<Accrual>,
+    ) -> Result<Annotated<Transaction>> {
+        let pos = self.scanner.pos();
+        let desc = self.scanner.read_quoted_string()?.0;
+        self.scanner.consume_space1()?;
+        let tags = self.parse_tags()?.0;
+        self.scanner.consume_eol()?;
+        let postings = self.parse_postings()?.0;
+        let t = Transaction::new(d, desc.into(), tags, postings, acc);
+        self.scanner.annotate(pos, t)
+    }
+
+    fn parse_postings(&mut self) -> Result<Annotated<Vec<Posting>>> {
+        let pos = self.scanner.pos();
+        let mut postings = Vec::new();
+        postings.push(self.parse_posting()?.0);
+        while self
+            .scanner
+            .current()
+            .map(|c| c.is_ascii_alphanumeric())
+            .unwrap_or(false)
+        {
+            postings.push(self.parse_posting()?.0)
+        }
+        self.scanner.annotate(pos, postings)
+    }
+
+    fn parse_posting(&mut self) -> Result<Annotated<Posting>> {
+        let pos = self.scanner.pos();
+        let mut lot = None;
+        let mut targets = None;
+        let credit = self.parse_account()?.0;
+
+        self.scanner.consume_space1()?;
+        let debit = self.parse_account()?.0;
+        self.scanner.consume_space1()?;
+        let amount = self.parse_decimal()?.0;
+        self.scanner.consume_space1()?;
+        let commodity = self.parse_commodity()?.0;
+        self.scanner.consume_space1()?;
+        if let Some('(') = self.scanner.current() {
+            targets = Some(self.parse_targets()?.0);
+            self.scanner.consume_space1()?;
+        }
+        if let Some('{') = self.scanner.current() {
+            lot = Some(self.parse_lot()?);
+            self.scanner.consume_space1()?;
+        }
+        let posting = self.scanner.annotate(
+            pos,
+            Posting {
+                credit,
+                debit,
+                commodity,
+                amount,
+                lot,
+                targets,
+            },
+        );
+        self.scanner.consume_eol()?;
+        posting
+    }
+
+    fn parse_assertion(&mut self, d: NaiveDate) -> Result<Annotated<Assertion>> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_string("balance")?;
+        self.scanner.consume_space1()?;
+        let account = self.parse_account()?.0;
+        self.scanner.consume_space1()?;
+        let price = self.parse_decimal()?.0;
+        self.scanner.consume_space1()?;
+        let commodity = self.parse_commodity()?.0;
+        self.scanner.consume_space1()?;
+        self.scanner.consume_eol()?;
+        self.scanner
+            .annotate(pos, Assertion::new(d, account, price, commodity))
+    }
+
+    fn parse_account(&mut self) -> Result<Annotated<Account>> {
+        let pos = self.scanner.pos();
+        let account_type = self.parse_account_type()?.0;
+        let mut segments = Vec::new();
+        while let Some(':') = self.scanner.current() {
+            self.scanner.consume_char(':')?;
+            match self.scanner.read_identifier() {
+                Ok(Annotated(t, _)) => segments.push(t),
+                Err(e) => {
+                    return Err(self.scanner.error(
+                        pos,
+                        Some("error parsing account".into()),
+                        Character::Custom("account".into()),
+                        Character::Custom(format!("{}", e)),
+                    ))
+                }
             }
         }
+        self.scanner
+            .annotate(pos, Account::new(account_type, &segments))
     }
-    scanr.annotate(pos, Account::new(account_type, &segments))
-}
 
-fn parse_open(d: NaiveDate, scanr: &mut Scanner) -> Result<Annotated<Open>> {
-    let pos = scanr.pos();
-    scanr.consume_string("open")?;
-    scanr.consume_space1()?;
-    let a = parse_account(scanr)?.0;
-    scanr.consume_space1()?;
-    scanr.consume_eol()?;
-    scanr.annotate(
-        pos,
-        Open {
-            date: d,
-            account: a,
-        },
-    )
-}
-
-fn parse_close(d: NaiveDate, scanr: &mut Scanner) -> Result<Annotated<Close>> {
-    let pos = scanr.pos();
-    scanr.consume_string("close")?;
-    scanr.consume_space1()?;
-    let a = parse_account(scanr)?.0;
-    scanr.consume_space1()?;
-    scanr.consume_eol()?;
-    scanr.annotate(
-        pos,
-        Close {
-            date: d,
-            account: a,
-        },
-    )
-}
-
-fn parse_value(d: NaiveDate, scanr: &mut Scanner) -> Result<Annotated<Value>> {
-    let pos = scanr.pos();
-    scanr.consume_string("value")?;
-    scanr.consume_space1()?;
-    let acc = parse_account(scanr)?.0;
-    scanr.consume_space1()?;
-    let amt = parse_decimal(scanr)?.0;
-    scanr.consume_space1()?;
-    let com = parse_commodity(scanr)?.0;
-    scanr.consume_space1()?;
-    scanr.consume_eol()?;
-    scanr.annotate(pos, Value::new(d, acc, amt, com))
-}
-
-fn parse_transaction(
-    s: &mut Scanner,
-    d: NaiveDate,
-    acc: Option<Accrual>,
-) -> Result<Annotated<Transaction>> {
-    let pos = s.pos();
-    let desc = s.read_quoted_string()?.0;
-    s.consume_space1()?;
-    let tags = parse_tags(s)?.0;
-    s.consume_eol()?;
-    let postings = parse_postings(s)?.0;
-    let t = Transaction::new(d, desc.into(), tags, postings, acc);
-    s.annotate(pos, t)
-}
-
-fn parse_tags(scanr: &mut Scanner) -> Result<Annotated<Vec<Tag>>> {
-    let pos = scanr.pos();
-    let mut v = Vec::new();
-    while let Some('#') = scanr.current() {
-        v.push(parse_tag(scanr)?.0);
-        scanr.consume_space1()?.0
-    }
-    scanr.annotate(pos, v)
-}
-
-fn parse_tag(scanr: &mut Scanner) -> Result<Annotated<Tag>> {
-    let pos = scanr.pos();
-    scanr.consume_char('#')?;
-    let tag = scanr.read_identifier()?.0;
-    scanr.annotate(pos, Tag::new(tag.into()))
-}
-
-fn parse_decimal(s: &mut Scanner) -> Result<Annotated<Decimal>> {
-    let pos = s.pos();
-    let t = s.read_until(|c| c.is_whitespace())?.0;
-    match t.parse::<Decimal>() {
-        Ok(d) => s.annotate(pos, d),
-        Err(_) => Err(s.error(
-            pos,
-            Some("error parsing decimal".into()),
-            Character::Custom("a decimal value".into()),
-            Character::Custom(t.to_string()),
-        )),
-    }
-}
-
-fn parse_commodity(scanr: &mut Scanner) -> Result<Annotated<Commodity>> {
-    let pos = scanr.pos();
-    let c = Commodity::new(scanr.read_identifier()?.0.into());
-    scanr.annotate(pos, c)
-}
-
-fn parse_lot(scanr: &mut Scanner) -> Result<Lot> {
-    let pos = scanr.pos();
-    scanr.consume_char('{')?;
-    scanr.consume_space1()?;
-    let price = parse_decimal(scanr)?.0;
-    scanr.consume_space1()?;
-    let commodity = parse_commodity(scanr)?.0;
-    let mut label = None;
-    let mut date = None;
-    scanr.consume_space();
-    while let Some(',') = scanr.current() {
-        scanr.consume_char(',')?;
-        scanr.consume_space();
-        match scanr.current() {
-            Some('"') => {
-                label = Some(scanr.read_quoted_string()?);
-                scanr.consume_space();
-            }
-            Some(d) if d.is_ascii_digit() => {
-                date = Some(parse_date(scanr)?.0);
-                scanr.consume_space();
-            }
-            c => {
-                return Err(scanr.error(
-                    pos,
-                    Some("error parsing lot".into()),
-                    Character::Either(vec![
-                        Character::Custom("label".into()),
-                        Character::Custom("date (YYYY-MM-DD)".into()),
-                    ]),
-                    Character::from_char(c),
-                ))
-            }
+    fn parse_account_type(&mut self) -> Result<Annotated<AccountType>> {
+        let pos = self.scanner.pos();
+        let str = self.scanner.read_identifier()?.0;
+        match str {
+            "Assets" => self.scanner.annotate(pos, AccountType::Assets),
+            "Liabilities" => self.scanner.annotate(pos, AccountType::Liabilities),
+            "Equity" => self.scanner.annotate(pos, AccountType::Equity),
+            "Income" => self.scanner.annotate(pos, AccountType::Income),
+            "Expenses" => self.scanner.annotate(pos, AccountType::Expenses),
+            _ => Err(self.scanner.error(
+                pos,
+                Some("error parsing account type".into()),
+                Character::Either(vec![
+                    Character::Custom("Assets".into()),
+                    Character::Custom("Liabilities".into()),
+                    Character::Custom("Equity".into()),
+                    Character::Custom("Income".into()),
+                    Character::Custom("Expenses".into()),
+                ]),
+                Character::Custom(str.into()),
+            )),
         }
     }
-    scanr.consume_char('}')?;
-    Ok(Lot::new(
-        price,
-        commodity,
-        date,
-        label.map(|s| s.0.to_string()),
-    ))
-}
 
-fn parse_postings(scanr: &mut Scanner) -> Result<Annotated<Vec<Posting>>> {
-    let pos = scanr.pos();
-    let mut postings = Vec::new();
-    postings.push(parse_posting(scanr)?.0);
-    while scanr
-        .current()
-        .map(|c| c.is_ascii_alphanumeric())
-        .unwrap_or(false)
-    {
-        postings.push(parse_posting(scanr)?.0)
+    fn parse_tags(&mut self) -> Result<Annotated<Vec<Tag>>> {
+        let pos = self.scanner.pos();
+        let mut v = Vec::new();
+        while let Some('#') = self.scanner.current() {
+            v.push(self.parse_tag()?.0);
+            self.scanner.consume_space1()?.0
+        }
+        self.scanner.annotate(pos, v)
     }
-    scanr.annotate(pos, postings)
-}
 
-fn parse_posting(scanr: &mut Scanner) -> Result<Annotated<Posting>> {
-    let pos = scanr.pos();
-    let mut lot = None;
-    let mut targets = None;
-    let credit = parse_account(scanr)?.0;
+    fn parse_tag(&mut self) -> Result<Annotated<Tag>> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_char('#')?;
+        let tag = self.scanner.read_identifier()?.0;
+        self.scanner.annotate(pos, Tag::new(tag.into()))
+    }
 
-    scanr.consume_space1()?;
-    let debit = parse_account(scanr)?.0;
-    scanr.consume_space1()?;
-    let amount = parse_decimal(scanr)?.0;
-    scanr.consume_space1()?;
-    let commodity = parse_commodity(scanr)?.0;
-    scanr.consume_space1()?;
-    if let Some('(') = scanr.current() {
-        targets = Some(parse_targets(scanr)?.0);
-        scanr.consume_space1()?;
+    fn parse_interval(&mut self) -> Result<Annotated<Interval>> {
+        let pos = self.scanner.pos();
+        let str = self.scanner.read_identifier()?.0;
+        match str.to_lowercase().as_str() {
+            "once" => self.scanner.annotate(pos, Interval::Once),
+            "daily" => self.scanner.annotate(pos, Interval::Daily),
+            "weekly" => self.scanner.annotate(pos, Interval::Weekly),
+            "monthly" => self.scanner.annotate(pos, Interval::Monthly),
+            "quarterly" => self.scanner.annotate(pos, Interval::Quarterly),
+            "yearly" => self.scanner.annotate(pos, Interval::Yearly),
+            _ => Err(self.scanner.error(
+                pos,
+                Some("error parsing interval".into()),
+                Character::Either(vec![
+                    Character::Custom("once".into()),
+                    Character::Custom("daily".into()),
+                    Character::Custom("weekly".into()),
+                    Character::Custom("monthly".into()),
+                    Character::Custom("quarterly".into()),
+                    Character::Custom("yearly".into()),
+                ]),
+                Character::Custom(str.into()),
+            )),
+        }
     }
-    if let Some('{') = scanr.current() {
-        lot = Some(parse_lot(scanr)?);
-        scanr.consume_space1()?;
+
+    fn parse_date(&mut self) -> Result<Annotated<NaiveDate>> {
+        let pos = self.scanner.pos();
+        let b = self.scanner.read_n(10)?;
+        match NaiveDate::parse_from_str(b.0, "%Y-%m-%d") {
+            Ok(d) => self.scanner.annotate(pos, d),
+            Err(_) => Err(self.scanner.error(
+                pos,
+                Some("error parsing date".into()),
+                Character::Custom("date (YYYY-MM-DD)".into()),
+                Character::Custom(b.0.into()),
+            )),
+        }
     }
-    let posting = scanr.annotate(
-        pos,
-        Posting {
-            credit,
-            debit,
+
+    fn parse_decimal(&mut self) -> Result<Annotated<Decimal>> {
+        let pos = self.scanner.pos();
+        let t = self.scanner.read_until(|c| c.is_whitespace())?.0;
+        match t.parse::<Decimal>() {
+            Ok(d) => self.scanner.annotate(pos, d),
+            Err(_) => Err(self.scanner.error(
+                pos,
+                Some("error parsing decimal".into()),
+                Character::Custom("a decimal value".into()),
+                Character::Custom(t.to_string()),
+            )),
+        }
+    }
+
+    fn parse_commodity(&mut self) -> Result<Annotated<Commodity>> {
+        let pos = self.scanner.pos();
+        let c = Commodity::new(self.scanner.read_identifier()?.0.into());
+        self.scanner.annotate(pos, c)
+    }
+
+    fn parse_lot(&mut self) -> Result<Lot> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_char('{')?;
+        self.scanner.consume_space1()?;
+        let price = self.parse_decimal()?.0;
+        self.scanner.consume_space1()?;
+        let commodity = self.parse_commodity()?.0;
+        let mut label = None;
+        let mut date = None;
+        self.scanner.consume_space();
+        while let Some(',') = self.scanner.current() {
+            self.scanner.consume_char(',')?;
+            self.scanner.consume_space();
+            match self.scanner.current() {
+                Some('"') => {
+                    label = Some(self.scanner.read_quoted_string()?);
+                    self.scanner.consume_space();
+                }
+                Some(d) if d.is_ascii_digit() => {
+                    date = Some(self.parse_date()?.0);
+                    self.scanner.consume_space();
+                }
+                c => {
+                    return Err(self.scanner.error(
+                        pos,
+                        Some("error parsing lot".into()),
+                        Character::Either(vec![
+                            Character::Custom("label".into()),
+                            Character::Custom("date (YYYY-MM-DD)".into()),
+                        ]),
+                        Character::from_char(c),
+                    ))
+                }
+            }
+        }
+        self.scanner.consume_char('}')?;
+        Ok(Lot::new(
+            price,
             commodity,
-            amount,
-            lot,
-            targets,
-        },
-    );
-    scanr.consume_eol()?;
-    posting
-}
-
-fn parse_targets(scanr: &mut Scanner) -> Result<Annotated<Vec<Commodity>>> {
-    let pos = scanr.pos();
-    let mut targets = Vec::new();
-    scanr.consume_char('(')?;
-    scanr.consume_space();
-    if Some(')') != scanr.current() {
-        targets.push(parse_commodity(scanr)?.0);
-        scanr.consume_space();
+            date,
+            label.map(|s| s.0.to_string()),
+        ))
     }
-    while let Some(',') = scanr.current() {
-        scanr.consume_char(',')?;
-        scanr.consume_space();
-        targets.push(parse_commodity(scanr)?.0);
-        scanr.consume_space();
+
+    fn parse_targets(&mut self) -> Result<Annotated<Vec<Commodity>>> {
+        let pos = self.scanner.pos();
+        let mut targets = Vec::new();
+        self.scanner.consume_char('(')?;
+        self.scanner.consume_space();
+        if Some(')') != self.scanner.current() {
+            targets.push(self.parse_commodity()?.0);
+            self.scanner.consume_space();
+        }
+        while let Some(',') = self.scanner.current() {
+            self.scanner.consume_char(',')?;
+            self.scanner.consume_space();
+            targets.push(self.parse_commodity()?.0);
+            self.scanner.consume_space();
+        }
+        self.scanner.consume_char(')')?;
+        self.scanner.annotate(pos, targets)
     }
-    scanr.consume_char(')')?;
-    scanr.annotate(pos, targets)
-}
 
-fn parse_price(d: NaiveDate, scanr: &mut Scanner) -> Result<Annotated<Price>> {
-    let pos = scanr.pos();
-    scanr.consume_string("price")?;
-    scanr.consume_space1()?;
-    let source = parse_commodity(scanr)?.0;
-    scanr.consume_space1()?;
-    let price = parse_decimal(scanr)?.0;
-    scanr.consume_space1()?;
-    let target = parse_commodity(scanr)?.0;
-    scanr.consume_space1()?;
-    scanr.consume_eol()?;
-    scanr.annotate(pos, Price::new(d, price, target, source))
-}
+    fn parse_price(&mut self, d: NaiveDate) -> Result<Annotated<Price>> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_string("price")?;
+        self.scanner.consume_space1()?;
+        let source = self.parse_commodity()?.0;
+        self.scanner.consume_space1()?;
+        let price = self.parse_decimal()?.0;
+        self.scanner.consume_space1()?;
+        let target = self.parse_commodity()?.0;
+        self.scanner.consume_space1()?;
+        self.scanner.consume_eol()?;
+        self.scanner
+            .annotate(pos, Price::new(d, price, target, source))
+    }
 
-fn parse_assertion(d: NaiveDate, scanr: &mut Scanner) -> Result<Annotated<Assertion>> {
-    let pos = scanr.pos();
-    scanr.consume_string("balance")?;
-    scanr.consume_space1()?;
-    let account = parse_account(scanr)?.0;
-    scanr.consume_space1()?;
-    let price = parse_decimal(scanr)?.0;
-    scanr.consume_space1()?;
-    let commodity = parse_commodity(scanr)?.0;
-    scanr.consume_space1()?;
-    scanr.consume_eol()?;
-    scanr.annotate(pos, Assertion::new(d, account, price, commodity))
-}
-
-fn parse_include(scanr: &mut Scanner) -> Result<Annotated<Directive>> {
-    let pos = scanr.pos();
-    scanr.consume_string("include")?;
-    scanr.consume_space1()?;
-    let directive = scanr
-        .read_quoted_string()
-        .map(|a| a.0)
-        .map(std::path::PathBuf::from)
-        .map(Directive::Include)?;
-    scanr.consume_space1()?;
-    scanr.consume_eol()?;
-    scanr.annotate(pos, directive)
+    fn parse_include(&mut self) -> Result<Annotated<Directive>> {
+        let pos = self.scanner.pos();
+        self.scanner.consume_string("include")?;
+        self.scanner.consume_space1()?;
+        let directive = self
+            .scanner
+            .read_quoted_string()
+            .map(|a| a.0)
+            .map(std::path::PathBuf::from)
+            .map(Directive::Include)?;
+        self.scanner.consume_space1()?;
+        self.scanner.consume_eol()?;
+        self.scanner.annotate(pos, directive)
+    }
 }
 
 #[cfg(test)]
@@ -480,7 +485,7 @@ mod tests {
     #[test]
     fn test_parse_account_type() {
         assert_eq!(
-            parse_account_type(&mut Scanner::new("Assets")).unwrap().0,
+            Parser::new("Assets").parse_account_type().unwrap().0,
             AccountType::Assets
         );
     }
@@ -488,11 +493,11 @@ mod tests {
     #[test]
     fn test_parse_date() {
         assert_eq!(
-            parse_date(&mut Scanner::new("0202-02-02")).unwrap(),
+            Parser::new("0202-02-02").parse_date().unwrap(),
             Annotated(chrono::NaiveDate::from_ymd_opt(202, 2, 2).unwrap(), (0, 10))
         );
         assert_eq!(
-            parse_date(&mut Scanner::new("2020-09-15")).unwrap(),
+            Parser::new("2020-09-15").parse_date().unwrap(),
             Annotated(
                 chrono::NaiveDate::from_ymd_opt(2020, 9, 15).unwrap(),
                 (0, 10)
@@ -503,11 +508,13 @@ mod tests {
     #[test]
     fn test_parse_account() {
         assert_eq!(
-            parse_account(&mut Scanner::new("Assets")).unwrap(),
+            Parser::new("Assets").parse_account().unwrap(),
             Annotated(Account::new(AccountType::Assets, &[]), (0, 6))
         );
         assert_eq!(
-            parse_account(&mut Scanner::new("Liabilities:CreditCards:Visa")).unwrap(),
+            Parser::new("Liabilities:CreditCards:Visa")
+                .parse_account()
+                .unwrap(),
             Annotated(
                 Account::new(AccountType::Liabilities, &["CreditCards", "Visa"]),
                 (0, 28)
@@ -518,11 +525,9 @@ mod tests {
     #[test]
     fn test_parse_open() {
         assert_eq!(
-            parse_open(
-                NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
-                &mut Scanner::new("open Assets:Account")
-            )
-            .unwrap(),
+            Parser::new("open Assets:Account")
+                .parse_open(NaiveDate::from_ymd_opt(2020, 2, 2).unwrap())
+                .unwrap(),
             Annotated(
                 Open {
                     date: NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
@@ -539,11 +544,9 @@ mod tests {
     #[test]
     fn test_parse_close() {
         assert_eq!(
-            parse_close(
-                NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
-                &mut Scanner::new("close Assets:Account")
-            )
-            .unwrap(),
+            Parser::new("close Assets:Account")
+                .parse_close(NaiveDate::from_ymd_opt(2020, 2, 2).unwrap())
+                .unwrap(),
             Annotated(
                 Close {
                     date: NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
@@ -560,11 +563,9 @@ mod tests {
     #[test]
     fn test_parse_value() {
         assert_eq!(
-            parse_value(
-                NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
-                &mut Scanner::new("value  Assets:Account  101.40 KNUT")
-            )
-            .unwrap(),
+            Parser::new("value  Assets:Account  101.40 KNUT")
+                .parse_value(NaiveDate::from_ymd_opt(2020, 2, 2).unwrap())
+                .unwrap(),
             Annotated(
                 Value::new(
                     NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
@@ -580,7 +581,9 @@ mod tests {
     #[test]
     fn test_parse_tags() {
         assert_eq!(
-            parse_tags(&mut Scanner::new("#tag1 #1tag   no more tags")).unwrap(),
+            Parser::new("#tag1 #1tag   no more tags")
+                .parse_tags()
+                .unwrap(),
             Annotated(
                 vec![Tag::new("tag1".into()), Tag::new("1tag".into())],
                 (0, 14)
@@ -591,15 +594,15 @@ mod tests {
     #[test]
     fn test_parse_decimal() {
         assert_eq!(
-            parse_decimal(&mut Scanner::new("3.14")).unwrap(),
+            Parser::new("3.14").parse_decimal().unwrap(),
             Annotated(Decimal::new(314, 2), (0, 4))
         );
         assert_eq!(
-            parse_decimal(&mut Scanner::new("-3.141")).unwrap(),
+            Parser::new("-3.141").parse_decimal().unwrap(),
             Annotated(Decimal::new(-3141, 3), (0, 6))
         );
         assert_eq!(
-            parse_decimal(&mut Scanner::new("3.14159265359")).unwrap(),
+            Parser::new("3.14159265359").parse_decimal().unwrap(),
             Annotated(Decimal::new(314159265359, 11), (0, 13))
         );
     }
@@ -663,18 +666,19 @@ mod tests {
             ),
         ];
         for (test, date, want) in tests {
-            let mut s = Scanner::new(test);
-            assert_eq!(parse_transaction(&mut s, date, None).unwrap(), want);
+            assert_eq!(
+                Parser::new(test).parse_transaction(date, None).unwrap(),
+                want
+            );
         }
     }
 
     #[test]
     fn test_parse_accrual() {
         assert_eq!(
-            parse_accrual(&mut Scanner::new(
-                "@accrue daily 2022-04-03 2022-05-05 Liabilities:Accruals"
-            ))
-            .unwrap(),
+            Parser::new("@accrue daily 2022-04-03 2022-05-05 Liabilities:Accruals")
+                .parse_accrual()
+                .unwrap(),
             Annotated(
                 Accrual {
                     account: Account::new(AccountType::Liabilities, &["Accruals"]),
@@ -688,10 +692,9 @@ mod tests {
             ),
         );
         assert_eq!(
-            parse_accrual(&mut Scanner::new(
-                "@accrue monthly 2022-04-03     2022-05-05     Liabilities:Bank    "
-            ))
-            .unwrap(),
+            Parser::new("@accrue monthly 2022-04-03     2022-05-05     Liabilities:Bank    ")
+                .parse_accrual()
+                .unwrap(),
             Annotated(
                 Accrual {
                     account: Account::new(AccountType::Liabilities, &["Bank"]),
@@ -709,27 +712,27 @@ mod tests {
     #[test]
     fn test_parse_interval() {
         assert_eq!(
-            parse_interval(&mut Scanner::new("daily")).unwrap(),
+            Parser::new("daily").parse_interval().unwrap(),
             Annotated(Interval::Daily, (0, 5))
         );
         assert_eq!(
-            parse_interval(&mut Scanner::new("weekly")).unwrap(),
+            Parser::new("weekly").parse_interval().unwrap(),
             Annotated(Interval::Weekly, (0, 6))
         );
         assert_eq!(
-            parse_interval(&mut Scanner::new("monthly")).unwrap(),
+            Parser::new("monthly").parse_interval().unwrap(),
             Annotated(Interval::Monthly, (0, 7))
         );
         assert_eq!(
-            parse_interval(&mut Scanner::new("quarterly")).unwrap(),
+            Parser::new("quarterly").parse_interval().unwrap(),
             Annotated(Interval::Quarterly, (0, 9))
         );
         assert_eq!(
-            parse_interval(&mut Scanner::new("yearly")).unwrap(),
+            Parser::new("yearly").parse_interval().unwrap(),
             Annotated(Interval::Yearly, (0, 6))
         );
         assert_eq!(
-            parse_interval(&mut Scanner::new("once")).unwrap(),
+            Parser::new("once").parse_interval().unwrap(),
             Annotated(Interval::Once, (0, 4))
         );
     }
@@ -737,8 +740,7 @@ mod tests {
     #[test]
     fn test_parse_postings() {
         assert_eq!(
-            parse_postings(
-                &mut Scanner::new("Assets:Account1    Assets:Account2   4.00    CHF\nAssets:Account2    Assets:Account1   3.00 USD")).unwrap(),
+            Parser::new("Assets:Account1    Assets:Account2   4.00    CHF\nAssets:Account2    Assets:Account1   3.00 USD").parse_postings().unwrap(),
             Annotated(
                 vec![
                     Posting {
@@ -766,7 +768,7 @@ mod tests {
     #[test]
     fn test_parse_targets() {
         assert_eq!(
-            parse_targets(&mut Scanner::new("(A,B,  C   )")).unwrap(),
+            Parser::new("(A,B,  C   )").parse_targets().unwrap(),
             Annotated(
                 vec![
                     Commodity::new("A".into()),
@@ -781,10 +783,9 @@ mod tests {
     #[test]
     fn test_parse_posting() {
         assert_eq!(
-            parse_posting(&mut Scanner::new(
-                "Assets:Account1    Assets:Account2   4.00    CHF"
-            ))
-            .unwrap(),
+            Parser::new("Assets:Account1    Assets:Account2   4.00    CHF")
+                .parse_posting()
+                .unwrap(),
             Annotated(
                 Posting {
                     credit: Account::new(AccountType::Assets, &["Account1"]),
@@ -803,7 +804,9 @@ mod tests {
     fn test_parse_price() {
         let date = NaiveDate::from_ymd_opt(2020, 2, 2).unwrap();
         assert_eq!(
-            parse_price(date, &mut Scanner::new("price USD 0.901 CHF")).unwrap(),
+            Parser::new("price USD 0.901 CHF")
+                .parse_price(date)
+                .unwrap(),
             Annotated(
                 Price::new(
                     NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
@@ -815,7 +818,9 @@ mod tests {
             )
         );
         assert_eq!(
-            parse_price(date, &mut Scanner::new("price 1MDB 1000000000 USD")).unwrap(),
+            Parser::new("price 1MDB 1000000000 USD")
+                .parse_price(date,)
+                .unwrap(),
             Annotated(
                 Price::new(
                     NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
@@ -832,7 +837,9 @@ mod tests {
     fn test_parse_assertion() {
         let d = NaiveDate::from_ymd_opt(2020, 2, 2).unwrap();
         assert_eq!(
-            parse_assertion(d, &mut Scanner::new("balance Assets:MyAccount 0.901 USD")).unwrap(),
+            Parser::new("balance Assets:MyAccount 0.901 USD")
+                .parse_assertion(d,)
+                .unwrap(),
             Annotated(
                 Assertion::new(
                     NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
@@ -844,7 +851,9 @@ mod tests {
             )
         );
         assert_eq!(
-            parse_assertion(d, &mut Scanner::new("balance Liabilities:123foo 100 1CT")).unwrap(),
+            Parser::new("balance Liabilities:123foo 100 1CT")
+                .parse_assertion(d,)
+                .unwrap(),
             Annotated(
                 Assertion::new(
                     NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
