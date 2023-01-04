@@ -11,9 +11,8 @@ impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let (ch, t) = journal::read_from_file(self.journal.clone());
         for v in ch {
-            match v {
-                Err(e) => println!("{}", e),
-                Ok(_) => (),
+            if let Err(e) = v {
+                println!("{}", e)
             }
         }
         t.join().unwrap();

@@ -12,7 +12,7 @@ mod tag;
 mod transaction;
 mod value;
 
-pub use account::{Account, AccountType};
+pub use account::{Account, AccountType, Accounts};
 pub use assertion::Assertion;
 pub use close::Close;
 pub use command::Command;
