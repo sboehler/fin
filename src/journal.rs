@@ -8,8 +8,8 @@ use std::{
 
 use crate::{
     model::Command,
-    parser::{parse, Directive},
-    scanner::{ParserError, Scanner},
+    parser::{Directive, Parser},
+    scanner::ParserError,
 };
 
 #[derive(Debug)]
@@ -58,8 +58,8 @@ pub fn parse_spawn(p: PathBuf, tx: mpsc::Sender<Result<Vec<Command>>>) {
 
 pub fn parse_and_separate(p: PathBuf) -> Result<(Vec<Command>, Vec<PathBuf>)> {
     let text = fs::read_to_string(&p).map_err(JournalError::IOError)?;
-    let mut s = Scanner::new_from_file(&text, Some(p.clone()));
-    let ds = parse(&mut s).map_err(JournalError::ParserError)?;
+    let mut s = Parser::new_from_file(&text, Some(p.clone()));
+    let ds = s.parse().map_err(JournalError::ParserError)?;
     let mut cs = Vec::new();
     let mut is = Vec::new();
     for d in ds {
