@@ -7,8 +7,8 @@ pub struct Commodity {
 }
 
 impl Commodity {
-    pub fn new(name: String) -> Commodity {
-        Commodity { name }
+    pub fn new(name: &str) -> Commodity {
+        Commodity { name: name.into() }
     }
 }
 
@@ -24,12 +24,7 @@ mod tests {
 
     #[test]
     fn test_fmt() {
-        let tests = [
-            (Commodity::new("USD".into()), "USD"),
-            (Commodity::new("100T".into()), "100T"),
-        ];
-        for (test, expected) in tests.iter() {
-            assert_eq!(format!("{}", test), **expected);
-        }
+        assert_eq!(Commodity::new("USD").to_string(), "USD");
+        assert_eq!(Commodity::new("100T").to_string(), "100T");
     }
 }
