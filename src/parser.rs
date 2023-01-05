@@ -268,7 +268,7 @@ impl<'a> Parser<'a> {
 
     fn parse_account(&mut self) -> Result<Annotated<Arc<Account>>> {
         let pos = self.scanner.pos();
-        let s = self.scanner.read_until(char::is_whitespace)?.0;
+        let s = self.scanner.read_until(char::is_whitespace).0;
         match self.context.account(s) {
             Ok(a) => self.scanner.annotate(pos, a),
             Err(e) => {
@@ -341,7 +341,7 @@ impl<'a> Parser<'a> {
 
     fn parse_decimal(&mut self) -> Result<Annotated<Decimal>> {
         let pos = self.scanner.pos();
-        let t = self.scanner.read_until(|c| c.is_whitespace())?.0;
+        let t = self.scanner.read_until(|c| c.is_whitespace()).0;
         match t.parse::<Decimal>() {
             Ok(d) => self.scanner.annotate(pos, d),
             Err(_) => Err(self.scanner.error(

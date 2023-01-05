@@ -133,7 +133,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_while<P>(&mut self, pred: P) -> Result<Annotated<&'a str>>
+    pub fn read_while<P>(&mut self, pred: P) -> Annotated<&'a str>
     where
         P: Fn(char) -> bool,
     {
@@ -141,10 +141,10 @@ impl<'a> Scanner<'a> {
         let start = self.pos();
         self.skip_while(pred);
         let end = self.pos();
-        self.annotate(pos, &self.source[start..end])
+        Annotated(&self.source[start..end], (pos, self.pos()))
     }
 
-    pub fn read_until<P>(&mut self, pred: P) -> Result<Annotated<&'a str>>
+    pub fn read_until<P>(&mut self, pred: P) -> Annotated<&'a str>
     where
         P: Fn(char) -> bool,
     {
@@ -152,14 +152,14 @@ impl<'a> Scanner<'a> {
         let start = self.pos();
         self.skip_while(|v| !pred(v));
         let end = self.pos();
-        self.annotate(pos, &self.source[start..end])
+        Annotated(&self.source[start..end], (pos, self.pos()))
     }
 
-    pub fn read_all(&mut self) -> Result<Annotated<&'a str>> {
+    pub fn read_all(&mut self) -> Annotated<&'a str> {
         let pos = self.pos();
         let start = self.pos();
         self.skip_while(|_| true);
-        self.annotate(pos, &self.source[start..])
+        Annotated(&self.source[start..], (pos, self.pos()))
     }
 
     pub fn consume_char(&mut self, c: char) -> Result<Annotated<()>> {
@@ -181,14 +181,14 @@ impl<'a> Scanner<'a> {
     pub fn read_quoted_string(&mut self) -> Result<Annotated<&'a str>> {
         let pos = self.pos();
         self.consume_char('"')?;
-        let res = self.read_while(|c| c != '"')?;
+        let res = self.read_while(|c| c != '"');
         self.consume_char('"')?;
         self.annotate(pos, res.0)
     }
 
     pub fn read_identifier(&mut self) -> Result<Annotated<&'a str>> {
         let pos = self.pos();
-        let res = self.read_while(|c| c.is_alphanumeric())?.0;
+        let res = self.read_while(|c| c.is_alphanumeric()).0;
         match res {
             "" => {
                 let got = Character::from_char(self.current());
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn test_read_while() {
         assert_eq!(
-            Scanner::new("asdf").read_while(|c| c != 'f').unwrap(),
+            Scanner::new("asdf").read_while(|c| c != 'f'),
             Annotated("asd", (0, 3))
         )
     }
