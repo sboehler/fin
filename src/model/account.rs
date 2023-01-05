@@ -51,10 +51,28 @@ pub struct Account {
 }
 
 impl Account {
-    pub fn new(account_type: AccountType, segments: &[&str]) -> Account {
-        Account {
+    #[cfg(test)]
+    pub fn new(account_type: AccountType, segments: &[&str]) -> Arc<Account> {
+        Arc::new(Account {
             account_type,
             segments: segments.iter().map(|s| s.to_string()).collect(),
+        })
+    }
+
+    fn parse(value: &str) -> Result<Arc<Self>, String> {
+        match value.split(':').collect::<Vec<_>>().as_slice() {
+            &[at, ref segments @ ..] => {
+                for segment in segments {
+                    if segment.is_empty() || segment.chars().any(|c| !c.is_alphanumeric()) {
+                        return Err(format!("invalid segment: {}", segment));
+                    }
+                }
+                Ok(Arc::new(Account {
+                    account_type: AccountType::try_from(at)?,
+                    segments: segments.iter().map(|s| s.to_string()).collect(),
+                }))
+            }
+            _ => Err(format!("invalid account name: {}", value)),
         }
     }
 }
@@ -67,24 +85,6 @@ impl Display for Account {
             write!(f, "{}", *segment)?;
         }
         Ok(())
-    }
-}
-
-impl TryFrom<&str> for Account {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value.split(':').collect::<Vec<_>>().as_slice() {
-            &[at, ref segments @ ..] => {
-                for segment in segments {
-                    if segment.is_empty() || segment.chars().any(|c| !c.is_alphanumeric()) {
-                        return Err(format!("invalid segment: {}", segment));
-                    }
-                }
-                Ok(Account::new(AccountType::try_from(at)?, segments))
-            }
-            _ => Err(format!("invalid account name: {}", value)),
-        }
     }
 }
 
@@ -110,11 +110,11 @@ mod tests {
     fn test_try_from() {
         assert_eq!(
             Account::new(AccountType::Assets, &["Bank"]),
-            Account::try_from("Assets:Bank").unwrap()
+            Account::parse("Assets:Bank").unwrap()
         );
         assert_eq!(
             Account::new(AccountType::Assets, &["Bank", "Foo"]),
-            Account::try_from("Assets:Bank:Foo").unwrap()
+            Account::parse("Assets:Bank:Foo").unwrap()
         );
     }
 }
@@ -131,7 +131,13 @@ impl Accounts {
         Accounts {
             accounts: vec![Assets, Liabilities, Equity, Income, Expenses]
                 .into_iter()
-                .map(|t| (t.to_string(), Arc::new(Account::new(t, &[]))))
+                .map(|account_type| {
+                    let a = Account {
+                        account_type,
+                        segments: Vec::new(),
+                    };
+                    (account_type.to_string(), Arc::new(a))
+                })
                 .collect(),
             parents: HashMap::new(),
             children: HashMap::new(),
@@ -146,7 +152,7 @@ impl Accounts {
         if let Some(a) = self.accounts.get(s) {
             return Ok(a.clone());
         }
-        let account = Arc::new(Account::try_from(s)?);
+        let account = Account::parse(s)?;
         self.accounts.insert(s.to_string(), account.clone());
         if let Some(parent) = s.rfind(':').map(|i| self.create(&s[..i])).transpose()? {
             self.parents.insert(account.clone(), parent.clone());
@@ -185,7 +191,7 @@ mod test_accounts {
         let a = Accounts::new();
         assert_eq!(
             a.get("Assets").unwrap(),
-            Arc::new(Account::new(AccountType::Assets, &[]))
+            Account::new(AccountType::Assets, &[])
         )
     }
 

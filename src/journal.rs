@@ -2,11 +2,12 @@ use std::{
     error::Error,
     fs, io,
     path::PathBuf,
-    sync::mpsc,
+    sync::{mpsc, Arc},
     thread::{self, JoinHandle},
 };
 
 use crate::{
+    context::Context,
     model::Command,
     parser::{Directive, Parser},
     scanner::ParserError,
@@ -33,18 +34,20 @@ pub type Result<T> = std::result::Result<T, JournalError>;
 
 pub fn read_from_file(p: PathBuf) -> (mpsc::Receiver<Result<Vec<Command>>>, JoinHandle<()>) {
     let (tx, rx) = mpsc::channel();
-    (rx, thread::spawn(move || parse_spawn(p, tx)))
+    let context = Arc::new(Context::new());
+    (rx, thread::spawn(move || parse_spawn(context, p, tx)))
 }
 
-pub fn parse_spawn(p: PathBuf, tx: mpsc::Sender<Result<Vec<Command>>>) {
-    match parse_and_separate(p) {
+pub fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Vec<Command>>>) {
+    match parse_and_separate(context.clone(), p) {
         Ok((commands, includes)) => {
             tx.send(Ok(commands)).unwrap();
             includes
                 .into_iter()
                 .map(|i| {
                     let tx = tx.clone();
-                    thread::spawn(move || parse_spawn(i, tx))
+                    let context = context.clone();
+                    thread::spawn(move || parse_spawn(context, i, tx))
                 })
                 .collect::<Vec<_>>()
                 .into_iter()
@@ -56,9 +59,12 @@ pub fn parse_spawn(p: PathBuf, tx: mpsc::Sender<Result<Vec<Command>>>) {
     }
 }
 
-pub fn parse_and_separate(p: PathBuf) -> Result<(Vec<Command>, Vec<PathBuf>)> {
+pub fn parse_and_separate(
+    context: Arc<Context>,
+    p: PathBuf,
+) -> Result<(Vec<Command>, Vec<PathBuf>)> {
     let text = fs::read_to_string(&p).map_err(JournalError::IOError)?;
-    let mut s = Parser::new_from_file(&text, Some(p.clone()));
+    let mut s = Parser::new_from_file(context, &text, Some(p.clone()));
     let ds = s.parse().map_err(JournalError::ParserError)?;
     let mut cs = Vec::new();
     let mut is = Vec::new();

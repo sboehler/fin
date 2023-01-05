@@ -1,6 +1,6 @@
 use chrono::prelude::NaiveDate;
-use std::fmt;
 use std::fmt::Display;
+use std::{fmt, sync::Arc};
 
 use super::{Account, Interval, Period, Posting, Tag};
 
@@ -64,5 +64,5 @@ impl Display for Transaction {
 pub struct Accrual {
     pub interval: Interval,
     pub period: Period,
-    pub account: Account,
+    pub account: Arc<Account>,
 }

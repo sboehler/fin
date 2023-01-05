@@ -2,11 +2,12 @@ use super::{Account, Commodity, Lot};
 use rust_decimal::prelude::Decimal;
 use std::fmt;
 use std::fmt::Display;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Posting {
-    pub credit: Account,
-    pub debit: Account,
+    pub credit: Arc<Account>,
+    pub debit: Arc<Account>,
     pub commodity: Commodity,
     pub amount: Decimal,
     pub lot: Option<Lot>,

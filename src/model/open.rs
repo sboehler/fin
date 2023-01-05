@@ -2,11 +2,12 @@ use super::Account;
 use chrono::prelude::NaiveDate;
 use std::fmt;
 use std::fmt::Display;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Open {
     pub date: NaiveDate,
-    pub account: Account,
+    pub account: Arc<Account>,
 }
 
 impl Display for Open {

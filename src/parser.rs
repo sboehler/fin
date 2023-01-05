@@ -1,6 +1,7 @@
+use crate::context::Context;
 use crate::model::{
-    Account, AccountType, Accrual, Assertion, Close, Command, Commodity, Interval, Lot, Open,
-    Period, Posting, Price, Tag, Transaction, Value,
+    Account, Accrual, Assertion, Close, Command, Commodity, Interval, Lot, Open, Period, Posting,
+    Price, Tag, Transaction, Value,
 };
 use crate::scanner::{Annotated, Character, Result, Scanner};
 use chrono::NaiveDate;
@@ -8,6 +9,7 @@ use rust_decimal::Decimal;
 use std::fmt;
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum Directive {
@@ -26,18 +28,21 @@ impl Display for Directive {
 }
 
 pub struct Parser<'a> {
+    context: Arc<Context>,
     scanner: Scanner<'a>,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(s: &str) -> Parser {
         Parser {
+            context: Arc::new(Context::new()),
             scanner: Scanner::new(s),
         }
     }
 
-    pub fn new_from_file(s: &str, filename: Option<PathBuf>) -> Parser {
+    pub fn new_from_file(context: Arc<Context>, s: &str, filename: Option<PathBuf>) -> Parser {
         Parser {
+            context: context,
             scanner: Scanner::new_from_file(s, filename),
         }
     }
@@ -261,49 +266,19 @@ impl<'a> Parser<'a> {
             .annotate(pos, Assertion::new(d, account, price, commodity))
     }
 
-    fn parse_account(&mut self) -> Result<Annotated<Account>> {
+    fn parse_account(&mut self) -> Result<Annotated<Arc<Account>>> {
         let pos = self.scanner.pos();
-        let account_type = self.parse_account_type()?.0;
-        let mut segments = Vec::new();
-        while let Some(':') = self.scanner.current() {
-            self.scanner.consume_char(':')?;
-            match self.scanner.read_identifier() {
-                Ok(Annotated(t, _)) => segments.push(t),
-                Err(e) => {
-                    return Err(self.scanner.error(
-                        pos,
-                        Some("error parsing account".into()),
-                        Character::Custom("account".into()),
-                        Character::Custom(format!("{}", e)),
-                    ))
-                }
+        let s = self.scanner.read_until(char::is_whitespace)?.0;
+        match self.context.account(s) {
+            Ok(a) => self.scanner.annotate(pos, a),
+            Err(e) => {
+                return Err(self.scanner.error(
+                    pos,
+                    Some("error parsing account".into()),
+                    Character::Custom("account".into()),
+                    Character::Custom(format!("{}", e)),
+                ))
             }
-        }
-        self.scanner
-            .annotate(pos, Account::new(account_type, &segments))
-    }
-
-    fn parse_account_type(&mut self) -> Result<Annotated<AccountType>> {
-        let pos = self.scanner.pos();
-        let str = self.scanner.read_identifier()?.0;
-        match str {
-            "Assets" => self.scanner.annotate(pos, AccountType::Assets),
-            "Liabilities" => self.scanner.annotate(pos, AccountType::Liabilities),
-            "Equity" => self.scanner.annotate(pos, AccountType::Equity),
-            "Income" => self.scanner.annotate(pos, AccountType::Income),
-            "Expenses" => self.scanner.annotate(pos, AccountType::Expenses),
-            _ => Err(self.scanner.error(
-                pos,
-                Some("error parsing account type".into()),
-                Character::Either(vec![
-                    Character::Custom("Assets".into()),
-                    Character::Custom("Liabilities".into()),
-                    Character::Custom("Equity".into()),
-                    Character::Custom("Income".into()),
-                    Character::Custom("Expenses".into()),
-                ]),
-                Character::Custom(str.into()),
-            )),
         }
     }
 
@@ -481,14 +456,7 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_parse_account_type() {
-        assert_eq!(
-            Parser::new("Assets").parse_account_type().unwrap().0,
-            AccountType::Assets
-        );
-    }
+    use crate::model::AccountType;
 
     #[test]
     fn test_parse_date() {
@@ -531,10 +499,10 @@ mod tests {
             Annotated(
                 Open {
                     date: NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
-                    account: Account {
+                    account: Arc::new(Account {
                         account_type: AccountType::Assets,
                         segments: vec!["Account".into()],
-                    },
+                    }),
                 },
                 (0, 19)
             )
@@ -550,10 +518,10 @@ mod tests {
             Annotated(
                 Close {
                     date: NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),
-                    account: Account {
+                    account: Arc::new(Account {
                         account_type: AccountType::Assets,
                         segments: vec!["Account".into()],
-                    },
+                    }),
                 },
                 (0, 20)
             )

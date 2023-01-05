@@ -4,11 +4,12 @@ use chrono::prelude::NaiveDate;
 use rust_decimal::prelude::Decimal;
 use std::fmt;
 use std::fmt::Display;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Assertion {
     pub date: NaiveDate,
-    pub account: Account,
+    pub account: Arc<Account>,
     pub balance: Decimal,
     pub commodity: Commodity,
 }
@@ -16,7 +17,7 @@ pub struct Assertion {
 impl Assertion {
     pub fn new(
         date: NaiveDate,
-        account: Account,
+        account: Arc<Account>,
         balance: Decimal,
         commodity: Commodity,
     ) -> Assertion {
