@@ -42,7 +42,7 @@ impl<'a> Parser<'a> {
 
     pub fn new_from_file(context: Arc<Context>, s: &str, filename: Option<PathBuf>) -> Parser {
         Parser {
-            context: context,
+            context,
             scanner: Scanner::new_from_file(s, filename),
         }
     }
@@ -271,14 +271,12 @@ impl<'a> Parser<'a> {
         let s = self.scanner.read_until(char::is_whitespace).0;
         match self.context.account(s) {
             Ok(a) => self.scanner.annotate(pos, a),
-            Err(e) => {
-                return Err(self.scanner.error(
-                    pos,
-                    Some("error parsing account".into()),
-                    Character::Custom("account".into()),
-                    Character::Custom(format!("{}", e)),
-                ))
-            }
+            Err(e) => Err(self.scanner.error(
+                pos,
+                Some("error parsing account".into()),
+                Character::Custom("account".into()),
+                Character::Custom(e),
+            )),
         }
     }
 
@@ -353,10 +351,18 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_commodity(&mut self) -> Result<Annotated<Commodity>> {
+    fn parse_commodity(&mut self) -> Result<Annotated<Arc<Commodity>>> {
         let pos = self.scanner.pos();
-        let c = Commodity::new(self.scanner.read_identifier()?.0.into());
-        self.scanner.annotate(pos, c)
+        let s = self.scanner.read_identifier()?.0;
+        match self.context.commodity(s) {
+            Ok(a) => self.scanner.annotate(pos, a),
+            Err(e) => Err(self.scanner.error(
+                pos,
+                Some("error parsing commodity".into()),
+                Character::Custom("commodity".into()),
+                Character::Custom(e),
+            )),
+        }
     }
 
     fn parse_lot(&mut self) -> Result<Lot> {
@@ -403,7 +409,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_targets(&mut self) -> Result<Annotated<Vec<Commodity>>> {
+    fn parse_targets(&mut self) -> Result<Annotated<Vec<Arc<Commodity>>>> {
         let pos = self.scanner.pos();
         let mut targets = Vec::new();
         self.scanner.consume_char('(')?;

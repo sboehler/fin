@@ -8,10 +8,10 @@ use std::sync::Arc;
 pub struct Posting {
     pub credit: Arc<Account>,
     pub debit: Arc<Account>,
-    pub commodity: Commodity,
+    pub commodity: Arc<Commodity>,
     pub amount: Decimal,
     pub lot: Option<Lot>,
-    pub targets: Option<Vec<Commodity>>,
+    pub targets: Option<Vec<Arc<Commodity>>>,
 }
 
 impl Display for Posting {

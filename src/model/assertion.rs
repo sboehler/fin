@@ -11,7 +11,7 @@ pub struct Assertion {
     pub date: NaiveDate,
     pub account: Arc<Account>,
     pub balance: Decimal,
-    pub commodity: Commodity,
+    pub commodity: Arc<Commodity>,
 }
 
 impl Assertion {
@@ -19,7 +19,7 @@ impl Assertion {
         date: NaiveDate,
         account: Arc<Account>,
         balance: Decimal,
-        commodity: Commodity,
+        commodity: Arc<Commodity>,
     ) -> Assertion {
         Assertion {
             date,

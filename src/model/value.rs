@@ -10,7 +10,7 @@ pub struct Value {
     pub date: NaiveDate,
     pub amount: Decimal,
     pub account: Arc<Account>,
-    pub commodity: Commodity,
+    pub commodity: Arc<Commodity>,
 }
 
 impl Value {
@@ -18,7 +18,7 @@ impl Value {
         date: NaiveDate,
         account: Arc<Account>,
         amount: Decimal,
-        commodity: Commodity,
+        commodity: Arc<Commodity>,
     ) -> Self {
         Value {
             date,

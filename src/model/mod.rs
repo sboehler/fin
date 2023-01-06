@@ -16,6 +16,7 @@ pub use account::{Account, AccountType, Accounts};
 pub use assertion::Assertion;
 pub use close::Close;
 pub use command::Command;
+pub use commodity::Commodities;
 pub use commodity::Commodity;
 pub use date::Interval;
 pub use date::Period;

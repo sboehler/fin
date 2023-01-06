@@ -3,11 +3,12 @@ use chrono::prelude::NaiveDate;
 use rust_decimal::prelude::Decimal;
 use std::fmt;
 use std::fmt::Display;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Lot {
     price: Decimal,
-    commodity: Commodity,
+    commodity: Arc<Commodity>,
     date: Option<NaiveDate>,
     label: Option<String>,
 }
@@ -15,7 +16,7 @@ pub struct Lot {
 impl Lot {
     pub fn new(
         price: Decimal,
-        commodity: Commodity,
+        commodity: Arc<Commodity>,
         date: Option<NaiveDate>,
         label: Option<String>,
     ) -> Self {
