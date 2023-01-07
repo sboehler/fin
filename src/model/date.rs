@@ -15,13 +15,14 @@ pub enum Interval {
 
 impl Display for Interval {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use super::Interval::*;
         match self {
-            Self::Once => write!(f, "once"),
-            Self::Daily => write!(f, "daily"),
-            Self::Weekly => write!(f, "weekly"),
-            Self::Monthly => write!(f, "monthly"),
-            Self::Quarterly => write!(f, "quarterly"),
-            Self::Yearly => write!(f, "yearly"),
+            Once => write!(f, "once"),
+            Daily => write!(f, "daily"),
+            Weekly => write!(f, "weekly"),
+            Monthly => write!(f, "monthly"),
+            Quarterly => write!(f, "quarterly"),
+            Yearly => write!(f, "yearly"),
         }
     }
 }
