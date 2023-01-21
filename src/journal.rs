@@ -32,45 +32,36 @@ impl Error for JournalError {}
 
 pub type Result<T> = std::result::Result<T, JournalError>;
 
-pub fn read_from_file(p: PathBuf) -> (mpsc::Receiver<Result<Vec<Command>>>, JoinHandle<()>) {
+pub fn read_from_file(p: PathBuf) -> (mpsc::Receiver<Result<Command>>, JoinHandle<()>) {
     let (tx, rx) = mpsc::channel();
     let context = Arc::new(Context::new());
     (rx, thread::spawn(move || parse_spawn(context, p, tx)))
 }
 
-pub fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Vec<Command>>>) {
-    match parse_and_separate(context.clone(), p) {
-        Ok((commands, includes)) => {
-            tx.send(Ok(commands)).unwrap();
-            includes
-                .into_iter()
-                .map(|i| {
-                    let tx = tx.clone();
-                    let context = context.clone();
-                    thread::spawn(move || parse_spawn(context, i, tx))
-                })
-                .collect::<Vec<_>>()
-                .into_iter()
-                .for_each(|t| t.join().unwrap())
+pub fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Command>>) {
+    match fs::read_to_string(&p) {
+        Ok(text) => {
+            let s = Parser::new_from_file(context.clone(), &text, Some(p.clone()));
+            let mut jh = Vec::new();
+            for dir in s {
+                match dir {
+                    Ok(Directive::Command(c)) => tx.send(Ok(c)).unwrap(),
+                    Ok(Directive::Include(i)) => {
+                        let tx = tx.clone();
+                        let i = p.parent().unwrap().join(i);
+                        let context = context.clone();
+                        jh.push(thread::spawn(move || parse_spawn(context, i, tx)));
+                    }
+                    Err(err) => tx.send(Err(JournalError::ParserError(err))).unwrap(),
+                }
+            }
+            for j in jh {
+                j.join().unwrap()
+            }
         }
-        Err(e) => tx.send(Err(e)).unwrap(),
-    }
-}
-
-fn parse_and_separate(context: Arc<Context>, p: PathBuf) -> Result<(Vec<Command>, Vec<PathBuf>)> {
-    let text = fs::read_to_string(&p).map_err(JournalError::IOError)?;
-    let s = Parser::new_from_file(context, &text, Some(p.clone()));
-    let ds = s
-        .into_iter()
-        .collect::<std::result::Result<Vec<_>, ParserError>>()
-        .map_err(JournalError::ParserError)?;
-    let mut cs = Vec::new();
-    let mut is = Vec::new();
-    for d in ds {
-        match d {
-            Directive::Command(c) => cs.push(c),
-            Directive::Include(i) => is.push(p.parent().unwrap().join(i)),
+        Err(e) => {
+            tx.send(Err(JournalError::IOError(e))).unwrap();
+            return;
         }
-    }
-    Ok((cs, is))
+    };
 }
