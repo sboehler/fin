@@ -59,9 +59,6 @@ pub fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Co
                 j.join().unwrap()
             }
         }
-        Err(e) => {
-            tx.send(Err(JournalError::IOError(e))).unwrap();
-            return;
-        }
+        Err(e) => tx.send(Err(JournalError::IOError(e))).unwrap(),
     };
 }
