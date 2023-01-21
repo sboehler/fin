@@ -38,7 +38,7 @@ pub fn read_from_file(p: PathBuf) -> (mpsc::Receiver<Result<Command>>, JoinHandl
     (rx, thread::spawn(move || parse_spawn(context, p, tx)))
 }
 
-pub fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Command>>) {
+fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Command>>) {
     match fs::read_to_string(&p) {
         Ok(text) => {
             let s = Parser::new_from_file(context.clone(), &text, Some(p.clone()));
