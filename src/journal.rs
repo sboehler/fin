@@ -51,11 +51,9 @@ pub fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Ve
                 })
                 .collect::<Vec<_>>()
                 .into_iter()
-                .for_each(|t| t.join().unwrap());
+                .for_each(|t| t.join().unwrap())
         }
-        Err(e) => {
-            tx.send(Err(e)).unwrap();
-        }
+        Err(e) => tx.send(Err(e)).unwrap(),
     }
 }
 
