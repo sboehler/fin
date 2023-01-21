@@ -57,13 +57,13 @@ pub fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Ve
     }
 }
 
-pub fn parse_and_separate(
-    context: Arc<Context>,
-    p: PathBuf,
-) -> Result<(Vec<Command>, Vec<PathBuf>)> {
+fn parse_and_separate(context: Arc<Context>, p: PathBuf) -> Result<(Vec<Command>, Vec<PathBuf>)> {
     let text = fs::read_to_string(&p).map_err(JournalError::IOError)?;
-    let mut s = Parser::new_from_file(context, &text, Some(p.clone()));
-    let ds = s.parse().map_err(JournalError::ParserError)?;
+    let s = Parser::new_from_file(context, &text, Some(p.clone()));
+    let ds = s
+        .into_iter()
+        .collect::<std::result::Result<Vec<_>, ParserError>>()
+        .map_err(JournalError::ParserError)?;
     let mut cs = Vec::new();
     let mut is = Vec::new();
     for d in ds {

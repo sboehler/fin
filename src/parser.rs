@@ -32,6 +32,14 @@ pub struct Parser<'a> {
     scanner: Scanner<'a>,
 }
 
+impl<'a> Iterator for Parser<'a> {
+    type Item = Result<Directive>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.parse_directive().transpose()
+    }
+}
+
 impl<'a> Parser<'a> {
     pub fn new(s: &str) -> Parser {
         Parser {
@@ -47,21 +55,20 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Directive>> {
-        let mut result = Vec::new();
+    fn parse_directive(&mut self) -> Result<Option<Directive>> {
         while self.scanner.current().is_some() {
             self.scanner.skip_while(|c| c.is_ascii_whitespace());
             if let Some(c) = self.scanner.current() {
                 match c {
                     '0'..='9' | '@' => {
                         let c = self.parse_command()?;
-                        result.push(Directive::Command(c.0))
+                        return Ok(Some(Directive::Command(c.0)));
+                    }
+                    'i' => {
+                        return Ok(Some(self.parse_include()?.0));
                     }
                     '*' | '#' => {
                         self.scanner.consume_rest_of_line()?;
-                    }
-                    'i' => {
-                        result.push(self.parse_include()?.0);
                     }
                     _ => {
                         let pos = self.scanner.pos();
@@ -75,7 +82,7 @@ impl<'a> Parser<'a> {
                 };
             }
         }
-        Ok(result)
+        Ok(None)
     }
 
     pub fn parse_command(&mut self) -> Result<Annotated<Command>> {

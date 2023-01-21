@@ -1,4 +1,4 @@
-use crate::{context::Context, parser::Parser};
+use crate::{context::Context, parser::Parser, scanner::ParserError};
 use clap::Args;
 use std::{error::Error, fs, path::PathBuf, sync::Arc};
 
@@ -10,9 +10,10 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let text = fs::read_to_string(&self.journal)?;
-        let mut p =
-            Parser::new_from_file(Arc::new(Context::new()), &text, Some(self.journal.clone()));
-        let res = p.parse();
+        let p = Parser::new_from_file(Arc::new(Context::new()), &text, Some(self.journal.clone()));
+        let res = p
+            .into_iter()
+            .collect::<std::result::Result<Vec<_>, ParserError>>();
         match res {
             Ok(ds) => {
                 for d in &ds {
