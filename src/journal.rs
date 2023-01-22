@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     error::Error,
     fs, io,
     path::PathBuf,
@@ -6,9 +7,11 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+use chrono::NaiveDate;
+
 use crate::{
     context::Context,
-    model::Command,
+    model::{Assertion, Close, Command, Open, Price, Transaction, Value},
     parser::{Directive, Parser},
     scanner::ParserError,
 };
@@ -61,4 +64,98 @@ fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Comman
         }
         Err(e) => tx.send(Err(JournalError::IOError(e))).unwrap(),
     };
+}
+
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Day {
+    pub date: NaiveDate,
+    pub prices: Vec<Price>,
+    pub assertions: Vec<Assertion>,
+    pub values: Vec<Value>,
+    pub openings: Vec<Open>,
+    pub transactions: Vec<Transaction>,
+    pub closings: Vec<Close>,
+}
+
+impl Day {
+    fn new(d: NaiveDate) -> Self {
+        Day {
+            date: d,
+            prices: Vec::new(),
+            assertions: Vec::new(),
+            values: Vec::new(),
+            openings: Vec::new(),
+            transactions: Vec::new(),
+            closings: Vec::new(),
+        }
+    }
+
+    fn add(&mut self, cmd: Command) {
+        match cmd {
+            Command::Open(o) => self.openings.push(o),
+            Command::Price(p) => self.prices.push(p),
+            Command::Trx(t) => self.transactions.push(t),
+            Command::Value(v) => self.values.push(v),
+            Command::Assertion(a) => self.assertions.push(a),
+            Command::Close(c) => self.closings.push(c),
+        }
+    }
+}
+
+pub struct Journal {
+    pub context: Arc<Context>,
+    pub days: BTreeMap<NaiveDate, Day>,
+}
+
+impl Journal {
+    pub fn new(context: Arc<Context>) -> Self {
+        Journal {
+            context,
+            days: BTreeMap::new(),
+        }
+    }
+
+    pub fn add(&mut self, cmd: Command) {
+        self.days
+            .entry(cmd.date())
+            .or_insert(Day::new(cmd.date()))
+            .add(cmd)
+    }
+
+    pub fn min_date(&self) -> Option<NaiveDate> {
+        self.days
+            .values()
+            .find(|d| !d.transactions.is_empty())
+            .map(|d| d.date)
+    }
+
+    pub fn max_date(&self) -> Option<NaiveDate> {
+        self.days
+            .values()
+            .rfind(|d| !d.transactions.is_empty())
+            .map(|d| d.date)
+    }
+}
+#[cfg(test)]
+mod journal_tests {
+    use super::*;
+
+    #[test]
+    fn test_min_max() {
+        let ctx = Arc::new(Context::new());
+        let mut j = Journal::new(ctx.clone());
+        assert_eq!(j.min_date(), None);
+        assert_eq!(j.max_date(), None);
+        for day in 1..20 {
+            j.add(Command::Trx(Transaction::new(
+                NaiveDate::from_ymd_opt(2022, 4, day).unwrap(),
+                "A transaction".into(),
+                Vec::new(),
+                Vec::new(),
+                None,
+            )));
+            assert_eq!(j.max_date(), NaiveDate::from_ymd_opt(2022, 4, day));
+        }
+        assert_eq!(j.min_date(), NaiveDate::from_ymd_opt(2022, 4, 1));
+    }
 }

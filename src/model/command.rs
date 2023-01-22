@@ -1,3 +1,5 @@
+use chrono::NaiveDate;
+
 use super::{Assertion, Close, Open, Price, Transaction, Value};
 use std::fmt;
 use std::fmt::Display;
@@ -10,6 +12,19 @@ pub enum Command {
     Value(Value),
     Assertion(Assertion),
     Close(Close),
+}
+
+impl Command {
+    pub fn date(&self) -> NaiveDate {
+        match self {
+            Command::Open(o) => o.date,
+            Command::Price(p) => p.date,
+            Command::Trx(t) => t.date,
+            Command::Value(v) => v.date,
+            Command::Assertion(a) => a.date,
+            Command::Close(c) => c.date,
+        }
+    }
 }
 
 impl Display for Command {
