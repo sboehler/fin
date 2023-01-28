@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{cmp::min, fmt::Display};
+use std::fmt::Display;
 
 use chrono::{Datelike, Days, Months, NaiveDate};
 
@@ -34,20 +34,6 @@ pub struct Period {
 }
 
 impl Period {
-    pub fn dates1(&self, interval: Interval, n: usize) -> Vec<NaiveDate> {
-        if interval == Interval::Once {
-            return vec![self.end];
-        }
-        let mut d = self.start;
-        let mut res = Vec::new();
-        while d <= self.end {
-            let end_date = min(end_of(d, interval).unwrap(), self.end);
-            res.push(end_date);
-            d = end_date.checked_add_days(Days::new(1)).unwrap()
-        }
-        res
-    }
-
     pub fn dates(&self, interval: Interval, n: Option<usize>) -> Vec<NaiveDate> {
         if interval == Interval::Once {
             return vec![self.end];
@@ -58,7 +44,7 @@ impl Period {
         while d >= self.start {
             match n {
                 Some(n) if counter == n => break,
-                Some(_) => counter = counter + 1,
+                Some(_) => counter += 1,
                 None => (),
             }
             res.push(d);

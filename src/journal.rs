@@ -118,7 +118,7 @@ impl Journal {
     pub fn add(&mut self, cmd: Command) {
         self.days
             .entry(cmd.date())
-            .or_insert(Day::new(cmd.date()))
+            .or_insert_with(|| Day::new(cmd.date()))
             .add(cmd)
     }
 
