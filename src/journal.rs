@@ -91,13 +91,14 @@ impl Day {
     }
 
     fn add(&mut self, cmd: Command) {
+        use Command::*;
         match cmd {
-            Command::Open(o) => self.openings.push(o),
-            Command::Price(p) => self.prices.push(p),
-            Command::Trx(t) => self.transactions.push(t),
-            Command::Value(v) => self.values.push(v),
-            Command::Assertion(a) => self.assertions.push(a),
-            Command::Close(c) => self.closings.push(c),
+            Open(o) => self.openings.push(o),
+            Price(p) => self.prices.push(p),
+            Trx(t) => self.transactions.push(t),
+            Value(v) => self.values.push(v),
+            Assertion(a) => self.assertions.push(a),
+            Close(c) => self.closings.push(c),
         }
     }
 }
