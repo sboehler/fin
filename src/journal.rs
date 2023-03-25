@@ -41,24 +41,24 @@ pub fn read_from_file(p: PathBuf) -> (mpsc::Receiver<Result<Command>>, JoinHandl
     (rx, thread::spawn(move || parse_spawn(context, p, tx)))
 }
 
-fn parse_spawn(context: Arc<Context>, p: PathBuf, tx: mpsc::Sender<Result<Command>>) {
-    match fs::read_to_string(&p) {
+fn parse_spawn(context: Arc<Context>, file: PathBuf, tx: mpsc::Sender<Result<Command>>) {
+    match fs::read_to_string(&file) {
         Ok(text) => {
-            let s = Parser::new_from_file(context.clone(), &text, Some(p.clone()));
-            let mut jh = Vec::new();
-            for dir in s {
-                match dir {
-                    Ok(Directive::Command(c)) => tx.send(Ok(c)).unwrap(),
-                    Ok(Directive::Include(i)) => {
+            let parser = Parser::new_from_file(context.clone(), &text, Some(file.clone()));
+            let mut handles = Vec::new();
+            for directive in parser {
+                match directive {
+                    Ok(Directive::Command(cmd)) => tx.send(Ok(cmd)).unwrap(),
+                    Ok(Directive::Include(path)) => {
                         let tx = tx.clone();
-                        let i = p.parent().unwrap().join(i);
+                        let path = file.parent().unwrap().join(path);
                         let context = context.clone();
-                        jh.push(thread::spawn(move || parse_spawn(context, i, tx)));
+                        handles.push(thread::spawn(move || parse_spawn(context, path, tx)));
                     }
                     Err(err) => tx.send(Err(JournalError::ParserError(err))).unwrap(),
                 }
             }
-            for j in jh {
+            for j in handles {
                 j.join().unwrap()
             }
         }
