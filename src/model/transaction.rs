@@ -1,4 +1,5 @@
 use chrono::prelude::NaiveDate;
+use rust_decimal::Decimal;
 use std::fmt::Display;
 use std::{fmt, sync::Arc};
 
@@ -54,7 +55,9 @@ impl Display for Transaction {
         }
         writeln!(f)?;
         for posting in &self.postings {
-            write!(f, "{}", posting)?;
+            if posting.amount > Decimal::ZERO {
+                write!(f, "{}", posting)?;
+            }
         }
         Ok(())
     }

@@ -22,7 +22,7 @@ pub use date::Period;
 pub use date::{end_of, start_of, Interval};
 pub use lot::Lot;
 pub use open::Open;
-pub use posting::Posting;
+pub use posting::{Posting, PostingBuilder};
 pub use price::Price;
 pub use tag::Tag;
 pub use transaction::Accrual;
