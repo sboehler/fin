@@ -55,7 +55,10 @@ fn parse_spawn(context: Arc<Context>, file: PathBuf, tx: mpsc::Sender<Result<Com
                         let context = context.clone();
                         handles.push(thread::spawn(move || parse_spawn(context, path, tx)));
                     }
-                    Err(err) => tx.send(Err(JournalError::ParserError(err))).unwrap(),
+                    Err(err) => {
+                        tx.send(Err(JournalError::ParserError(err))).unwrap();
+                        break;
+                    }
                 }
             }
             for j in handles {
@@ -135,6 +138,24 @@ impl Journal {
             .values()
             .rfind(|d| !d.transactions.is_empty())
             .map(|d| d.date)
+    }
+
+    pub fn from_file(p: PathBuf) -> Result<Journal> {
+        let ctx = Arc::new(Context::new());
+        let mut j = Self::new(ctx);
+        let (ch, t) = read_from_file(p.clone());
+        let mut errs = Vec::new();
+        for v in ch {
+            match v {
+                Ok(c) => j.add(c),
+                Err(e) => errs.push(e),
+            }
+        }
+        t.join().unwrap();
+        if let Some(e) = errs.pop() {
+            return Err(e);
+        }
+        return Ok(j);
     }
 }
 #[cfg(test)]

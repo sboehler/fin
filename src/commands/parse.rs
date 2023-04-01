@@ -9,13 +9,8 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        let (ch, t) = journal::read_from_file(self.journal.clone());
-        for v in ch {
-            if let Err(e) = v {
-                println!("{}", e)
-            }
-        }
-        t.join().unwrap();
+        let j = journal::Journal::from_file(self.journal.clone())?;
+        println!("{} {}", j.min_date().unwrap(), j.max_date().unwrap());
         Ok(())
     }
 }
