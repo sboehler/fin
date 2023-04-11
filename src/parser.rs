@@ -477,12 +477,12 @@ mod tests {
     fn test_parse_date() {
         assert_eq!(
             Parser::new("0202-02-02").parse_date().unwrap(),
-            Annotated(chrono::NaiveDate::from_ymd_opt(202, 2, 2).unwrap(), (0, 10))
+            Annotated(NaiveDate::from_ymd_opt(202, 2, 2).unwrap(), (0, 10))
         );
         assert_eq!(
             Parser::new("2020-09-15").parse_date().unwrap(),
             Annotated(
-                chrono::NaiveDate::from_ymd_opt(2020, 9, 15).unwrap(),
+                NaiveDate::from_ymd_opt(2020, 9, 15).unwrap(),
                 (0, 10)
             )
         );
