@@ -9,10 +9,16 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        match journal::Journal::from_file(self.journal.clone()) {
-            Err(e) => println!("{}", e),
-            Ok(j) => println!("{} {}", j.min_date().unwrap(), j.max_date().unwrap()),
+        if let Err(e) = execute(self.journal.clone()) {
+            println!("{}", e);
+            std::process::exit(1)
         }
         Ok(())
     }
+}
+
+fn execute(path: PathBuf) -> Result<(), Box<dyn Error>> {
+    let j = journal::Journal::from_file(path)?;
+    println!("{} {}", j.min_date().unwrap(), j.max_date().unwrap());
+    Ok(())
 }
