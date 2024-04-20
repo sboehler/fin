@@ -1,3 +1,5 @@
 /target
 journal.bean
 /.idea
+.envrc
+.direnv
