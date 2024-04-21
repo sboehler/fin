@@ -1,4 +1,4 @@
-use std::{iter::Peekable, path::PathBuf, str::CharIndices};
+use std::{cell::RefCell, iter::Peekable, path::PathBuf, str::CharIndices};
 
 #[derive(Debug)]
 pub struct ParserError {
@@ -9,6 +9,44 @@ pub struct ParserError {
     line: usize,
     col: usize,
     context: Vec<(usize, String)>,
+    wrapped: Option<Box<ParserError>>,
+}
+
+impl ParserError {
+    pub fn new(
+        source: &str,
+        file: &Option<PathBuf>,
+        pos: usize,
+        msg: Option<String>,
+        want: Token,
+        got: Token,
+        wrapped: Option<ParserError>,
+    ) -> ParserError {
+        let lines: Vec<_> = source[..pos + 1].lines().collect();
+        let line = lines.len().saturating_sub(1);
+        let col = lines.last().map(|s| s.len().saturating_sub(1)).unwrap_or(0);
+        let rng = lines.len().saturating_sub(5)..=line;
+        let file = file
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "<stream>".into());
+        let context = source
+            .lines()
+            .enumerate()
+            .filter(|t| rng.contains(&t.0))
+            .map(|(i, l)| (i, l.into()))
+            .collect();
+        ParserError {
+            file,
+            line,
+            col,
+            context,
+            msg,
+            want,
+            got,
+            wrapped: wrapped.map(Box::new),
+        }
+    }
 }
 
 impl std::fmt::Display for ParserError {
@@ -33,7 +71,10 @@ impl std::fmt::Display for ParserError {
             writeln!(f, "{:5}:  {}", n, line)?;
         }
         writeln!(f, "{}^^^ want: {}", " ".repeat(self.col + 8), self.want)?;
-        Ok(())
+        match &self.wrapped {
+            Some(e) => e.fmt(f),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -101,9 +142,9 @@ impl<'a> Range<'a> {
 }
 
 pub struct Scanner<'a> {
-    source: &'a str,
-    filename: Option<PathBuf>,
-    chars: Peekable<CharIndices<'a>>,
+    pub source: &'a str,
+    pub filename: Option<PathBuf>,
+    chars: RefCell<Peekable<CharIndices<'a>>>,
 }
 
 impl<'a> Scanner<'a> {
@@ -111,7 +152,7 @@ impl<'a> Scanner<'a> {
         Scanner {
             source: s,
             filename,
-            chars: s.char_indices().peekable(),
+            chars: RefCell::new(s.char_indices().peekable()),
         }
     }
 
@@ -119,26 +160,27 @@ impl<'a> Scanner<'a> {
         Scanner::new_from_file(s, None)
     }
 
-    pub fn range_from(&mut self, start: usize) -> Range {
+    pub fn range_from(&self, start: usize) -> Range {
         Range::new(start, self.pos(), &self.source[start..self.pos()])
     }
 
-    pub fn current(&mut self) -> Option<char> {
-        self.chars.peek().map(|t| t.1)
+    pub fn current(&self) -> Option<char> {
+        self.chars.borrow_mut().peek().map(|t| t.1)
     }
 
-    pub fn advance(&mut self) -> Option<char> {
-        self.chars.next().map(|t| t.1)
+    pub fn advance(&self) -> Option<char> {
+        self.chars.borrow_mut().next().map(|t| t.1)
     }
 
-    pub fn pos(&mut self) -> usize {
+    pub fn pos(&self) -> usize {
         self.chars
+            .borrow_mut()
             .peek()
             .map(|t| t.0)
             .unwrap_or_else(|| self.source.as_bytes().len())
     }
 
-    pub fn read_while<P>(&mut self, pred: P) -> Range
+    pub fn read_while<P>(&self, pred: P) -> Range
     where
         P: Fn(char) -> bool,
     {
@@ -149,18 +191,18 @@ impl<'a> Scanner<'a> {
         self.range_from(start)
     }
 
-    pub fn read_until<P>(&mut self, pred: P) -> Range
+    pub fn read_until<P>(&self, pred: P) -> Range
     where
         P: Fn(char) -> bool,
     {
         self.read_while(|v| !pred(v))
     }
 
-    pub fn read_all(&mut self) -> Range {
+    pub fn read_all(&self) -> Range {
         self.read_while(|_| true)
     }
 
-    pub fn consume_char(&mut self, c: char) -> Result<Range> {
+    pub fn consume_char(&self, c: char) -> Result<Range> {
         let start = self.pos();
         match self.advance() {
             Some(d) if c == d => Ok(self.range_from(start)),
@@ -168,7 +210,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn consume_string(&mut self, str: &str) -> Result<Range> {
+    pub fn consume_string(&self, str: &str) -> Result<Range> {
         let start = self.pos();
         for c in str.chars() {
             self.consume_char(c)?;
@@ -176,7 +218,7 @@ impl<'a> Scanner<'a> {
         Ok(self.range_from(start))
     }
 
-    pub fn read_identifier(&mut self) -> Result<Range> {
+    pub fn read_identifier(&self) -> Result<Range> {
         let start = self.pos();
         let ident = self.read_while(|c| c.is_alphanumeric());
         if ident.len() == 0 {
@@ -192,7 +234,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_1(&mut self) -> Result<Range> {
+    pub fn read_1(&self) -> Result<Range> {
         let start = self.pos();
         match self.advance() {
             Some(_) => Ok(self.range_from(start)),
@@ -200,7 +242,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_n(&mut self, n: usize) -> Result<Range> {
+    pub fn read_n(&self, n: usize) -> Result<Range> {
         let start = self.pos();
         for _ in 0..n {
             self.read_1()?;
@@ -208,7 +250,7 @@ impl<'a> Scanner<'a> {
         Ok(self.range_from(start))
     }
 
-    pub fn consume_eol(&mut self) -> Result<Range> {
+    pub fn consume_eol(&self) -> Result<Range> {
         let start = self.pos();
         match self.advance() {
             None | Some('\n') => Ok(self.range_from(start)),
@@ -221,7 +263,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn consume_space1(&mut self) -> Result<Range> {
+    pub fn consume_space1(&self) -> Result<Range> {
         let start = self.pos();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
@@ -231,49 +273,19 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn consume_space(&mut self) -> Range {
+    pub fn consume_space(&self) -> Range {
         self.read_while(|c| c != '\n' && c.is_ascii_whitespace())
     }
 
-    pub fn consume_rest_of_line(&mut self) -> Result<Range> {
+    pub fn consume_rest_of_line(&self) -> Result<Range> {
         let start = self.pos();
         self.read_while(|c| c != '\n');
         self.consume_eol()?;
         Ok(self.range_from(start))
     }
 
-    pub fn error(
-        &mut self,
-        pos: usize,
-        msg: Option<String>,
-        want: Token,
-        got: Token,
-    ) -> ParserError {
-        let lines: Vec<_> = self.source[..pos + 1].lines().collect();
-        let line = lines.len().saturating_sub(1);
-        let col = lines.last().map(|s| s.len().saturating_sub(1)).unwrap_or(0);
-        let rng = lines.len().saturating_sub(5)..=lines.len().saturating_sub(1);
-        let file = self
-            .filename
-            .as_ref()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| "<stream>".into());
-        let context = self
-            .source
-            .lines()
-            .enumerate()
-            .filter(|t| rng.contains(&t.0))
-            .map(|(i, l)| (i, l.into()))
-            .collect();
-        ParserError {
-            file,
-            line,
-            col,
-            context,
-            msg,
-            want,
-            got,
-        }
+    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> ParserError {
+        ParserError::new(&self.source, &self.filename, pos, msg, want, got, None)
     }
 }
 
@@ -288,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_consume_while() {
-        let mut s = Scanner::new("asdf");
+        let s = Scanner::new("asdf");
         s.read_while(|c| c != 'f');
         assert_eq!(s.consume_char('f').unwrap().str, "f");
         assert!(s.current().is_none());
@@ -297,7 +309,7 @@ mod tests {
     #[test]
     fn test_consume_char() {
         let t = "asdf";
-        let mut s = Scanner::new(t);
+        let s = Scanner::new(t);
         assert_eq!(s.consume_char('a').unwrap().str, "a");
         assert_eq!(s.consume_char('s').unwrap().str, "s");
         assert_eq!(s.consume_char('d').unwrap().str, "d");
