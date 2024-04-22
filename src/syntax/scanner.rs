@@ -1,6 +1,6 @@
 use std::{cell::RefCell, iter::Peekable, path::PathBuf, str::CharIndices};
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ParserError {
     got: Token,
     want: Token,
@@ -22,7 +22,7 @@ impl ParserError {
         got: Token,
         wrapped: Option<ParserError>,
     ) -> ParserError {
-        let lines: Vec<_> = source[..pos + 1].lines().collect();
+        let lines: Vec<_> = source[..pos].lines().collect();
         let line = lines.len().saturating_sub(1);
         let col = lines.last().map(|s| s.len().saturating_sub(1)).unwrap_or(0);
         let rng = lines.len().saturating_sub(5)..=line;
@@ -86,6 +86,8 @@ pub type Result<T> = std::result::Result<T, ParserError>;
 pub enum Token {
     EOF,
     Char(char),
+    Digit,
+    AlphaNum,
     Either(Vec<Token>),
     Any,
     WhiteSpace,
@@ -107,6 +109,8 @@ impl std::fmt::Display for Token {
         match self {
             Self::EOF => write!(f, "EOF"),
             Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
+            Self::Digit => write!(f, "a digit (0-9)"),
+            Self::AlphaNum => write!(f, "a character (a-z, A-Z) or a digit (0-9)"),
             Self::Any => write!(f, "any character"),
             Self::WhiteSpace => write!(f, "whitespace"),
             Self::Custom(s) => write!(f, "{}", s),
@@ -202,7 +206,7 @@ impl<'a> Scanner<'a> {
         self.read_while(|_| true)
     }
 
-    pub fn consume_char(&self, c: char) -> Result<Range> {
+    pub fn read_char(&self, c: char) -> Result<Range> {
         let start = self.pos();
         match self.advance() {
             Some(d) if c == d => Ok(self.range_from(start)),
@@ -213,7 +217,7 @@ impl<'a> Scanner<'a> {
     pub fn consume_string(&self, str: &str) -> Result<Range> {
         let start = self.pos();
         for c in str.chars() {
-            self.consume_char(c)?;
+            self.read_char(c)?;
         }
         Ok(self.range_from(start))
     }
@@ -226,7 +230,7 @@ impl<'a> Scanner<'a> {
             Err(self.error(
                 start,
                 Some("error while parsing identifier".into()),
-                Token::Custom("alphanumeric character to start the identifier".into()),
+                Token::AlphaNum,
                 got,
             ))
         } else {
@@ -239,6 +243,18 @@ impl<'a> Scanner<'a> {
         match self.advance() {
             Some(_) => Ok(self.range_from(start)),
             None => Err(self.error(start, None, Token::Any, Token::EOF)),
+        }
+    }
+
+    pub fn read_1_with<P>(&self, token: Token, pred: P) -> Result<Range>
+    where
+        P: Fn(char) -> bool,
+    {
+        let start = self.pos();
+        match self.advance() {
+            Some(c) if pred(c) => Ok(self.range_from(start)),
+            Some(c) => Err(self.error(start, None, token, Token::Char(c))),
+            None => Err(self.error(start, None, token, Token::EOF)),
         }
     }
 
@@ -302,7 +318,7 @@ mod tests {
     fn test_consume_while() {
         let s = Scanner::new("asdf");
         s.read_while(|c| c != 'f');
-        assert_eq!(s.consume_char('f').unwrap().str, "f");
+        assert_eq!(s.read_char('f').unwrap().str, "f");
         assert!(s.current().is_none());
     }
 
@@ -310,10 +326,10 @@ mod tests {
     fn test_consume_char() {
         let t = "asdf";
         let s = Scanner::new(t);
-        assert_eq!(s.consume_char('a').unwrap().str, "a");
-        assert_eq!(s.consume_char('s').unwrap().str, "s");
-        assert_eq!(s.consume_char('d').unwrap().str, "d");
-        assert_eq!(s.consume_char('f').unwrap().str, "f");
+        assert_eq!(s.read_char('a').unwrap().str, "a");
+        assert_eq!(s.read_char('s').unwrap().str, "s");
+        assert_eq!(s.read_char('d').unwrap().str, "d");
+        assert_eq!(s.read_char('f').unwrap().str, "f");
     }
 
     #[test]
@@ -342,10 +358,43 @@ mod tests {
     }
 
     #[test]
+    fn test_read_1() {
+        assert_eq!(Scanner::new("23asdflj").read_1().unwrap().str, "2");
+        assert_eq!(Scanner::new("foo bar").read_1().unwrap().str, "f");
+        assert_eq!(Scanner::new("foo").read_1().unwrap().str, "f");
+        assert!(Scanner::new("").read_1().is_err());
+    }
+
+    #[test]
+    fn test_read_1_with() {
+        assert_eq!(
+            Scanner::new("23asdflj")
+                .read_1_with(Token::Digit, |c| c.is_ascii_digit())
+                .unwrap()
+                .str,
+            "2"
+        );
+        assert_eq!(
+            Scanner::new("0foo bar")
+                .read_1_with(Token::Digit, |c| c.is_ascii_digit())
+                .unwrap()
+                .str,
+            "0"
+        );
+        assert!(Scanner::new("")
+            .read_1_with(Token::Digit, |c| c.is_ascii_digit())
+            .is_err());
+        assert!(Scanner::new("a")
+            .read_1_with(Token::Digit, |c| c.is_ascii_digit())
+            .is_err());
+    }
+
+    #[test]
     fn test_read_n() {
         assert_eq!(Scanner::new("23asdflj").read_n(4).unwrap().str, "23as");
         assert_eq!(Scanner::new("foo bar").read_n(4).unwrap().str, "foo ");
         assert_eq!(Scanner::new("foo").read_n(3).unwrap().str, "foo");
+        assert!(Scanner::new("foo").read_n(4).is_err());
     }
 
     #[test]
