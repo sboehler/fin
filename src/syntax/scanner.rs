@@ -258,6 +258,21 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    pub fn read_n_with<P>(&self, n: usize, token: Token, pred: P) -> Result<Range>
+    where
+        P: Fn(char) -> bool,
+    {
+        let start = self.pos();
+        for _ in 0..n {
+            match self.advance() {
+                Some(c) if pred(c) => continue,
+                Some(c) => return Err(self.error(start, None, token, Token::Char(c))),
+                None => return Err(self.error(start, None, token, Token::EOF)),
+            };
+        }
+        Ok(self.range_from(start))
+    }
+
     pub fn read_n(&self, n: usize) -> Result<Range> {
         let start = self.pos();
         for _ in 0..n {

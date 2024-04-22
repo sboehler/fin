@@ -3,7 +3,7 @@ use crate::syntax::syntax::Commodity;
 use std::path::PathBuf;
 
 use super::scanner::ParserError;
-use super::syntax::Date;
+use super::syntax::{Account, Date};
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
@@ -40,38 +40,48 @@ impl<'a> Parser<'a> {
         )
     }
 
-    pub fn parse_commodity(&self) -> Result<Commodity> {
+    pub fn parse_account(&self) -> Result<Account> {
         let start = self.scanner.pos();
+        let account_type = self.scanner.read_identifier().map_err(|e| {
+            self.error(
+                start,
+                Some("parsing account type".into()),
+                Token::AlphaNum,
+                Some(e),
+            )
+        })?;
+        let mut segments = vec![account_type];
+        while self.scanner.current() == Some(':') {
+            self.scanner.read_char(':')?;
+            segments.push(self.scanner.read_identifier().map_err(|e| {
+                self.error(
+                    start,
+                    Some("parsing account type".into()),
+                    Token::AlphaNum,
+                    Some(e),
+                )
+            })?);
+        }
+        Ok(Account {
+            range: self.scanner.range_from(start),
+            segments,
+        })
+    }
+
+    pub fn parse_commodity(&self) -> Result<Commodity> {
         self.scanner
             .read_identifier()
             .map(|range| Commodity { range })
-            .map_err(|e| {
-                self.error(
-                    start,
-                    Some("error parsing commodity".into()),
-                    Token::Custom("commodity".into()),
-                    e.into(),
-                )
-            })
     }
 
     pub fn parse_date(&self) -> Result<Date> {
         let start = self.scanner.pos();
-        for _ in 0..4 {
-            self.scanner
-                .read_1_with(Token::Digit, |c| c.is_ascii_digit())
-                .map_err(|e| self.error(start, None, Token::Custom("date".into()), Some(e)))?;
-        }
-        for _ in 0..2 {
-            self.scanner
-                .read_char('-')
-                .map_err(|e| self.error(start, None, Token::Custom("date".into()), Some(e)))?;
-            for _ in 0..2 {
-                self.scanner
-                    .read_1_with(Token::Digit, |c| c.is_ascii_digit())
-                    .map_err(|e| self.error(start, None, Token::Custom("date".into()), Some(e)))?;
-            }
-        }
+        let s = &self.scanner;
+        s.read_n_with(4, Token::Digit, |c| c.is_ascii_digit())?;
+        s.read_char('-')?;
+        s.read_n_with(2, Token::Digit, |c| c.is_ascii_digit())?;
+        s.read_char('-')?;
+        s.read_n_with(2, Token::Digit, |c| c.is_ascii_digit())?;
         Ok(Date {
             range: self.scanner.range_from(start),
         })
@@ -95,6 +105,28 @@ mod tests {
         );
         assert!(Parser::new(" USD").parse_commodity().is_err());
         assert!(Parser::new("/USD").parse_commodity().is_err());
+    }
+
+    #[test]
+    fn test_parse_account() {
+        assert_eq!(
+            Parser::new("Assets").parse_account().unwrap().range.str,
+            "Assets"
+        );
+        assert_eq!(
+            Parser::new("Sometype").parse_account().unwrap().range.str,
+            "Sometype"
+        );
+        assert_eq!(
+            Parser::new("Liabilities:Debt  ")
+                .parse_account()
+                .unwrap()
+                .range
+                .str,
+            "Liabilities:Debt"
+        );
+        assert!(Parser::new(" USD").parse_account().is_err());
+        assert!(Parser::new("/USD").parse_account().is_err());
     }
 
     #[test]
