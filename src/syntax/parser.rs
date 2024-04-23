@@ -195,7 +195,7 @@ mod tests {
             Err(ParserError::new(
                 "024-02-02",
                 None,
-                0,
+                3,
                 Some("parsing year".into()),
                 Token::Digit,
                 Token::Char('-')
@@ -206,7 +206,7 @@ mod tests {
             Err(ParserError::new(
                 "2024-02-0",
                 None,
-                8,
+                9,
                 Some("parsing day".into()),
                 Token::Digit,
                 Token::EOF
@@ -217,7 +217,7 @@ mod tests {
             Err(ParserError::new(
                 "2024-0--0",
                 None,
-                5,
+                6,
                 Some("parsing month".into()),
                 Token::Digit,
                 Token::Char('-')

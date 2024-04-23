@@ -261,10 +261,13 @@ impl<'a> Scanner<'a> {
 
     pub fn read_char(&self, c: char) -> Result<Range> {
         let start = self.pos();
-        match self.advance() {
-            Some(d) if c == d => Ok(self.range_from(start)),
+        match self.current() {
+            Some(d) if c == d => {
+                self.advance();
+                Ok(self.range_from(start))
+            }
             o => Err(self.error(
-                start,
+                self.pos(),
                 None,
                 Token::Char(c),
                 Token::from_char(o),
@@ -272,7 +275,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn consume_string(&self, str: &str) -> Result<Range> {
+    pub fn read_string(&self, str: &str) -> Result<Range> {
         let start = self.pos();
         for c in str.chars() {
             self.read_char(c)?;
@@ -309,8 +312,11 @@ impl<'a> Scanner<'a> {
         P: Fn(char) -> bool,
     {
         let start = self.pos();
-        match self.advance() {
-            Some(c) if pred(c) => Ok(self.range_from(start)),
+        match self.current() {
+            Some(c) if pred(c) => {
+                self.advance();
+                Ok(self.range_from(start))
+            }
             Some(c) => Err(self.error(start, None, token, Token::Char(c))),
             None => Err(self.error(start, None, token, Token::EOF)),
         }
@@ -327,12 +333,19 @@ impl<'a> Scanner<'a> {
     {
         let start = self.pos();
         for _ in 0..n {
-            match self.advance() {
-                Some(c) if pred(c) => continue,
+            match self.current() {
+                Some(c) if pred(c) => self.advance(),
                 Some(c) => {
-                    return Err(self.error(start, None, token, Token::Char(c)))
+                    return Err(self.error(
+                        self.pos(),
+                        None,
+                        token,
+                        Token::Char(c),
+                    ))
                 }
-                None => return Err(self.error(start, None, token, Token::EOF)),
+                None => {
+                    return Err(self.error(self.pos(), None, token, Token::EOF))
+                }
             };
         }
         Ok(self.range_from(start))
@@ -348,8 +361,11 @@ impl<'a> Scanner<'a> {
 
     pub fn consume_eol(&self) -> Result<Range> {
         let start = self.pos();
-        match self.advance() {
-            None | Some('\n') => Ok(self.range_from(start)),
+        match self.current() {
+            None | Some('\n') => {
+                self.advance();
+                Ok(self.range_from(start))
+            }
             Some(ch) => Err(self.error(
                 start,
                 None,
@@ -401,112 +417,207 @@ impl<'a> Scanner<'a> {
 #[cfg(test)]
 mod test_scanner {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_read_while() {
-        assert_eq!(Scanner::new("asdf").read_while(|c| c != 'f').str, "asd")
+        let s = Scanner::new("aaasdff");
+        assert_eq!(Range::new(0, "aaasd".into()), s.read_while(|c| c != 'f'));
+        assert_eq!(Range::new(5, "ff".into()), s.read_while(|c| c == 'f'));
+        assert_eq!(Range::new(7, "".into()), s.read_while(|c| c == 'q'));
+        assert_eq!(Ok(Range::new(7, "")), s.consume_eol());
     }
 
     #[test]
-    fn test_consume_while() {
-        let s = Scanner::new("asdf");
-        s.read_while(|c| c != 'f');
-        assert_eq!(s.read_char('f').unwrap().str, "f");
-        assert!(s.current().is_none());
-    }
-
-    #[test]
-    fn test_consume_char() {
-        let t = "asdf";
-        let s = Scanner::new(t);
-        assert_eq!(s.read_char('a').unwrap().str, "a");
-        assert_eq!(s.read_char('s').unwrap().str, "s");
-        assert_eq!(s.read_char('d').unwrap().str, "d");
-        assert_eq!(s.read_char('f').unwrap().str, "f");
-    }
-
-    #[test]
-    fn test_consume_string() {
+    fn test_read_char() {
+        let s = Scanner::new("asdf".into());
+        assert_eq!(Ok(Range::new(0, "a")), s.read_char('a'));
         assert_eq!(
-            Scanner::new("asdf").consume_string("asdf").unwrap().str,
-            "asdf"
+            Err(ParserError::new(
+                "asdf",
+                None,
+                1,
+                None,
+                Token::Char('q'),
+                Token::Char('s')
+            )),
+            s.read_char('q')
         );
-        assert_eq!(Scanner::new("asdf").consume_string("as").unwrap().str, "as")
+        assert_eq!(Ok(Range::new(1, "s")), s.read_char('s'));
+        assert_eq!(Ok(Range::new(2, "d")), s.read_char('d'));
+        assert_eq!(Ok(Range::new(3, "f")), s.read_char('f'));
+        assert_eq!(Ok(Range::new(4, "")), s.consume_eol());
+    }
+
+    #[test]
+    fn test_read_string() {
+        let s = Scanner::new("asdf");
+
+        assert_eq!(Ok(Range::new(0, "as")), s.read_string("as"),);
+        assert_eq!(
+            Err(ParserError::new(
+                "asdf",
+                None,
+                2,
+                None,
+                Token::Char('q'),
+                Token::Char('d')
+            )),
+            s.read_char('q')
+        );
+        assert_eq!(Ok(Range::new(2, "df")), s.read_string("df"));
+        assert_eq!(Ok(Range::new(4, "")), s.consume_eol());
     }
 
     #[test]
     fn test_read_identifier() {
+        let s = Scanner::new("foo bar 1baz");
+        assert_eq!(Ok(Range::new(0, "foo")), s.read_identifier());
         assert_eq!(
-            Scanner::new("23asdf 3asdf").read_identifier().unwrap().str,
-            "23asdf"
+            Range::new(3, " "),
+            s.read_while(|c| c.is_ascii_whitespace())
         );
+        assert_eq!(Ok(Range::new(4, "bar")), s.read_identifier());
         assert_eq!(
-            Scanner::new("foo# bar").read_identifier().unwrap().str,
-            "foo"
+            Range::new(7, " "),
+            s.read_while(|c| c.is_ascii_whitespace())
         );
-        assert_eq!(
-            Scanner::new("Foo( Bar").read_identifier().unwrap().str,
-            "Foo"
-        );
+        assert_eq!(Ok(Range::new(8, "1baz")), s.read_identifier());
+        assert_eq!(Ok(Range::new(12, "")), s.consume_eol());
     }
 
     #[test]
     fn test_read_1() {
-        assert_eq!(Scanner::new("23asdflj").read_1().unwrap().str, "2");
-        assert_eq!(Scanner::new("foo bar").read_1().unwrap().str, "f");
-        assert_eq!(Scanner::new("foo").read_1().unwrap().str, "f");
-        assert!(Scanner::new("").read_1().is_err());
+        let s = Scanner::new("foo");
+        assert_eq!(Ok(Range::new(0, "f")), s.read_1());
+        assert_eq!(Ok(Range::new(1, "o")), s.read_1());
+        assert_eq!(Ok(Range::new(2, "o")), s.read_1());
+        assert_eq!(
+            Err(ParserError::new("foo", None, 3, None, Token::Any, Token::EOF)),
+            s.read_1()
+        );
+        assert_eq!(Ok(Range::new(3, "")), s.consume_eol());
     }
 
     #[test]
     fn test_read_1_with() {
+        let s = Scanner::new("asdf");
         assert_eq!(
-            Scanner::new("23asdflj")
-                .read_1_with(Token::Digit, |c| c.is_ascii_digit())
-                .unwrap()
-                .str,
-            "2"
+            Ok(Range::new(0, "a")),
+            s.read_1_with(Token::Char('a'), |c| c == 'a'),
         );
         assert_eq!(
-            Scanner::new("0foo bar")
-                .read_1_with(Token::Digit, |c| c.is_ascii_digit())
-                .unwrap()
-                .str,
-            "0"
+            Ok(Range::new(1, "s")),
+            s.read_1_with(Token::Custom("no a".into()), |c| c != 'a')
         );
-        assert!(Scanner::new("")
-            .read_1_with(Token::Digit, |c| c.is_ascii_digit())
-            .is_err());
-        assert!(Scanner::new("a")
-            .read_1_with(Token::Digit, |c| c.is_ascii_digit())
-            .is_err());
+        assert_eq!(
+            Err(ParserError::new(
+                "asdf",
+                None,
+                2,
+                None,
+                Token::Digit,
+                Token::Char('d')
+            )),
+            s.read_1_with(Token::Digit, |c| c.is_ascii_digit())
+        );
+        assert_eq!(
+            Ok(Range::new(2, "d")),
+            s.read_1_with(Token::Char('d'), |c| c == 'd')
+        );
+        assert_eq!(
+            Ok(Range::new(3, "f")),
+            s.read_1_with(Token::Char('f'), |c| c == 'f')
+        );
+        assert_eq!(
+            Err(ParserError::new(
+                "asdf",
+                None,
+                4,
+                None,
+                Token::Any,
+                Token::EOF
+            )),
+            s.read_1_with(Token::Any, |_| true)
+        );
+        assert_eq!(Ok(Range::new(4, "")), s.consume_eol());
     }
 
     #[test]
     fn test_read_n() {
-        assert_eq!(Scanner::new("23asdflj").read_n(4).unwrap().str, "23as");
-        assert_eq!(Scanner::new("foo bar").read_n(4).unwrap().str, "foo ");
-        assert_eq!(Scanner::new("foo").read_n(3).unwrap().str, "foo");
-        assert!(Scanner::new("foo").read_n(4).is_err());
+        let s = Scanner::new("asdf");
+        assert_eq!(
+            Ok(Range {
+                start: 0,
+                str: "as".into()
+            }),
+            s.read_n(2)
+        );
+        assert_eq!(
+            Ok(Range {
+                start: 2,
+                str: "".into()
+            }),
+            s.read_n(0)
+        );
+        assert_eq!(
+            Err(ParserError::new(
+                "asdf",
+                None,
+                4,
+                None,
+                Token::Any,
+                Token::EOF
+            )),
+            s.read_n(3)
+        );
+        assert_eq!(Ok(Range::new(4, "")), s.consume_eol());
     }
 
     #[test]
     fn test_consume_eol() {
-        assert_eq!(Scanner::new("").consume_eol().unwrap().str, "");
-        assert_eq!(Scanner::new("\n").consume_eol().unwrap().str, "\n");
-        assert_eq!(Scanner::new("\na").consume_eol().unwrap().str, "\n");
-        assert!(Scanner::new(" ").consume_eol().is_err());
-        assert!(Scanner::new("not eol").consume_eol().is_err())
+        let s = Scanner::new("a\n\n");
+        assert_eq!(
+            Err(ParserError::new(
+                "a\n\n",
+                None,
+                0,
+                None,
+                Token::Either(vec![Token::Char('\n'), Token::EOF]),
+                Token::Char('a')
+            )),
+            s.consume_eol()
+        );
+        assert_eq!(Ok(Range::new(0, "a")), s.read_1());
+        assert_eq!(Ok(Range::new(1, "\n")), s.consume_eol());
+        assert_eq!(Ok(Range::new(2, "\n")), s.consume_eol());
+        assert_eq!(Ok(Range::new(3, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(3, "")), s.consume_eol());
     }
 
     #[test]
     fn test_consume_space1() {
-        assert_eq!(Scanner::new("").consume_space1().unwrap().str, "");
-        assert_eq!(Scanner::new("\n").consume_space1().unwrap().str, "");
-        assert_eq!(Scanner::new("\n\n").consume_space1().unwrap().str, "");
-        assert_eq!(Scanner::new("\t").consume_space1().unwrap().str, "\t");
-        assert!(Scanner::new("a\n").consume_space1().is_err());
-        assert!(Scanner::new("n").consume_space1().is_err());
-        assert!(Scanner::new("na").consume_space1().is_err());
+        let s = Scanner::new("  a\t\tb  \nc");
+
+        assert_eq!(Ok(Range::new(0, "  ")), s.consume_space1());
+        assert_eq!(Ok(Range::new(2, "a")), s.read_1());
+        assert_eq!(Ok(Range::new(3, "\t\t")), s.consume_space1());
+        assert_eq!(
+            Err(ParserError::new(
+                s.source,
+                None,
+                5,
+                None,
+                Token::WhiteSpace,
+                Token::Char('b')
+            )),
+            s.consume_space1()
+        );
+        assert_eq!(Ok(Range::new(5, "b")), s.read_1());
+        assert_eq!(Ok(Range::new(6, "  ")), s.consume_space1());
+        assert_eq!(Ok(Range::new(8, "")), s.consume_space1());
+        assert_eq!(Ok(Range::new(8, "\n")), s.consume_eol());
+        assert_eq!(Ok(Range::new(9, "c")), s.read_1());
+        assert_eq!(Ok(Range::new(10, "")), s.consume_eol());
     }
 }
