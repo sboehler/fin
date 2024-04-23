@@ -27,40 +27,32 @@ impl<'a> Parser<'a> {
         pos: usize,
         msg: Option<String>,
         want: Token,
-        wrapped: Option<ParserError>,
+        got: Token,
     ) -> ParserError {
         ParserError::new(
             &self.scanner.source,
-            &self.scanner.filename,
+            self.scanner.filename.as_ref(),
             pos,
             msg,
             want,
-            Token::Custom("error".into()),
-            wrapped,
+            got,
         )
     }
 
     pub fn parse_account(&self) -> Result<Account> {
         let start = self.scanner.pos();
-        let account_type = self.scanner.read_identifier().map_err(|e| {
-            self.error(
-                start,
-                Some("parsing account type".into()),
-                Token::AlphaNum,
-                Some(e),
-            )
-        })?;
+        let account_type = self
+            .scanner
+            .read_identifier()
+            .map_err(|e| e.update("parsing account type"))?;
         let mut segments = vec![account_type];
         while self.scanner.current() == Some(':') {
             self.scanner.read_char(':')?;
-            segments.push(self.scanner.read_identifier().map_err(|e| {
-                self.error(
-                    start,
-                    Some("parsing account type".into()),
-                    Token::AlphaNum,
-                    Some(e),
-                )
-            })?);
+            segments.push(
+                self.scanner
+                    .read_identifier()
+                    .map_err(|e| e.update("parsing account segment"))?,
+            );
         }
         Ok(Account {
             range: self.scanner.range_from(start),
@@ -69,18 +61,27 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_commodity(&self) -> Result<Commodity> {
-        self.scanner.read_identifier().map(|range| Commodity {
-            range,
-        })
+        self.scanner
+            .read_identifier()
+            .map_err(|e| e.update("parsing commodity"))
+            .map(|range| Commodity {
+                range,
+            })
     }
 
     pub fn parse_date(&self) -> Result<Date> {
         let start = self.scanner.pos();
-        self.scanner.read_n_with(4, Token::Digit, |c| c.is_ascii_digit())?;
+        self.scanner
+            .read_n_with(4, Token::Digit, |c| c.is_ascii_digit())
+            .map_err(|e| e.update("parsing year".into()))?;
         self.scanner.read_char('-')?;
-        self.scanner.read_n_with(2, Token::Digit, |c| c.is_ascii_digit())?;
+        self.scanner
+            .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
+            .map_err(|e| e.update("parsing month".into()))?;
         self.scanner.read_char('-')?;
-        self.scanner.read_n_with(2, Token::Digit, |c| c.is_ascii_digit())?;
+        self.scanner
+            .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
+            .map_err(|e| e.update("parsing day".into()))?;
         Ok(Date {
             range: self.scanner.range_from(start),
         })
@@ -89,57 +90,139 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
+
+    use crate::syntax::scanner::Range;
 
     use super::*;
 
     #[test]
     fn test_parse_commodity() {
         assert_eq!(
-            Parser::new("USD").parse_commodity().unwrap().range.str,
-            "USD"
+            Parser::new("USD").parse_commodity().unwrap(),
+            Commodity {
+                range: Range::new(0, "USD"),
+            },
         );
         assert_eq!(
-            Parser::new("1FOO  ").parse_commodity().unwrap().range.str,
-            "1FOO"
+            Parser::new("1FOO  ").parse_commodity().unwrap(),
+            Commodity {
+                range: Range::new(0, "1FOO"),
+            },
         );
-        assert!(Parser::new(" USD").parse_commodity().is_err());
-        assert!(Parser::new("/USD").parse_commodity().is_err());
+        assert_eq!(
+            Err(ParserError::new(
+                " USD",
+                None,
+                0,
+                Some("parsing commodity".into()),
+                Token::AlphaNum,
+                Token::WhiteSpace
+            )),
+            Parser::new(" USD").parse_commodity()
+        );
+        assert_eq!(
+            Err(ParserError::new(
+                "/USD",
+                None,
+                0,
+                Some("parsing commodity".into()),
+                Token::AlphaNum,
+                Token::Char('/')
+            )),
+            Parser::new("/USD").parse_commodity()
+        );
     }
 
     #[test]
     fn test_parse_account() {
         assert_eq!(
-            Parser::new("Assets").parse_account().unwrap().range.str,
-            "Assets"
+            Ok(Account {
+                range: Range::new(0, "Sometype"),
+                segments: vec![Range::new(0, "Sometype")],
+            }),
+            Parser::new("Sometype").parse_account(),
         );
         assert_eq!(
-            Parser::new("Sometype").parse_account().unwrap().range.str,
-            "Sometype"
+            Ok(Account {
+                range: Range::new(0, "Liabilities:Debt"),
+                segments: vec![
+                    Range::new(0, "Liabilities"),
+                    Range::new(12, "Debt")
+                ],
+            }),
+            Parser::new("Liabilities:Debt  ").parse_account(),
         );
         assert_eq!(
-            Parser::new("Liabilities:Debt  ")
-                .parse_account()
-                .unwrap()
-                .range
-                .str,
-            "Liabilities:Debt"
+            Err(ParserError::new(
+                " USD",
+                None,
+                0,
+                Some("parsing account type".into()),
+                Token::AlphaNum,
+                Token::WhiteSpace
+            )),
+            Parser::new(" USD").parse_account(),
         );
-        assert!(Parser::new(" USD").parse_account().is_err());
-        assert!(Parser::new("/USD").parse_account().is_err());
+        assert_eq!(
+            Err(ParserError::new(
+                "/USD",
+                None,
+                0,
+                Some("parsing account type".into()),
+                Token::AlphaNum,
+                Token::Char('/')
+            )),
+            Parser::new("/USD").parse_account(),
+        );
     }
 
     #[test]
     fn test_parse_date() {
         assert_eq!(
-            Parser::new("0202-02-02").parse_date().unwrap().range.str,
-            "0202-02-02"
+            Date {
+                range: Range::new(0, "0202-02-02"),
+            },
+            Parser::new("0202-02-02").parse_date().unwrap(),
         );
         assert_eq!(
-            Parser::new("2024-02-02").parse_date().unwrap().range.str,
-            "2024-02-02"
+            Date {
+                range: Range::new(0, "2024-02-02"),
+            },
+            Parser::new("2024-02-02").parse_date().unwrap(),
         );
-        assert!(Parser::new("024-02-02").parse_date().is_err());
-        assert!(Parser::new("2024-02-0").parse_date().is_err());
-        assert!(Parser::new("2024-0--0").parse_date().is_err())
+        assert_eq!(
+            Err(ParserError::new(
+                "024-02-02",
+                None,
+                0,
+                Some("parsing year".into()),
+                Token::Digit,
+                Token::Char('-')
+            )),
+            Parser::new("024-02-02").parse_date(),
+        );
+        assert_eq!(
+            Err(ParserError::new(
+                "2024-02-0",
+                None,
+                8,
+                Some("parsing day".into()),
+                Token::Digit,
+                Token::EOF
+            )),
+            Parser::new("2024-02-0").parse_date(),
+        );
+        assert_eq!(
+            Err(ParserError::new(
+                "2024-0--0",
+                None,
+                5,
+                Some("parsing month".into()),
+                Token::Digit,
+                Token::Char('-')
+            )),
+            Parser::new("2024-0--0").parse_date()
+        )
     }
 }

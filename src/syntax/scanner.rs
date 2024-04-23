@@ -5,31 +5,24 @@ pub struct ParserError {
     got: Token,
     want: Token,
     msg: Option<String>,
-    file: String,
+    file: Option<String>,
     line: usize,
     col: usize,
     context: Vec<(usize, String)>,
-    wrapped: Option<Box<ParserError>>,
 }
 
 impl ParserError {
     pub fn new(
         source: &str,
-        file: &Option<PathBuf>,
+        file: Option<&PathBuf>,
         pos: usize,
         msg: Option<String>,
         want: Token,
         got: Token,
-        wrapped: Option<ParserError>,
     ) -> ParserError {
-        let lines: Vec<_> = source[..pos].lines().collect();
-        let line = lines.len().saturating_sub(1);
-        let col = lines.last().map(|s| s.len().saturating_sub(1)).unwrap_or(0);
-        let rng = lines.len().saturating_sub(5)..=line;
-        let file = file
-            .as_ref()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|| "<stream>".into());
+        let (line, col) = Self::position(source, pos);
+        let rng = line.saturating_sub(4)..=line;
+        let file = file.map(|p| p.to_string_lossy().to_string());
         let context = source
             .lines()
             .enumerate()
@@ -44,8 +37,19 @@ impl ParserError {
             msg,
             want,
             got,
-            wrapped: wrapped.map(Box::new),
         }
+    }
+
+    fn position(t: &str, pos: usize) -> (usize, usize) {
+        let lines: Vec<_> = t[..pos].split(|c| c == '\n').collect();
+        let line = lines.len().saturating_sub(1);
+        let col = lines.last().map(|s| s.len()).unwrap_or(0);
+        (line, col)
+    }
+
+    pub fn update(mut self, msg: &str) -> Self {
+        self.msg = Some(msg.into());
+        self
     }
 }
 
@@ -55,26 +59,30 @@ impl std::fmt::Display for ParserError {
         write!(
             f,
             "{file}:{line}:{col}:",
-            file = self.file,
+            file = self.file.as_deref().unwrap_or(""),
             line = self.line,
             col = self.col,
         )?;
         if let Some(ref s) = self.msg {
-            writeln!(f, " {}", s)?;
+            writeln!(f, " while {}", s)?;
         } else {
             writeln!(f)?;
         }
-        writeln!(f, "-> got:  {}", self.got)?;
-        writeln!(f, "-> want: {}", self.want)?;
         writeln!(f)?;
         for (n, line) in &self.context {
-            writeln!(f, "{:5}:  {}", n, line)?;
+            writeln!(f, "{:5}|{}", n, line)?;
         }
-        writeln!(f, "{}^^^ want: {}", " ".repeat(self.col + 8), self.want)?;
-        match &self.wrapped {
-            Some(e) => e.fmt(f),
-            _ => Ok(()),
+        writeln!(
+            f,
+            "{}^ want {}, got {}",
+            " ".repeat(self.col + 6),
+            self.want,
+            self.got
+        )?;
+        if let Token::Error(ref e) = self.got {
+            e.fmt(f)?;
         }
+        Ok(())
     }
 }
 
@@ -92,6 +100,7 @@ pub enum Token {
     Any,
     WhiteSpace,
     Custom(String),
+    Error(Box<ParserError>),
 }
 
 impl Token {
@@ -108,6 +117,7 @@ impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::EOF => write!(f, "EOF"),
+            Self::Error(_) => write!(f, "error"),
             Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
             Self::Digit => write!(f, "a digit (0-9)"),
             Self::AlphaNum => {
@@ -130,24 +140,61 @@ impl std::fmt::Display for Token {
     }
 }
 
+#[cfg(test)]
+mod test_parser_error {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_read_while() {
+        assert_eq!(
+            vec![
+                "",
+                "finance.knut:0:1: while parsing file",
+                "",
+                "    0|asdf",
+                "       ^ want whitespace, got a character (a-z, A-Z) or a digit (0-9)",
+                ""
+            ]
+            .join("\n"),
+            ParserError {
+                got: Token::AlphaNum,
+                want: Token::WhiteSpace,
+                msg: Some("parsing file".into()),
+                file: Some("finance.knut".into()),
+                line: 0,
+                col: 1,
+                context: vec![(0, "asdf".into())]
+            }.to_string()
+        );
+        assert_eq!(ParserError::position("foo\nbar\n", 0), (0, 0));
+        assert_eq!(ParserError::position("foo\nbar\n", 1), (0, 1));
+        assert_eq!(ParserError::position("foo\nbar\n", 2), (0, 2));
+        assert_eq!(ParserError::position("foo\nbar\n", 3), (0, 3));
+        assert_eq!(ParserError::position("foo\nbar\n", 4), (1, 0));
+        assert_eq!(ParserError::position("foo\nbar\n", 5), (1, 1));
+        assert_eq!(ParserError::position("foo\nbar\n", 6), (1, 2));
+        assert_eq!(ParserError::position("foo\nbar\n", 7), (1, 3));
+        assert_eq!(ParserError::position("foo\nbar\n", 8), (2, 0));
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Range<'a> {
-    pub str: &'a str,
     pub start: usize,
-    pub end: usize,
+    pub str: &'a str,
 }
 
 impl<'a> Range<'a> {
-    pub fn new(start: usize, end: usize, str: &'a str) -> Range<'a> {
+    pub fn new(start: usize, str: &'a str) -> Range<'a> {
         Range {
             start,
-            end,
             str,
         }
     }
 
     pub fn len(&self) -> usize {
-        self.end - self.start
+        self.str.len()
     }
 }
 
@@ -171,7 +218,7 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn range_from(&self, start: usize) -> Range {
-        Range::new(start, self.pos(), &self.source[start..self.pos()])
+        Range::new(start, &self.source[start..self.pos()])
     }
 
     pub fn current(&self) -> Option<char> {
@@ -240,7 +287,7 @@ impl<'a> Scanner<'a> {
             let got = Token::from_char(self.current());
             Err(self.error(
                 start,
-                Some("error while parsing identifier".into()),
+                Some("parsing identifier".into()),
                 Token::AlphaNum,
                 got,
             ))
@@ -341,19 +388,18 @@ impl<'a> Scanner<'a> {
         got: Token,
     ) -> ParserError {
         ParserError::new(
-            &self.source,
-            &self.filename,
+            self.source,
+            self.filename.as_ref(),
             pos,
             msg,
             want,
             got,
-            None,
         )
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod test_scanner {
     use super::*;
 
     #[test]
