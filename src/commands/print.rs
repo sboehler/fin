@@ -10,10 +10,13 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let text = fs::read_to_string(&self.journal)?;
-        let p = Parser::new_from_file(Arc::new(Context::new()), &text, Some(self.journal.clone()));
-        let res = p
-            .into_iter()
-            .collect::<std::result::Result<Vec<_>, ParserError>>();
+        let p = Parser::new_from_file(
+            Arc::new(Context::new()),
+            &text,
+            Some(self.journal.clone()),
+        );
+        let res =
+            p.into_iter().collect::<std::result::Result<Vec<_>, ParserError>>();
         match res {
             Ok(ds) => {
                 for d in &ds {

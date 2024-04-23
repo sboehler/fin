@@ -11,7 +11,9 @@ pub struct Commodity {
 impl Commodity {
     #[cfg(test)]
     pub fn new(name: &str) -> Arc<Commodity> {
-        Arc::new(Commodity { name: name.into() })
+        Arc::new(Commodity {
+            name: name.into(),
+        })
     }
 
     fn parse(value: &str) -> Result<Arc<Self>, String> {

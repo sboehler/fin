@@ -110,7 +110,9 @@ impl std::fmt::Display for Token {
             Self::EOF => write!(f, "EOF"),
             Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
             Self::Digit => write!(f, "a digit (0-9)"),
-            Self::AlphaNum => write!(f, "a character (a-z, A-Z) or a digit (0-9)"),
+            Self::AlphaNum => {
+                write!(f, "a character (a-z, A-Z) or a digit (0-9)")
+            }
             Self::Any => write!(f, "any character"),
             Self::WhiteSpace => write!(f, "whitespace"),
             Self::Custom(s) => write!(f, "{}", s),
@@ -137,7 +139,11 @@ pub struct Range<'a> {
 
 impl<'a> Range<'a> {
     pub fn new(start: usize, end: usize, str: &'a str) -> Range<'a> {
-        Range { start, end, str }
+        Range {
+            start,
+            end,
+            str,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -210,7 +216,12 @@ impl<'a> Scanner<'a> {
         let start = self.pos();
         match self.advance() {
             Some(d) if c == d => Ok(self.range_from(start)),
-            o => Err(self.error(start, None, Token::Char(c), Token::from_char(o))),
+            o => Err(self.error(
+                start,
+                None,
+                Token::Char(c),
+                Token::from_char(o),
+            )),
         }
     }
 
@@ -258,7 +269,12 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_n_with<P>(&self, n: usize, token: Token, pred: P) -> Result<Range>
+    pub fn read_n_with<P>(
+        &self,
+        n: usize,
+        token: Token,
+        pred: P,
+    ) -> Result<Range>
     where
         P: Fn(char) -> bool,
     {
@@ -266,7 +282,9 @@ impl<'a> Scanner<'a> {
         for _ in 0..n {
             match self.advance() {
                 Some(c) if pred(c) => continue,
-                Some(c) => return Err(self.error(start, None, token, Token::Char(c))),
+                Some(c) => {
+                    return Err(self.error(start, None, token, Token::Char(c)))
+                }
                 None => return Err(self.error(start, None, token, Token::EOF)),
             };
         }
@@ -315,8 +333,22 @@ impl<'a> Scanner<'a> {
         Ok(self.range_from(start))
     }
 
-    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> ParserError {
-        ParserError::new(&self.source, &self.filename, pos, msg, want, got, None)
+    fn error(
+        &self,
+        pos: usize,
+        msg: Option<String>,
+        want: Token,
+        got: Token,
+    ) -> ParserError {
+        ParserError::new(
+            &self.source,
+            &self.filename,
+            pos,
+            msg,
+            want,
+            got,
+            None,
+        )
     }
 }
 

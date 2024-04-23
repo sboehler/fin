@@ -56,10 +56,26 @@ impl PostingBuilder {
     pub fn build(self) -> Vec<Posting> {
         let rev = self.amount < Decimal::ZERO
             || self.amount == Decimal::ZERO && self.value < Decimal::ZERO;
-        let credit = if rev { &self.debit } else { &self.credit };
-        let debit = if rev { &self.credit } else { &self.debit };
-        let amount = if rev { -self.amount } else { self.amount };
-        let value = if rev { -self.value } else { self.value };
+        let credit = if rev {
+            &self.debit
+        } else {
+            &self.credit
+        };
+        let debit = if rev {
+            &self.credit
+        } else {
+            &self.debit
+        };
+        let amount = if rev {
+            -self.amount
+        } else {
+            self.amount
+        };
+        let value = if rev {
+            -self.value
+        } else {
+            self.value
+        };
 
         return vec![
             Posting {

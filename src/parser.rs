@@ -1,7 +1,7 @@
 use crate::context::Context;
 use crate::model::{
-    Account, Accrual, Assertion, Close, Command, Commodity, Interval, Lot, Open, Period, Posting,
-    PostingBuilder, Price, Tag, Transaction, Value,
+    Account, Accrual, Assertion, Close, Command, Commodity, Interval, Lot,
+    Open, Period, Posting, PostingBuilder, Price, Tag, Transaction, Value,
 };
 use crate::scanner::{Annotated, Character, Result, Scanner};
 use chrono::NaiveDate;
@@ -48,7 +48,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn new_from_file(context: Arc<Context>, s: &str, filename: Option<PathBuf>) -> Parser {
+    pub fn new_from_file(
+        context: Arc<Context>,
+        s: &str,
+        filename: Option<PathBuf>,
+    ) -> Parser {
         Parser {
             context,
             scanner: Scanner::new_from_file(s, filename),
@@ -139,7 +143,10 @@ impl<'a> Parser<'a> {
         self.scanner.annotate(
             pos,
             Accrual {
-                period: Period { start, end },
+                period: Period {
+                    start,
+                    end,
+                },
                 interval,
                 account,
             },
@@ -260,7 +267,10 @@ impl<'a> Parser<'a> {
         posting
     }
 
-    fn parse_assertion(&mut self, d: NaiveDate) -> Result<Annotated<Assertion>> {
+    fn parse_assertion(
+        &mut self,
+        d: NaiveDate,
+    ) -> Result<Annotated<Assertion>> {
         let pos = self.scanner.pos();
         self.scanner.consume_string("balance")?;
         self.scanner.consume_space1()?;
@@ -271,8 +281,7 @@ impl<'a> Parser<'a> {
         let commodity = self.parse_commodity()?.0;
         self.scanner.consume_space1()?;
         self.scanner.consume_eol()?;
-        self.scanner
-            .annotate(pos, Assertion::new(d, account, price, commodity))
+        self.scanner.annotate(pos, Assertion::new(d, account, price, commodity))
     }
 
     fn parse_account(&mut self) -> Result<Annotated<Arc<Account>>> {
@@ -410,12 +419,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.scanner.consume_char('}')?;
-        Ok(Lot::new(
-            price,
-            commodity,
-            date,
-            label.map(|s| s.0.to_string()),
-        ))
+        Ok(Lot::new(price, commodity, date, label.map(|s| s.0.to_string())))
     }
 
     fn parse_targets(&mut self) -> Result<Annotated<Vec<Arc<Commodity>>>> {
@@ -448,8 +452,7 @@ impl<'a> Parser<'a> {
         let target = self.parse_commodity()?.0;
         self.scanner.consume_space1()?;
         self.scanner.consume_eol()?;
-        self.scanner
-            .annotate(pos, Price::new(d, price, target, source))
+        self.scanner.annotate(pos, Price::new(d, price, target, source))
     }
 
     fn parse_include(&mut self) -> Result<Annotated<Directive>> {
@@ -481,10 +484,7 @@ mod tests {
         );
         assert_eq!(
             Parser::new("2020-09-15").parse_date().unwrap(),
-            Annotated(
-                NaiveDate::from_ymd_opt(2020, 9, 15).unwrap(),
-                (0, 10)
-            )
+            Annotated(NaiveDate::from_ymd_opt(2020, 9, 15).unwrap(), (0, 10))
         );
     }
 
@@ -499,7 +499,10 @@ mod tests {
                 .parse_account()
                 .unwrap(),
             Annotated(
-                Account::new(AccountType::Liabilities, &["CreditCards", "Visa"]),
+                Account::new(
+                    AccountType::Liabilities,
+                    &["CreditCards", "Visa"]
+                ),
                 (0, 28)
             )
         );
@@ -564,9 +567,7 @@ mod tests {
     #[test]
     fn test_parse_tags() {
         assert_eq!(
-            Parser::new("#tag1 #1tag   no more tags")
-                .parse_tags()
-                .unwrap(),
+            Parser::new("#tag1 #1tag   no more tags").parse_tags().unwrap(),
             Annotated(
                 vec![Tag::new("tag1".into()), Tag::new("1tag".into())],
                 (0, 14)
@@ -690,12 +691,17 @@ mod tests {
     #[test]
     fn test_parse_accrual() {
         assert_eq!(
-            Parser::new("@accrue daily 2022-04-03 2022-05-05 Liabilities:Accruals")
-                .parse_accrual()
-                .unwrap(),
+            Parser::new(
+                "@accrue daily 2022-04-03 2022-05-05 Liabilities:Accruals"
+            )
+            .parse_accrual()
+            .unwrap(),
             Annotated(
                 Accrual {
-                    account: Account::new(AccountType::Liabilities, &["Accruals"]),
+                    account: Account::new(
+                        AccountType::Liabilities,
+                        &["Accruals"]
+                    ),
                     interval: Interval::Daily,
                     period: Period {
                         start: NaiveDate::from_ymd_opt(2022, 4, 3).unwrap(),
@@ -754,7 +760,11 @@ mod tests {
     #[test]
     fn test_parse_postings() {
         assert_eq!(
-            Parser::new("Assets:Account1    Assets:Account2   4.00    CHF\nAssets:Account2    Assets:Account1   3.00 USD").parse_postings().unwrap(),
+            Parser::new(
+                "Assets:Account1    Assets:Account2   4.00    CHF\nAssets:Account2    Assets:Account1   3.00 USD"
+            )
+            .parse_postings()
+            .unwrap(),
             Annotated(
                 vec![
                     Posting {
@@ -823,7 +833,10 @@ mod tests {
             Annotated(
                 vec![
                     Posting {
-                        account: Account::new(AccountType::Assets, &["Account1"]),
+                        account: Account::new(
+                            AccountType::Assets,
+                            &["Account1"]
+                        ),
                         other: Account::new(AccountType::Assets, &["Account2"]),
                         amount: Decimal::new(-400, 2),
                         value: Decimal::ZERO,
@@ -832,7 +845,10 @@ mod tests {
                         targets: None,
                     },
                     Posting {
-                        account: Account::new(AccountType::Assets, &["Account2"]),
+                        account: Account::new(
+                            AccountType::Assets,
+                            &["Account2"]
+                        ),
                         other: Account::new(AccountType::Assets, &["Account1"]),
                         amount: Decimal::new(400, 2),
                         value: Decimal::ZERO,
@@ -850,9 +866,7 @@ mod tests {
     fn test_parse_price() {
         let date = NaiveDate::from_ymd_opt(2020, 2, 2).unwrap();
         assert_eq!(
-            Parser::new("price USD 0.901 CHF")
-                .parse_price(date)
-                .unwrap(),
+            Parser::new("price USD 0.901 CHF").parse_price(date).unwrap(),
             Annotated(
                 Price::new(
                     NaiveDate::from_ymd_opt(2020, 2, 2).unwrap(),

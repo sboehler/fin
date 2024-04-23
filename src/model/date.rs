@@ -34,7 +34,11 @@ pub struct Period {
 }
 
 impl Period {
-    pub fn dates(&self, interval: Interval, n: Option<usize>) -> Vec<NaiveDate> {
+    pub fn dates(
+        &self,
+        interval: Interval,
+        n: Option<usize>,
+    ) -> Vec<NaiveDate> {
         if interval == Interval::Once {
             return vec![self.end];
         }
@@ -63,9 +67,13 @@ pub fn start_of(d: NaiveDate, p: Interval) -> Option<NaiveDate> {
     use super::Interval::*;
     match p {
         Once | Daily => Some(d),
-        Weekly => d.checked_sub_days(Days::new(d.weekday().number_from_monday() as u64 - 1)),
+        Weekly => d.checked_sub_days(Days::new(
+            d.weekday().number_from_monday() as u64 - 1,
+        )),
         Monthly => d.checked_sub_days(Days::new((d.day() - 1) as u64)),
-        Quarterly => NaiveDate::from_ymd_opt(d.year(), ((d.month() - 1) / 3 * 3) + 1, 1),
+        Quarterly => {
+            NaiveDate::from_ymd_opt(d.year(), ((d.month() - 1) / 3 * 3) + 1, 1)
+        }
         Yearly => NaiveDate::from_ymd_opt(d.year(), 1, 1),
     }
 }
@@ -76,7 +84,9 @@ pub fn end_of(d: NaiveDate, p: Interval) -> Option<NaiveDate> {
     use super::Interval::*;
     match p {
         Once | Daily => Some(d),
-        Weekly => d.checked_add_days(Days::new(7 - d.weekday().number_from_monday() as u64)),
+        Weekly => d.checked_add_days(Days::new(
+            7 - d.weekday().number_from_monday() as u64,
+        )),
         Monthly => start_of(d, Monthly)
             .and_then(|d| d.checked_add_months(Months::new(1)))
             .and_then(|d| d.checked_sub_days(Days::new(1))),

@@ -44,12 +44,7 @@ impl Display for Transaction {
                 account = acc.account
             )?;
         }
-        write!(
-            f,
-            "{} \"{}\"",
-            self.date.format("%Y-%m-%d"),
-            self.description
-        )?;
+        write!(f, "{} \"{}\"", self.date.format("%Y-%m-%d"), self.description)?;
         for t in &self.tags {
             write!(f, " {}", t)?
         }

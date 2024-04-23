@@ -69,19 +69,18 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_commodity(&self) -> Result<Commodity> {
-        self.scanner
-            .read_identifier()
-            .map(|range| Commodity { range })
+        self.scanner.read_identifier().map(|range| Commodity {
+            range,
+        })
     }
 
     pub fn parse_date(&self) -> Result<Date> {
         let start = self.scanner.pos();
-        let s = &self.scanner;
-        s.read_n_with(4, Token::Digit, |c| c.is_ascii_digit())?;
-        s.read_char('-')?;
-        s.read_n_with(2, Token::Digit, |c| c.is_ascii_digit())?;
-        s.read_char('-')?;
-        s.read_n_with(2, Token::Digit, |c| c.is_ascii_digit())?;
+        self.scanner.read_n_with(4, Token::Digit, |c| c.is_ascii_digit())?;
+        self.scanner.read_char('-')?;
+        self.scanner.read_n_with(2, Token::Digit, |c| c.is_ascii_digit())?;
+        self.scanner.read_char('-')?;
+        self.scanner.read_n_with(2, Token::Digit, |c| c.is_ascii_digit())?;
         Ok(Date {
             range: self.scanner.range_from(start),
         })
