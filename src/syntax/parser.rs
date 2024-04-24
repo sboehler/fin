@@ -105,9 +105,9 @@ impl<'a> Parser<'a> {
 
     pub fn parse_directive(&self) -> Result<Directive> {
         let start = self.scanner.pos();
-        let d = self.parse_date().map_err(|e| e.update("parsing date"))?;
+        let date = self.parse_date().map_err(|e| e.update("parsing date"))?;
         self.scanner.read_space1()?;
-        let c = match self.scanner.current() {
+        let command = match self.scanner.current() {
             Some('p') => {
                 self.parse_price().map(Command::Price).map_err(|e| {
                     self.error(
@@ -148,10 +148,12 @@ impl<'a> Parser<'a> {
                 ))
             }
         };
+        let range = self.scanner.range_from(start);
+        self.scanner.read_rest_of_line()?;
         Ok(Directive {
-            range: self.scanner.range_from(start),
-            date: d,
-            command: c,
+            range,
+            date,
+            command,
         })
     }
 
@@ -159,20 +161,21 @@ impl<'a> Parser<'a> {
         let start = self.scanner.pos();
         self.scanner.read_string("price")?;
         self.scanner.read_space1()?;
-        let c = self
+        let commodity = self
             .parse_commodity()
             .map_err(|e| e.update("parsing commodity"))?;
         self.scanner.read_space1()?;
-        let p = self.parse_decimal().map_err(|e| e.update("parsing price"))?;
+        let price =
+            self.parse_decimal().map_err(|e| e.update("parsing price"))?;
         self.scanner.read_space1()?;
-        let t = self
+        let target = self
             .parse_commodity()
             .map_err(|e| e.update("parsing target commodity"))?;
         Ok(Price {
             range: self.scanner.range_from(start),
-            commodity: c,
-            price: p,
-            target: t,
+            commodity,
+            price,
+            target,
         })
     }
 
@@ -183,7 +186,6 @@ impl<'a> Parser<'a> {
         let a = self
             .parse_account()
             .map_err(|e| e.update("parsing account").into())?;
-        self.scanner.read_rest_of_line()?;
         Ok(Open {
             range: self.scanner.range_from(start),
             account: a,
@@ -197,7 +199,6 @@ impl<'a> Parser<'a> {
         let a = self
             .parse_account()
             .map_err(|e| e.update("parsing account").into())?;
-        self.scanner.read_rest_of_line()?;
         Ok(Close {
             range: self.scanner.range_from(start),
             account: a,
