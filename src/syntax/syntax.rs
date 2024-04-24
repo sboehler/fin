@@ -32,6 +32,7 @@ pub struct Directive<'a> {
 pub enum Command<'a> {
     Price(Price<'a>),
     Open(Open<'a>),
+    Assertion(Assertion<'a>),
     Close(Close<'a>),
 }
 
@@ -47,6 +48,14 @@ pub struct Price<'a> {
 pub struct Open<'a> {
     pub range: Range<'a>,
     pub account: Account<'a>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Assertion<'a> {
+    pub range: Range<'a>,
+    pub account: Account<'a>,
+    pub amount: Decimal<'a>,
+    pub commodity: Commodity<'a>,
 }
 
 #[derive(Eq, PartialEq, Debug)]

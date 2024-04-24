@@ -3,7 +3,8 @@ use std::path::PathBuf;
 
 use super::scanner::ParserError;
 use super::syntax::{
-    Account, Close, Command, Commodity, Date, Decimal, Directive, Open, Price,
+    Account, Assertion, Close, Command, Commodity, Date, Decimal, Directive,
+    Open, Price,
 };
 
 pub struct Parser<'a> {
@@ -126,6 +127,16 @@ impl<'a> Parser<'a> {
                     Token::Error(Box::new(e)),
                 )
             })?,
+            Some('b') => {
+                self.parse_assertion().map(Command::Assertion).map_err(|e| {
+                    self.error(
+                        start,
+                        Some("parsing 'balance' directive".into()),
+                        Token::Custom("directive".into()),
+                        Token::Error(Box::new(e)),
+                    )
+                })?
+            }
             Some('c') => {
                 self.parse_close().map(Command::Close).map_err(|e| {
                     self.error(
@@ -141,7 +152,9 @@ impl<'a> Parser<'a> {
                     self.scanner.pos(),
                     None,
                     Token::Either(vec![
+                        Token::Custom("price".into()),
                         Token::Custom("open".into()),
+                        Token::Custom("balance".into()),
                         Token::Custom("close".into()),
                     ]),
                     o.map(Token::Char).unwrap_or(Token::EOF),
@@ -183,12 +196,32 @@ impl<'a> Parser<'a> {
         let start = self.scanner.pos();
         self.scanner.read_string("open")?;
         self.scanner.read_space1()?;
-        let a = self
-            .parse_account()
-            .map_err(|e| e.update("parsing account").into())?;
+        let a =
+            self.parse_account().map_err(|e| e.update("parsing account"))?;
         Ok(Open {
             range: self.scanner.range_from(start),
             account: a,
+        })
+    }
+
+    pub fn parse_assertion(&self) -> Result<Assertion> {
+        let start = self.scanner.pos();
+        self.scanner.read_string("balance")?;
+        self.scanner.read_space1()?;
+        let account =
+            self.parse_account().map_err(|e| e.update("parsing account"))?;
+        self.scanner.read_space1()?;
+        let amount =
+            self.parse_decimal().map_err(|e| e.update("parsing amount"))?;
+        self.scanner.read_space1()?;
+        let commodity = self
+            .parse_commodity()
+            .map_err(|e| e.update("parsing commodity"))?;
+        Ok(Assertion {
+            range: self.scanner.range_from(start),
+            account,
+            amount,
+            commodity,
         })
     }
 
@@ -485,6 +518,39 @@ mod tests {
                     }),
                 }),
                 Parser::new("2024-03-01 price FOO 1.543 BAR").parse_directive()
+            )
+        }
+
+        #[test]
+        fn parse_assertion() {
+            assert_eq!(
+                Ok(Directive {
+                    range: Range::new(
+                        0,
+                        "2024-03-01 balance Assets:Foo 500.1 BAR"
+                    ),
+                    date: Date {
+                        range: Range::new(0, "2024-03-01"),
+                    },
+                    command: Command::Assertion(Assertion {
+                        range: Range::new(11, "balance Assets:Foo 500.1 BAR"),
+                        account: Account {
+                            range: Range::new(19, "Assets:Foo"),
+                            segments: vec![
+                                Range::new(19, "Assets"),
+                                Range::new(26, "Foo")
+                            ],
+                        },
+                        amount: Decimal {
+                            range: Range::new(30, "500.1"),
+                        },
+                        commodity: Commodity {
+                            range: Range::new(36, "BAR"),
+                        },
+                    }),
+                }),
+                Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR")
+                    .parse_directive()
             )
         }
     }
