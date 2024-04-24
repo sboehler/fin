@@ -22,14 +22,38 @@ pub struct Decimal<'a> {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Directive<'a> {
+pub struct QuotedString<'a> {
     pub range: Range<'a>,
-    pub date: Date<'a>,
-    pub command: Command<'a>,
+    pub content: Range<'a>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub enum Command<'a> {
+pub struct SourceFile<'a> {
+    pub range: Range<'a>,
+    pub directives: Vec<Directive<'a>>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum Directive<'a> {
+    Include(Include<'a>),
+    Dated(Command<'a>),
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Include<'a> {
+    pub range: Range<'a>,
+    pub path: QuotedString<'a>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Command<'a> {
+    pub range: Range<'a>,
+    pub date: Date<'a>,
+    pub command: Cmd<'a>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum Cmd<'a> {
     Price(Price<'a>),
     Open(Open<'a>),
     Assertion(Assertion<'a>),

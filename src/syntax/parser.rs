@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use super::scanner::ParserError;
 use super::syntax::{
-    Account, Assertion, Close, Command, Commodity, Date, Decimal, Directive,
-    Open, Price,
+    Account, Assertion, Close, Cmd, Command, Commodity, Date, Decimal,
+    Directive, Include, Open, Price, QuotedString,
 };
 
 pub struct Parser<'a> {
@@ -104,22 +104,58 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn parse_quoted_string(&self) -> Result<QuotedString> {
+        let start = self.scanner.pos();
+        self.scanner.read_char('"')?;
+        let content = self.scanner.read_while(|c| c != '"');
+        self.scanner.read_char('"')?;
+        Ok(QuotedString {
+            range: self.scanner.range_from(start),
+            content,
+        })
+    }
+
     pub fn parse_directive(&self) -> Result<Directive> {
+        match self.scanner.current() {
+            Some('i') => self.parse_include().map(Directive::Include),
+            Some(c) if c.is_ascii_digit() => {
+                self.parse_command().map(Directive::Dated)
+            }
+            o => Err(self.error(
+                self.scanner.pos(),
+                None,
+                Token::Custom("directive".into()),
+                o.map(Token::Char).unwrap_or(Token::EOF),
+            )),
+        }
+    }
+
+    pub fn parse_include(&self) -> Result<Include> {
+        let start = self.scanner.pos();
+        self.scanner.read_string("include")?;
+        self.scanner.read_space1()?;
+        let path =
+            self.parse_quoted_string().map_err(|e| e.update("parsing path"))?;
+        Ok(Include {
+            range: self.scanner.range_from(start),
+            path,
+        })
+    }
+
+    pub fn parse_command(&self) -> Result<Command> {
         let start = self.scanner.pos();
         let date = self.parse_date().map_err(|e| e.update("parsing date"))?;
         self.scanner.read_space1()?;
         let command = match self.scanner.current() {
-            Some('p') => {
-                self.parse_price().map(Command::Price).map_err(|e| {
-                    self.error(
-                        start,
-                        Some("parsing 'price' directive".into()),
-                        Token::Custom("directive".into()),
-                        Token::Error(Box::new(e)),
-                    )
-                })?
-            }
-            Some('o') => self.parse_open().map(Command::Open).map_err(|e| {
+            Some('p') => self.parse_price().map(Cmd::Price).map_err(|e| {
+                self.error(
+                    start,
+                    Some("parsing 'price' directive".into()),
+                    Token::Custom("directive".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?,
+            Some('o') => self.parse_open().map(Cmd::Open).map_err(|e| {
                 self.error(
                     start,
                     Some("parsing 'open' directive".into()),
@@ -128,7 +164,7 @@ impl<'a> Parser<'a> {
                 )
             })?,
             Some('b') => {
-                self.parse_assertion().map(Command::Assertion).map_err(|e| {
+                self.parse_assertion().map(Cmd::Assertion).map_err(|e| {
                     self.error(
                         start,
                         Some("parsing 'balance' directive".into()),
@@ -137,16 +173,14 @@ impl<'a> Parser<'a> {
                     )
                 })?
             }
-            Some('c') => {
-                self.parse_close().map(Command::Close).map_err(|e| {
-                    self.error(
-                        start,
-                        Some("parsing 'close' directive".into()),
-                        Token::Custom("directive".into()),
-                        Token::Error(Box::new(e)),
-                    )
-                })?
-            }
+            Some('c') => self.parse_close().map(Cmd::Close).map_err(|e| {
+                self.error(
+                    start,
+                    Some("parsing 'close' directive".into()),
+                    Token::Custom("directive".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?,
             o => {
                 return Err(self.error(
                     self.scanner.pos(),
@@ -163,7 +197,7 @@ impl<'a> Parser<'a> {
         };
         let range = self.scanner.range_from(start);
         self.scanner.read_rest_of_line()?;
-        Ok(Directive {
+        Ok(Command {
             range,
             date,
             command,
@@ -451,14 +485,32 @@ mod tests {
         use pretty_assertions::assert_eq;
 
         #[test]
+        fn parse_include() {
+            assert_eq!(
+                Ok(Directive::Include(Include {
+                    range: Range::new(
+                        0,
+                        r#"include "/foo/bar/baz/finance.knut""#
+                    ),
+                    path: QuotedString {
+                        range: Range::new(8, r#""/foo/bar/baz/finance.knut""#),
+                        content: Range::new(9, "/foo/bar/baz/finance.knut"),
+                    }
+                })),
+                Parser::new(r#"include "/foo/bar/baz/finance.knut""#)
+                    .parse_directive()
+            )
+        }
+
+        #[test]
         fn parse_open() {
             assert_eq!(
-                Ok(Directive {
+                Ok(Directive::Dated(Command {
                     range: Range::new(0, "2024-03-01 open Assets:Foo"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
                     },
-                    command: Command::Open(Open {
+                    command: Cmd::Open(Open {
                         range: Range::new(11, "open Assets:Foo"),
                         account: Account {
                             range: Range::new(16, "Assets:Foo"),
@@ -468,7 +520,7 @@ mod tests {
                             ]
                         }
                     }),
-                }),
+                })),
                 Parser::new("2024-03-01 open Assets:Foo").parse_directive()
             )
         }
@@ -476,12 +528,12 @@ mod tests {
         #[test]
         fn parse_close() {
             assert_eq!(
-                Ok(Directive {
+                Ok(Directive::Dated(Command {
                     range: Range::new(0, "2024-03-01 close Assets:Foo"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
                     },
-                    command: Command::Close(Close {
+                    command: Cmd::Close(Close {
                         range: Range::new(11, "close Assets:Foo"),
                         account: Account {
                             range: Range::new(17, "Assets:Foo"),
@@ -491,7 +543,7 @@ mod tests {
                             ]
                         }
                     }),
-                }),
+                })),
                 Parser::new("2024-03-01 close Assets:Foo").parse_directive()
             )
         }
@@ -499,12 +551,12 @@ mod tests {
         #[test]
         fn parse_price() {
             assert_eq!(
-                Ok(Directive {
+                Ok(Directive::Dated(Command {
                     range: Range::new(0, "2024-03-01 price FOO 1.543 BAR"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
                     },
-                    command: Command::Price(Price {
+                    command: Cmd::Price(Price {
                         range: Range::new(11, "price FOO 1.543 BAR"),
                         commodity: Commodity {
                             range: Range::new(17, "FOO"),
@@ -516,7 +568,7 @@ mod tests {
                             range: Range::new(27, "BAR"),
                         }
                     }),
-                }),
+                })),
                 Parser::new("2024-03-01 price FOO 1.543 BAR").parse_directive()
             )
         }
@@ -524,7 +576,7 @@ mod tests {
         #[test]
         fn parse_assertion() {
             assert_eq!(
-                Ok(Directive {
+                Ok(Directive::Dated(Command {
                     range: Range::new(
                         0,
                         "2024-03-01 balance Assets:Foo 500.1 BAR"
@@ -532,7 +584,7 @@ mod tests {
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
                     },
-                    command: Command::Assertion(Assertion {
+                    command: Cmd::Assertion(Assertion {
                         range: Range::new(11, "balance Assets:Foo 500.1 BAR"),
                         account: Account {
                             range: Range::new(19, "Assets:Foo"),
@@ -548,7 +600,7 @@ mod tests {
                             range: Range::new(36, "BAR"),
                         },
                     }),
-                }),
+                })),
                 Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR")
                     .parse_directive()
             )
