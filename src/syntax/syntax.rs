@@ -24,3 +24,28 @@ pub struct Decimal<'a> {
     pub range: Range<'a>,
     pub decimal: rust_decimal::Decimal,
 }
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Directive<'a> {
+    pub range: Range<'a>,
+    pub date: Date<'a>,
+    pub command: Command<'a>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum Command<'a> {
+    Open(Open<'a>),
+    Close(Close<'a>),
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Open<'a> {
+    pub range: Range<'a>,
+    pub account: Account<'a>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Close<'a> {
+    pub range: Range<'a>,
+    pub account: Account<'a>,
+}

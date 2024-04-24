@@ -363,7 +363,7 @@ impl<'a> Scanner<'a> {
         Ok(self.range_from(start))
     }
 
-    pub fn consume_eol(&self) -> Result<Range> {
+    pub fn read_eol(&self) -> Result<Range> {
         let start = self.pos();
         match self.current() {
             None | Some('\n') => {
@@ -379,24 +379,24 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn consume_space1(&self) -> Result<Range> {
+    pub fn read_space1(&self) -> Result<Range> {
         let start = self.pos();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
                 Err(self.error(start, None, Token::WhiteSpace, Token::Char(ch)))
             }
-            _ => Ok(self.consume_space()),
+            _ => Ok(self.read_space()),
         }
     }
 
-    pub fn consume_space(&self) -> Range {
+    pub fn read_space(&self) -> Range {
         self.read_while(|c| c != '\n' && c.is_ascii_whitespace())
     }
 
-    pub fn consume_rest_of_line(&self) -> Result<Range> {
+    pub fn read_rest_of_line(&self) -> Result<Range> {
         let start = self.pos();
         self.read_while(|c| c != '\n');
-        self.consume_eol()?;
+        self.read_eol()?;
         Ok(self.range_from(start))
     }
 
@@ -429,7 +429,7 @@ mod test_scanner {
         assert_eq!(Range::new(0, "aaasd".into()), s.read_while(|c| c != 'f'));
         assert_eq!(Range::new(5, "ff".into()), s.read_while(|c| c == 'f'));
         assert_eq!(Range::new(7, "".into()), s.read_while(|c| c == 'q'));
-        assert_eq!(Ok(Range::new(7, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(7, "")), s.read_eol());
     }
 
     #[test]
@@ -450,7 +450,7 @@ mod test_scanner {
         assert_eq!(Ok(Range::new(1, "s")), s.read_char('s'));
         assert_eq!(Ok(Range::new(2, "d")), s.read_char('d'));
         assert_eq!(Ok(Range::new(3, "f")), s.read_char('f'));
-        assert_eq!(Ok(Range::new(4, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(4, "")), s.read_eol());
     }
 
     #[test]
@@ -470,7 +470,7 @@ mod test_scanner {
             s.read_char('q')
         );
         assert_eq!(Ok(Range::new(2, "df")), s.read_string("df"));
-        assert_eq!(Ok(Range::new(4, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(4, "")), s.read_eol());
     }
 
     #[test]
@@ -487,7 +487,7 @@ mod test_scanner {
             s.read_while(|c| c.is_ascii_whitespace())
         );
         assert_eq!(Ok(Range::new(8, "1baz")), s.read_identifier());
-        assert_eq!(Ok(Range::new(12, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(12, "")), s.read_eol());
     }
 
     #[test]
@@ -500,7 +500,7 @@ mod test_scanner {
             Err(ParserError::new("foo", None, 3, None, Token::Any, Token::EOF)),
             s.read_1()
         );
-        assert_eq!(Ok(Range::new(3, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(3, "")), s.read_eol());
     }
 
     #[test]
@@ -544,7 +544,7 @@ mod test_scanner {
             )),
             s.read_1_with(Token::Any, |_| true)
         );
-        assert_eq!(Ok(Range::new(4, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(4, "")), s.read_eol());
     }
 
     #[test]
@@ -575,7 +575,7 @@ mod test_scanner {
             )),
             s.read_n(3)
         );
-        assert_eq!(Ok(Range::new(4, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(4, "")), s.read_eol());
     }
 
     #[test]
@@ -590,22 +590,22 @@ mod test_scanner {
                 Token::Either(vec![Token::Char('\n'), Token::EOF]),
                 Token::Char('a')
             )),
-            s.consume_eol()
+            s.read_eol()
         );
         assert_eq!(Ok(Range::new(0, "a")), s.read_1());
-        assert_eq!(Ok(Range::new(1, "\n")), s.consume_eol());
-        assert_eq!(Ok(Range::new(2, "\n")), s.consume_eol());
-        assert_eq!(Ok(Range::new(3, "")), s.consume_eol());
-        assert_eq!(Ok(Range::new(3, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(1, "\n")), s.read_eol());
+        assert_eq!(Ok(Range::new(2, "\n")), s.read_eol());
+        assert_eq!(Ok(Range::new(3, "")), s.read_eol());
+        assert_eq!(Ok(Range::new(3, "")), s.read_eol());
     }
 
     #[test]
     fn test_consume_space1() {
         let s = Scanner::new("  a\t\tb  \nc");
 
-        assert_eq!(Ok(Range::new(0, "  ")), s.consume_space1());
+        assert_eq!(Ok(Range::new(0, "  ")), s.read_space1());
         assert_eq!(Ok(Range::new(2, "a")), s.read_1());
-        assert_eq!(Ok(Range::new(3, "\t\t")), s.consume_space1());
+        assert_eq!(Ok(Range::new(3, "\t\t")), s.read_space1());
         assert_eq!(
             Err(ParserError::new(
                 s.source,
@@ -615,13 +615,13 @@ mod test_scanner {
                 Token::WhiteSpace,
                 Token::Char('b')
             )),
-            s.consume_space1()
+            s.read_space1()
         );
         assert_eq!(Ok(Range::new(5, "b")), s.read_1());
-        assert_eq!(Ok(Range::new(6, "  ")), s.consume_space1());
-        assert_eq!(Ok(Range::new(8, "")), s.consume_space1());
-        assert_eq!(Ok(Range::new(8, "\n")), s.consume_eol());
+        assert_eq!(Ok(Range::new(6, "  ")), s.read_space1());
+        assert_eq!(Ok(Range::new(8, "")), s.read_space1());
+        assert_eq!(Ok(Range::new(8, "\n")), s.read_eol());
         assert_eq!(Ok(Range::new(9, "c")), s.read_1());
-        assert_eq!(Ok(Range::new(10, "")), s.consume_eol());
+        assert_eq!(Ok(Range::new(10, "")), s.read_eol());
     }
 }

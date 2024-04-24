@@ -4,7 +4,9 @@ use crate::syntax::scanner::{Result, Scanner, Token};
 use std::path::PathBuf;
 
 use super::scanner::ParserError;
-use super::syntax::{Account, Commodity, Date, Decimal};
+use super::syntax::{
+    Account, Close, Command, Commodity, Date, Decimal, Directive, Open,
+};
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
@@ -98,7 +100,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_decimal(&mut self) -> Result<Decimal> {
+    pub fn parse_decimal(&self) -> Result<Decimal> {
         let pos = self.scanner.pos();
         let t = self.scanner.read_until(|c| c.is_whitespace());
         match t.str.parse::<rust_decimal::Decimal>() {
@@ -113,6 +115,76 @@ impl<'a> Parser<'a> {
                 Token::Custom(t.str.into()),
             )),
         }
+    }
+
+    pub fn parse_directive(&self) -> Result<Directive> {
+        let start = self.scanner.pos();
+        let d = self.parse_date().map_err(|e| e.update("parsing date"))?;
+        self.scanner.read_space1()?;
+        let c = match self.scanner.current() {
+            Some('o') => self.parse_open().map(Command::Open).map_err(|e| {
+                self.error(
+                    start,
+                    Some("parsing 'open' directive".into()),
+                    Token::Custom("directive".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?,
+            Some('c') => {
+                self.parse_close().map(Command::Close).map_err(|e| {
+                    self.error(
+                        start,
+                        Some("parsing 'close' directive".into()),
+                        Token::Custom("directive".into()),
+                        Token::Error(Box::new(e)),
+                    )
+                })?
+            }
+            o => {
+                return Err(self.error(
+                    self.scanner.pos(),
+                    None,
+                    Token::Either(vec![
+                        Token::Custom("open".into()),
+                        Token::Custom("close".into()),
+                    ]),
+                    o.map(Token::Char).unwrap_or(Token::EOF),
+                ))
+            }
+        };
+        Ok(Directive {
+            range: self.scanner.range_from(start),
+            date: d,
+            command: c,
+        })
+    }
+
+    pub fn parse_open(&self) -> Result<Open> {
+        let start = self.scanner.pos();
+        self.scanner.read_string("open")?;
+        self.scanner.read_space1()?;
+        let a = self
+            .parse_account()
+            .map_err(|e| e.update("parsing account").into())?;
+        self.scanner.read_rest_of_line()?;
+        Ok(Open {
+            range: self.scanner.range_from(start),
+            account: a,
+        })
+    }
+
+    pub fn parse_close(&self) -> Result<Close> {
+        let start = self.scanner.pos();
+        self.scanner.read_string("close")?;
+        self.scanner.read_space1()?;
+        let a = self
+            .parse_account()
+            .map_err(|e| e.update("parsing account").into())?;
+        self.scanner.read_rest_of_line()?;
+        Ok(Close {
+            range: self.scanner.range_from(start),
+            account: a,
+        })
     }
 }
 
@@ -290,5 +362,92 @@ mod tests {
             )),
             Parser::new("foo").parse_decimal(),
         );
+    }
+
+    #[test]
+    fn test_parse_open() {
+        assert_eq!(
+            Ok(Open {
+                range: Range::new(0, "open   Assets:Foo"),
+                account: Account {
+                    range: Range::new(7, "Assets:Foo"),
+                    segments: vec![
+                        Range::new(7, "Assets"),
+                        Range::new(14, "Foo")
+                    ]
+                }
+            }),
+            Parser::new("open   Assets:Foo").parse_open()
+        )
+    }
+
+    #[test]
+    fn test_parse_close() {
+        assert_eq!(
+            Ok(Close {
+                range: Range::new(0, "close  Assets:Foo"),
+                account: Account {
+                    range: Range::new(7, "Assets:Foo"),
+                    segments: vec![
+                        Range::new(7, "Assets"),
+                        Range::new(14, "Foo")
+                    ]
+                }
+            }),
+            Parser::new("close  Assets:Foo").parse_close()
+        )
+    }
+
+    mod directive {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        #[test]
+        fn parse_open() {
+            assert_eq!(
+                Ok(Directive {
+                    range: Range::new(0, "2024-03-01 open Assets:Foo"),
+                    date: Date {
+                        range: Range::new(0, "2024-03-01"),
+                        date: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap(),
+                    },
+                    command: Command::Open(Open {
+                        range: Range::new(11, "open Assets:Foo"),
+                        account: Account {
+                            range: Range::new(16, "Assets:Foo"),
+                            segments: vec![
+                                Range::new(16, "Assets"),
+                                Range::new(23, "Foo")
+                            ]
+                        }
+                    }),
+                }),
+                Parser::new("2024-03-01 open Assets:Foo").parse_directive()
+            )
+        }
+    }
+
+    #[test]
+    fn parse_close() {
+        assert_eq!(
+            Ok(Directive {
+                range: Range::new(0, "2024-03-01 close Assets:Foo"),
+                date: Date {
+                    range: Range::new(0, "2024-03-01"),
+                    date: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap(),
+                },
+                command: Command::Close(Close {
+                    range: Range::new(11, "close Assets:Foo"),
+                    account: Account {
+                        range: Range::new(17, "Assets:Foo"),
+                        segments: vec![
+                            Range::new(17, "Assets"),
+                            Range::new(24, "Foo")
+                        ]
+                    }
+                }),
+            }),
+            Parser::new("2024-03-01 close Assets:Foo").parse_directive()
+        )
     }
 }
