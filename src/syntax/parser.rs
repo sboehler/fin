@@ -1,3 +1,5 @@
+use chrono::NaiveDate;
+
 use crate::syntax::scanner::{Result, Scanner, Token};
 use std::path::PathBuf;
 
@@ -81,9 +83,19 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
             .map_err(|e| e.update("parsing day".into()))?;
-        Ok(Date {
-            range: self.scanner.range_from(start),
-        })
+        let r = self.scanner.range_from(start);
+        match r.str.parse::<NaiveDate>() {
+            Ok(d) => Ok(Date {
+                range: self.scanner.range_from(start),
+                date: d,
+            }),
+            Err(_) => Err(self.error(
+                start,
+                Some("parsing date".into()),
+                Token::Date,
+                Token::Custom(r.str.into()),
+            )),
+        }
     }
 
     pub fn parse_decimal(&mut self) -> Result<Decimal> {
@@ -198,12 +210,14 @@ mod tests {
         assert_eq!(
             Date {
                 range: Range::new(0, "0202-02-02"),
+                date: NaiveDate::from_ymd_opt(202, 2, 2).unwrap()
             },
             Parser::new("0202-02-02").parse_date().unwrap(),
         );
         assert_eq!(
             Date {
                 range: Range::new(0, "2024-02-02"),
+                date: NaiveDate::from_ymd_opt(2024, 2, 2).unwrap()
             },
             Parser::new("2024-02-02").parse_date().unwrap(),
         );

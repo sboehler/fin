@@ -1,3 +1,5 @@
+use chrono::NaiveDate;
+
 use super::scanner::Range;
 
 #[derive(PartialEq, Eq, Debug)]
@@ -14,6 +16,7 @@ pub struct Account<'a> {
 #[derive(Eq, PartialEq, Debug)]
 pub struct Date<'a> {
     pub range: Range<'a>,
+    pub date: NaiveDate,
 }
 
 #[derive(Eq, PartialEq, Debug)]
