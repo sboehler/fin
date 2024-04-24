@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use super::scanner::ParserError;
 use super::syntax::{
-    Account, Close, Command, Commodity, Date, Decimal, Directive, Open,
+    Account, Close, Command, Commodity, Date, Decimal, Directive, Open, Price,
 };
 
 pub struct Parser<'a> {
@@ -108,6 +108,16 @@ impl<'a> Parser<'a> {
         let d = self.parse_date().map_err(|e| e.update("parsing date"))?;
         self.scanner.read_space1()?;
         let c = match self.scanner.current() {
+            Some('p') => {
+                self.parse_price().map(Command::Price).map_err(|e| {
+                    self.error(
+                        start,
+                        Some("parsing 'price' directive".into()),
+                        Token::Custom("directive".into()),
+                        Token::Error(Box::new(e)),
+                    )
+                })?
+            }
             Some('o') => self.parse_open().map(Command::Open).map_err(|e| {
                 self.error(
                     start,
@@ -142,6 +152,27 @@ impl<'a> Parser<'a> {
             range: self.scanner.range_from(start),
             date: d,
             command: c,
+        })
+    }
+
+    pub fn parse_price(&self) -> Result<Price> {
+        let start = self.scanner.pos();
+        self.scanner.read_string("price")?;
+        self.scanner.read_space1()?;
+        let c = self
+            .parse_commodity()
+            .map_err(|e| e.update("parsing commodity"))?;
+        self.scanner.read_space1()?;
+        let p = self.parse_decimal().map_err(|e| e.update("parsing price"))?;
+        self.scanner.read_space1()?;
+        let t = self
+            .parse_commodity()
+            .map_err(|e| e.update("parsing target commodity"))?;
+        Ok(Price {
+            range: self.scanner.range_from(start),
+            commodity: c,
+            price: p,
+            target: t,
         })
     }
 
@@ -380,6 +411,8 @@ mod tests {
     }
 
     mod directive {
+        use crate::syntax::syntax::Price;
+
         use super::*;
         use pretty_assertions::assert_eq;
 
@@ -405,28 +438,53 @@ mod tests {
                 Parser::new("2024-03-01 open Assets:Foo").parse_directive()
             )
         }
-    }
 
-    #[test]
-    fn parse_close() {
-        assert_eq!(
-            Ok(Directive {
-                range: Range::new(0, "2024-03-01 close Assets:Foo"),
-                date: Date {
-                    range: Range::new(0, "2024-03-01"),
-                },
-                command: Command::Close(Close {
-                    range: Range::new(11, "close Assets:Foo"),
-                    account: Account {
-                        range: Range::new(17, "Assets:Foo"),
-                        segments: vec![
-                            Range::new(17, "Assets"),
-                            Range::new(24, "Foo")
-                        ]
-                    }
+        #[test]
+        fn parse_close() {
+            assert_eq!(
+                Ok(Directive {
+                    range: Range::new(0, "2024-03-01 close Assets:Foo"),
+                    date: Date {
+                        range: Range::new(0, "2024-03-01"),
+                    },
+                    command: Command::Close(Close {
+                        range: Range::new(11, "close Assets:Foo"),
+                        account: Account {
+                            range: Range::new(17, "Assets:Foo"),
+                            segments: vec![
+                                Range::new(17, "Assets"),
+                                Range::new(24, "Foo")
+                            ]
+                        }
+                    }),
                 }),
-            }),
-            Parser::new("2024-03-01 close Assets:Foo").parse_directive()
-        )
+                Parser::new("2024-03-01 close Assets:Foo").parse_directive()
+            )
+        }
+
+        #[test]
+        fn parse_price() {
+            assert_eq!(
+                Ok(Directive {
+                    range: Range::new(0, "2024-03-01 price FOO 1.543 BAR"),
+                    date: Date {
+                        range: Range::new(0, "2024-03-01"),
+                    },
+                    command: Command::Price(Price {
+                        range: Range::new(11, "price FOO 1.543 BAR"),
+                        commodity: Commodity {
+                            range: Range::new(17, "FOO"),
+                        },
+                        price: Decimal {
+                            range: Range::new(21, "1.543"),
+                        },
+                        target: Commodity {
+                            range: Range::new(27, "BAR"),
+                        }
+                    }),
+                }),
+                Parser::new("2024-03-01 price FOO 1.543 BAR").parse_directive()
+            )
+        }
     }
 }

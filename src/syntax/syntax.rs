@@ -30,8 +30,17 @@ pub struct Directive<'a> {
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum Command<'a> {
+    Price(Price<'a>),
     Open(Open<'a>),
     Close(Close<'a>),
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Price<'a> {
+    pub range: Range<'a>,
+    pub commodity: Commodity<'a>,
+    pub price: Decimal<'a>,
+    pub target: Commodity<'a>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
