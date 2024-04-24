@@ -97,6 +97,7 @@ pub enum Token {
     Digit,
     AlphaNum,
     Either(Vec<Token>),
+    Decimal,
     Any,
     WhiteSpace,
     Custom(String),
@@ -120,6 +121,7 @@ impl std::fmt::Display for Token {
             Self::Error(_) => write!(f, "error"),
             Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
             Self::Digit => write!(f, "a digit (0-9)"),
+            Self::Decimal => write!(f, "a decimal number"),
             Self::AlphaNum => {
                 write!(f, "a character (a-z, A-Z) or a digit (0-9)")
             }

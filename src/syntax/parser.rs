@@ -1,9 +1,8 @@
 use crate::syntax::scanner::{Result, Scanner, Token};
-use crate::syntax::syntax::Commodity;
 use std::path::PathBuf;
 
 use super::scanner::ParserError;
-use super::syntax::{Account, Date};
+use super::syntax::{Account, Commodity, Date, Decimal};
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
@@ -85,6 +84,23 @@ impl<'a> Parser<'a> {
         Ok(Date {
             range: self.scanner.range_from(start),
         })
+    }
+
+    pub fn parse_decimal(&mut self) -> Result<Decimal> {
+        let pos = self.scanner.pos();
+        let t = self.scanner.read_until(|c| c.is_whitespace());
+        match t.str.parse::<rust_decimal::Decimal>() {
+            Ok(d) => Ok(Decimal {
+                range: t,
+                decimal: d,
+            }),
+            Err(_) => Err(self.error(
+                pos,
+                Some("parsing decimal".into()),
+                Token::Decimal,
+                Token::Custom(t.str.into()),
+            )),
+        }
     }
 }
 
@@ -224,5 +240,41 @@ mod tests {
             )),
             Parser::new("2024-0--0").parse_date()
         )
+    }
+
+    #[test]
+    fn test_parse_decimal() {
+        assert_eq!(
+            Ok(Decimal {
+                range: Range::new(0, "0"),
+                decimal: rust_decimal::Decimal::new(0, 0),
+            }),
+            Parser::new("0").parse_decimal(),
+        );
+        assert_eq!(
+            Ok(Decimal {
+                range: Range::new(0, "10.01"),
+                decimal: rust_decimal::Decimal::new(1001, 2),
+            }),
+            Parser::new("10.01").parse_decimal(),
+        );
+        assert_eq!(
+            Ok(Decimal {
+                range: Range::new(0, "-10.01"),
+                decimal: rust_decimal::Decimal::new(-1001, 2),
+            }),
+            Parser::new("-10.01").parse_decimal(),
+        );
+        assert_eq!(
+            Err(ParserError::new(
+                "foo",
+                None,
+                0,
+                Some("parsing decimal".into()),
+                Token::Decimal,
+                Token::Custom("foo".into())
+            )),
+            Parser::new("foo").parse_decimal(),
+        );
     }
 }

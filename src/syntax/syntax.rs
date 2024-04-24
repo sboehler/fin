@@ -15,3 +15,9 @@ pub struct Account<'a> {
 pub struct Date<'a> {
     pub range: Range<'a>,
 }
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Decimal<'a> {
+    pub range: Range<'a>,
+    pub decimal: rust_decimal::Decimal,
+}
