@@ -1,5 +1,3 @@
-use chrono::NaiveDate;
-
 use crate::syntax::scanner::{Result, Scanner, Token};
 use std::path::PathBuf;
 
@@ -85,36 +83,24 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
             .map_err(|e| e.update("parsing day".into()))?;
-        let r = self.scanner.range_from(start);
-        match r.str.parse::<NaiveDate>() {
-            Ok(d) => Ok(Date {
-                range: self.scanner.range_from(start),
-                date: d,
-            }),
-            Err(_) => Err(self.error(
-                start,
-                Some("parsing date".into()),
-                Token::Date,
-                Token::Custom(r.str.into()),
-            )),
-        }
+        Ok(Date {
+            range: self.scanner.range_from(start),
+        })
     }
 
     pub fn parse_decimal(&self) -> Result<Decimal> {
-        let pos = self.scanner.pos();
-        let t = self.scanner.read_until(|c| c.is_whitespace());
-        match t.str.parse::<rust_decimal::Decimal>() {
-            Ok(d) => Ok(Decimal {
-                range: t,
-                decimal: d,
-            }),
-            Err(_) => Err(self.error(
-                pos,
-                Some("parsing decimal".into()),
-                Token::Decimal,
-                Token::Custom(t.str.into()),
-            )),
+        let start = self.scanner.pos();
+        if let Some('-') = self.scanner.current() {
+            self.scanner.read_char('-')?;
         }
+        self.scanner.read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
+        if let Some('.') = self.scanner.current() {
+            self.scanner.read_char('.')?;
+            self.scanner.read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
+        }
+        Ok(Decimal {
+            range: self.scanner.range_from(start),
+        })
     }
 
     pub fn parse_directive(&self) -> Result<Directive> {
@@ -282,14 +268,12 @@ mod tests {
         assert_eq!(
             Date {
                 range: Range::new(0, "0202-02-02"),
-                date: NaiveDate::from_ymd_opt(202, 2, 2).unwrap()
             },
             Parser::new("0202-02-02").parse_date().unwrap(),
         );
         assert_eq!(
             Date {
                 range: Range::new(0, "2024-02-02"),
-                date: NaiveDate::from_ymd_opt(2024, 2, 2).unwrap()
             },
             Parser::new("2024-02-02").parse_date().unwrap(),
         );
@@ -333,21 +317,18 @@ mod tests {
         assert_eq!(
             Ok(Decimal {
                 range: Range::new(0, "0"),
-                decimal: rust_decimal::Decimal::new(0, 0),
             }),
             Parser::new("0").parse_decimal(),
         );
         assert_eq!(
             Ok(Decimal {
                 range: Range::new(0, "10.01"),
-                decimal: rust_decimal::Decimal::new(1001, 2),
             }),
             Parser::new("10.01").parse_decimal(),
         );
         assert_eq!(
             Ok(Decimal {
                 range: Range::new(0, "-10.01"),
-                decimal: rust_decimal::Decimal::new(-1001, 2),
             }),
             Parser::new("-10.01").parse_decimal(),
         );
@@ -356,9 +337,9 @@ mod tests {
                 "foo",
                 None,
                 0,
-                Some("parsing decimal".into()),
-                Token::Decimal,
-                Token::Custom("foo".into())
+                None,
+                Token::Digit,
+                Token::Char('f')
             )),
             Parser::new("foo").parse_decimal(),
         );
@@ -409,7 +390,6 @@ mod tests {
                     range: Range::new(0, "2024-03-01 open Assets:Foo"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
-                        date: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap(),
                     },
                     command: Command::Open(Open {
                         range: Range::new(11, "open Assets:Foo"),
@@ -434,7 +414,6 @@ mod tests {
                 range: Range::new(0, "2024-03-01 close Assets:Foo"),
                 date: Date {
                     range: Range::new(0, "2024-03-01"),
-                    date: NaiveDate::from_ymd_opt(2024, 3, 1).unwrap(),
                 },
                 command: Command::Close(Close {
                     range: Range::new(11, "close Assets:Foo"),

@@ -241,6 +241,21 @@ impl<'a> Scanner<'a> {
             .unwrap_or_else(|| self.source.as_bytes().len())
     }
 
+    pub fn read_while_1<P>(&self, token: Token, pred: P) -> Result<Range>
+    where
+        P: Fn(char) -> bool,
+    {
+        if !self.current().map(&pred).unwrap_or(false) {
+            return Err(self.error(
+                self.pos(),
+                None,
+                token,
+                self.current().map(Token::Char).unwrap_or(Token::EOF),
+            ));
+        }
+        Ok(self.read_while(pred))
+    }
+
     pub fn read_while<P>(&self, pred: P) -> Range
     where
         P: Fn(char) -> bool,
@@ -429,6 +444,31 @@ mod test_scanner {
         assert_eq!(Range::new(0, "aaasd".into()), s.read_while(|c| c != 'f'));
         assert_eq!(Range::new(5, "ff".into()), s.read_while(|c| c == 'f'));
         assert_eq!(Range::new(7, "".into()), s.read_while(|c| c == 'q'));
+        assert_eq!(Ok(Range::new(7, "")), s.read_eol());
+    }
+
+    #[test]
+    fn test_read_while_1() {
+        let s = Scanner::new("aaasdff");
+        assert_eq!(
+            Ok(Range::new(0, "aaasd".into())),
+            s.read_while_1(Token::Any, |c| c != 'f')
+        );
+        assert_eq!(
+            Ok(Range::new(5, "ff".into())),
+            s.read_while_1(Token::Char('f'), |c| c == 'f')
+        );
+        assert_eq!(
+            Err(ParserError::new(
+                "aaasdff",
+                None,
+                7,
+                None,
+                Token::Char('q'),
+                Token::EOF
+            )),
+            s.read_while_1(Token::Char('q'), |c| c == 'q')
+        );
         assert_eq!(Ok(Range::new(7, "")), s.read_eol());
     }
 
