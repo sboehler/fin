@@ -619,7 +619,7 @@ mod test_scanner {
     }
 
     #[test]
-    fn test_consume_eol() {
+    fn test_read_eol() {
         let s = Scanner::new("a\n\n");
         assert_eq!(
             Err(ParserError::new(
@@ -640,7 +640,7 @@ mod test_scanner {
     }
 
     #[test]
-    fn test_consume_space1() {
+    fn test_read_space1() {
         let s = Scanner::new("  a\t\tb  \nc");
 
         assert_eq!(Ok(Range::new(0, "  ")), s.read_space1());
