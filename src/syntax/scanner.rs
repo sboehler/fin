@@ -169,7 +169,8 @@ mod test_parser_error {
                 line: 0,
                 col: 1,
                 context: vec![(0, "asdf".into())]
-            }.to_string()
+            }
+            .to_string()
         );
         assert_eq!(ParserError::position("foo\nbar\n", 0), (0, 0));
         assert_eq!(ParserError::position("foo\nbar\n", 1), (0, 1));
