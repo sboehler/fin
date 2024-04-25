@@ -199,6 +199,7 @@ impl<'a> Parser<'a> {
                         Token::Custom("price".into()),
                         Token::Custom("open".into()),
                         Token::Custom("balance".into()),
+                        Token::Custom("opening quote (\")".into()),
                         Token::Custom("close".into()),
                     ]),
                     o.map(Token::Char).unwrap_or(Token::EOF),
