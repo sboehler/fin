@@ -411,7 +411,7 @@ impl<'a> Scanner<'a> {
 
     pub fn read_rest_of_line(&self) -> Result<Range> {
         let start = self.pos();
-        self.read_while(|c| c != '\n');
+        self.read_while(|c| c.is_whitespace() && c != '\n');
         self.read_eol()?;
         Ok(self.range_from(start))
     }
@@ -529,6 +529,27 @@ mod test_scanner {
         );
         assert_eq!(Ok(Range::new(8, "1baz")), s.read_identifier());
         assert_eq!(Ok(Range::new(12, "")), s.read_eol());
+    }
+
+    #[test]
+    fn read_rest_of_line() {
+        let s = Scanner::new("\n\n  \nfoo");
+        assert_eq!(Ok(Range::new(0, "\n")), s.read_rest_of_line());
+        assert_eq!(Ok(Range::new(1, "\n")), s.read_rest_of_line());
+        assert_eq!(Ok(Range::new(2, "  \n")), s.read_rest_of_line());
+        assert_eq!(
+            Err(ParserError::new(
+                "\n\n  \nfoo",
+                None,
+                5,
+                None,
+                Token::Either(vec![Token::Char('\n'), Token::EOF]),
+                Token::Char('f')
+            )),
+            s.read_rest_of_line()
+        );
+        assert_eq!(Ok(Range::new(5, "foo")), s.read_string("foo"));
+        assert_eq!(Ok(Range::new(8, "")), s.read_rest_of_line());
     }
 
     #[test]

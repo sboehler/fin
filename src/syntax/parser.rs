@@ -599,6 +599,34 @@ mod tests {
                 ]
             }),
             Parser::new(s).parse_transaction()
+        );
+    }
+    #[test]
+    fn test_parse_transaction2() {
+        assert_eq!(
+            Err(ParserError::new(
+                "\"",
+                None,
+                1,
+                None,
+                Token::Char('"'),
+                Token::EOF
+            ),),
+            Parser::new("\"").parse_transaction()
+        );
+    }
+    #[test]
+    fn test_parse_transaction3() {
+        assert_eq!(
+            Err(ParserError::new(
+                "\"\"   Assets Assets 12 USD",
+                None,
+                5,
+                None,
+                Token::Either(vec![Token::Char('\n'), Token::EOF]),
+                Token::Char('A'),
+            ),),
+            Parser::new("\"\"   Assets Assets 12 USD").parse_transaction()
         )
     }
     #[test]
