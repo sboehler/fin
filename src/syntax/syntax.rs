@@ -56,6 +56,7 @@ pub struct Command<'a> {
 pub enum Cmd<'a> {
     Price(Price<'a>),
     Open(Open<'a>),
+    Transaction(Transaction<'a>),
     Assertion(Assertion<'a>),
     Close(Close<'a>),
 }

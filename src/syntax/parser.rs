@@ -163,6 +163,16 @@ impl<'a> Parser<'a> {
                     Token::Error(Box::new(e)),
                 )
             })?,
+            Some('"') => {
+                self.parse_transaction().map(Cmd::Transaction).map_err(|e| {
+                    self.error(
+                        start,
+                        Some("parsing 'transaction' directive".into()),
+                        Token::Custom("directive".into()),
+                        Token::Error(Box::new(e)),
+                    )
+                })?
+            }
             Some('b') => {
                 self.parse_assertion().map(Cmd::Assertion).map_err(|e| {
                     self.error(
@@ -691,6 +701,56 @@ mod tests {
                 })),
                 Parser::new("2024-03-01 open Assets:Foo").parse_directive()
             )
+        }
+
+        #[test]
+        fn parse_transaction() {
+            assert_eq!(
+                Ok(Directive::Dated(
+                    Command {
+                    range: Range::new(0, "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
+                    date: Date {
+                        range: Range::new(0, "2024-12-31"),
+                    },
+                    command: Cmd::Transaction(Transaction {
+                        range: Range::new(
+                            11,
+                            "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
+                        ),
+                        description: QuotedString {
+                            range: Range::new(11, r#""Message""#),
+                            content: Range::new(12, "Message"),
+                        },
+                        bookings: vec![Booking {
+                            range: Range::new(23, "Assets:Foo Assets:Bar 4.23 USD"),
+                            credit: Account {
+                                range: Range::new(23, "Assets:Foo"),
+                                segments: vec![
+                                    Range::new(23, "Assets"),
+                                    Range::new(30, "Foo")
+                                ]
+                            },
+                            debit: Account {
+                                range: Range::new(34, "Assets:Bar"),
+                                segments: vec![
+                                    Range::new(34, "Assets"),
+                                    Range::new(41, "Bar")
+                                ]
+                            },
+                            quantity: Decimal {
+                                range: Range::new(45, "4.23"),
+                            },
+                            commodity: Commodity {
+                                range: Range::new(50, "USD"),
+                            }
+                        },]
+                    }),
+                })),
+                Parser::new(
+                    "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
+                )
+                .parse_directive()
+            );
         }
 
         #[test]
