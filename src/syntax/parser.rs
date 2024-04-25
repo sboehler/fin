@@ -284,16 +284,16 @@ mod tests {
     #[test]
     fn test_parse_commodity() {
         assert_eq!(
-            Parser::new("USD").parse_commodity().unwrap(),
-            Commodity {
+            Ok(Commodity {
                 range: Range::new(0, "USD"),
-            },
+            }),
+            Parser::new("USD").parse_commodity(),
         );
         assert_eq!(
-            Parser::new("1FOO  ").parse_commodity().unwrap(),
-            Commodity {
+            Ok(Commodity {
                 range: Range::new(0, "1FOO"),
-            },
+            }),
+            Parser::new("1FOO  ").parse_commodity(),
         );
         assert_eq!(
             Err(ParserError::new(
@@ -365,16 +365,16 @@ mod tests {
     #[test]
     fn test_parse_date() {
         assert_eq!(
-            Date {
+            Ok(Date {
                 range: Range::new(0, "0202-02-02"),
-            },
-            Parser::new("0202-02-02").parse_date().unwrap(),
+            }),
+            Parser::new("0202-02-02").parse_date(),
         );
         assert_eq!(
-            Date {
+            Ok(Date {
                 range: Range::new(0, "2024-02-02"),
-            },
-            Parser::new("2024-02-02").parse_date().unwrap(),
+            }),
+            Parser::new("2024-02-02").parse_date(),
         );
         assert_eq!(
             Err(ParserError::new(
