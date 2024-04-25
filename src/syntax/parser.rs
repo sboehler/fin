@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use super::scanner::ParserError;
 use super::syntax::{
-    Account, Assertion, Close, Cmd, Command, Commodity, Date, Decimal,
-    Directive, Include, Open, Price, QuotedString,
+    Account, Assertion, Booking, Close, Cmd, Command, Commodity, Date, Decimal,
+    Directive, Include, Open, Price, QuotedString, Transaction,
 };
 
 pub struct Parser<'a> {
@@ -238,6 +238,54 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn parse_transaction(&self) -> Result<Transaction> {
+        let start = self.scanner.pos();
+        let description = self.parse_quoted_string()?;
+        self.scanner.read_rest_of_line()?;
+        let mut bookings = Vec::new();
+        loop {
+            bookings.push(self.parse_booking()?);
+            match self.scanner.current() {
+                Some(c) if c.is_alphanumeric() => continue,
+                _ => break,
+            }
+        }
+        let range = self.scanner.range_from(start);
+        self.scanner.read_rest_of_line()?;
+        Ok(Transaction {
+            range,
+            description,
+            bookings,
+        })
+    }
+
+    pub fn parse_booking(&self) -> Result<Booking> {
+        let start = self.scanner.pos();
+        let credit = self
+            .parse_account()
+            .map_err(|e| e.update("parsing credit account"))?;
+        self.scanner.read_space1()?;
+        let debit = self
+            .parse_account()
+            .map_err(|e| e.update("parsing debit account"))?;
+        self.scanner.read_space1()?;
+        let quantity =
+            self.parse_decimal().map_err(|e| e.update("parsing quantity"))?;
+        self.scanner.read_space1()?;
+        let commodity = self
+            .parse_commodity()
+            .map_err(|e| e.update("parsing commodity"))?;
+        let range = self.scanner.range_from(start);
+        self.scanner.read_rest_of_line()?;
+        Ok(Booking {
+            range: range,
+            credit,
+            debit,
+            quantity,
+            commodity,
+        })
+    }
+
     pub fn parse_assertion(&self) -> Result<Assertion> {
         let start = self.scanner.pos();
         self.scanner.read_string("balance")?;
@@ -461,6 +509,98 @@ mod tests {
         )
     }
 
+    #[test]
+    fn test_parse_booking() {
+        assert_eq!(
+            Ok(Booking {
+                range: Range::new(0, "Assets:Foo Assets:Bar 4.23 BAZ"),
+                credit: Account {
+                    range: Range::new(0, "Assets:Foo"),
+                    segments: vec![
+                        Range::new(0, "Assets"),
+                        Range::new(7, "Foo")
+                    ]
+                },
+                debit: Account {
+                    range: Range::new(11, "Assets:Bar"),
+                    segments: vec![
+                        Range::new(11, "Assets"),
+                        Range::new(18, "Bar")
+                    ]
+                },
+                quantity: Decimal {
+                    range: Range::new(22, "4.23"),
+                },
+                commodity: Commodity {
+                    range: Range::new(27, "BAZ"),
+                }
+            }),
+            Parser::new("Assets:Foo Assets:Bar 4.23 BAZ").parse_booking()
+        )
+    }
+
+    #[test]
+    fn test_parse_transaction() {
+        let s = "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD\nAssets:Foo Assets:Baz 8 USD";
+        assert_eq!(
+            Ok(Transaction {
+                range: Range::new(0, s),
+                description: QuotedString {
+                    range: Range::new(0, r#""Message""#),
+                    content: Range::new(1, "Message"),
+                },
+                bookings: vec![
+                    Booking {
+                        range: Range::new(12, "Assets:Foo Assets:Bar 4.23 USD"),
+                        credit: Account {
+                            range: Range::new(12, "Assets:Foo"),
+                            segments: vec![
+                                Range::new(12, "Assets"),
+                                Range::new(19, "Foo")
+                            ]
+                        },
+                        debit: Account {
+                            range: Range::new(23, "Assets:Bar"),
+                            segments: vec![
+                                Range::new(23, "Assets"),
+                                Range::new(30, "Bar")
+                            ]
+                        },
+                        quantity: Decimal {
+                            range: Range::new(34, "4.23"),
+                        },
+                        commodity: Commodity {
+                            range: Range::new(39, "USD"),
+                        }
+                    },
+                    Booking {
+                        range: Range::new(43, "Assets:Foo Assets:Baz 8 USD"),
+                        credit: Account {
+                            range: Range::new(43, "Assets:Foo"),
+                            segments: vec![
+                                Range::new(43, "Assets"),
+                                Range::new(50, "Foo")
+                            ]
+                        },
+                        debit: Account {
+                            range: Range::new(54, "Assets:Baz"),
+                            segments: vec![
+                                Range::new(54, "Assets"),
+                                Range::new(61, "Baz")
+                            ]
+                        },
+                        quantity: Decimal {
+                            range: Range::new(65, "8"),
+                        },
+                        commodity: Commodity {
+                            range: Range::new(67, "USD"),
+                        }
+                    }
+                ]
+            }),
+            Parser::new(s).parse_transaction()
+        )
+    }
     #[test]
     fn test_parse_close() {
         assert_eq!(

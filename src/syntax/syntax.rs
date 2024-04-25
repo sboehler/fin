@@ -75,6 +75,22 @@ pub struct Open<'a> {
 }
 
 #[derive(Eq, PartialEq, Debug)]
+pub struct Booking<'a> {
+    pub range: Range<'a>,
+    pub credit: Account<'a>,
+    pub debit: Account<'a>,
+    pub quantity: Decimal<'a>,
+    pub commodity: Commodity<'a>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Transaction<'a> {
+    pub range: Range<'a>,
+    pub description: QuotedString<'a>,
+    pub bookings: Vec<Booking<'a>>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
 pub struct Assertion<'a> {
     pub range: Range<'a>,
     pub account: Account<'a>,
