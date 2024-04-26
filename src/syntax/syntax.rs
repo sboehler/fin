@@ -48,25 +48,31 @@ pub enum Directive<'a> {
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum Command<'a> {
-    Price(Price<'a>),
-    Open(Open<'a>),
-    Transaction(Transaction<'a>),
-    Assertion(Assertion<'a>),
-    Close(Close<'a>),
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Price<'a> {
-    pub range: Range<'a>,
-    pub commodity: Commodity<'a>,
-    pub price: Decimal<'a>,
-    pub target: Commodity<'a>,
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Open<'a> {
-    pub range: Range<'a>,
-    pub account: Account<'a>,
+    Price {
+        range: Range<'a>,
+        commodity: Commodity<'a>,
+        price: Decimal<'a>,
+        target: Commodity<'a>,
+    },
+    Open {
+        range: Range<'a>,
+        account: Account<'a>,
+    },
+    Transaction {
+        range: Range<'a>,
+        description: QuotedString<'a>,
+        bookings: Vec<Booking<'a>>,
+    },
+    Assertion {
+        range: Range<'a>,
+        account: Account<'a>,
+        amount: Decimal<'a>,
+        commodity: Commodity<'a>,
+    },
+    Close {
+        range: Range<'a>,
+        account: Account<'a>,
+    },
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -76,27 +82,6 @@ pub struct Booking<'a> {
     pub debit: Account<'a>,
     pub quantity: Decimal<'a>,
     pub commodity: Commodity<'a>,
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Transaction<'a> {
-    pub range: Range<'a>,
-    pub description: QuotedString<'a>,
-    pub bookings: Vec<Booking<'a>>,
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Assertion<'a> {
-    pub range: Range<'a>,
-    pub account: Account<'a>,
-    pub amount: Decimal<'a>,
-    pub commodity: Commodity<'a>,
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Close<'a> {
-    pub range: Range<'a>,
-    pub account: Account<'a>,
 }
 
 #[derive(Eq, PartialEq, Debug)]

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use super::scanner::ParserError;
 use super::syntax::{
-    Account, Addon, Assertion, Booking, Close, Command, Commodity, Date,
-    Decimal, Directive, Open, Performance, Price, QuotedString, Transaction,
+    Account, Addon, Booking, Command, Commodity, Date, Decimal, Directive,
+    Performance, QuotedString,
 };
 
 pub struct Parser<'a> {
@@ -145,17 +145,15 @@ impl<'a> Parser<'a> {
         let date = self.parse_date().map_err(|e| e.update("parsing date"))?;
         self.scanner.read_space1()?;
         let command = match self.scanner.current() {
-            Some('p') => {
-                self.parse_price().map(Command::Price).map_err(|e| {
-                    self.error(
-                        start,
-                        Some("parsing 'price' directive".into()),
-                        Token::Custom("directive".into()),
-                        Token::Error(Box::new(e)),
-                    )
-                })?
-            }
-            Some('o') => self.parse_open().map(Command::Open).map_err(|e| {
+            Some('p') => self.parse_price().map_err(|e| {
+                self.error(
+                    start,
+                    Some("parsing 'price' directive".into()),
+                    Token::Custom("directive".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?,
+            Some('o') => self.parse_open().map_err(|e| {
                 self.error(
                     start,
                     Some("parsing 'open' directive".into()),
@@ -163,37 +161,30 @@ impl<'a> Parser<'a> {
                     Token::Error(Box::new(e)),
                 )
             })?,
-            Some('"') => self
-                .parse_transaction()
-                .map(Command::Transaction)
-                .map_err(|e| {
-                    self.error(
-                        start,
-                        Some("parsing 'transaction' directive".into()),
-                        Token::Custom("directive".into()),
-                        Token::Error(Box::new(e)),
-                    )
-                })?,
-            Some('b') => {
-                self.parse_assertion().map(Command::Assertion).map_err(|e| {
-                    self.error(
-                        start,
-                        Some("parsing 'balance' directive".into()),
-                        Token::Custom("directive".into()),
-                        Token::Error(Box::new(e)),
-                    )
-                })?
-            }
-            Some('c') => {
-                self.parse_close().map(Command::Close).map_err(|e| {
-                    self.error(
-                        start,
-                        Some("parsing 'close' directive".into()),
-                        Token::Custom("directive".into()),
-                        Token::Error(Box::new(e)),
-                    )
-                })?
-            }
+            Some('"') => self.parse_transaction().map_err(|e| {
+                self.error(
+                    start,
+                    Some("parsing 'transaction' directive".into()),
+                    Token::Custom("directive".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?,
+            Some('b') => self.parse_assertion().map_err(|e| {
+                self.error(
+                    start,
+                    Some("parsing 'balance' directive".into()),
+                    Token::Custom("directive".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?,
+            Some('c') => self.parse_close().map_err(|e| {
+                self.error(
+                    start,
+                    Some("parsing 'close' directive".into()),
+                    Token::Custom("directive".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?,
             o => {
                 return Err(self.error(
                     self.scanner.pos(),
@@ -268,7 +259,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_price(&self) -> Result<Price> {
+    pub fn parse_price(&self) -> Result<Command> {
         let start = self.scanner.pos();
         self.scanner.read_string("price")?;
         self.scanner.read_space1()?;
@@ -282,7 +273,7 @@ impl<'a> Parser<'a> {
         let target = self
             .parse_commodity()
             .map_err(|e| e.update("parsing target commodity"))?;
-        Ok(Price {
+        Ok(Command::Price {
             range: self.scanner.range_from(start),
             commodity,
             price,
@@ -290,19 +281,19 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_open(&self) -> Result<Open> {
+    pub fn parse_open(&self) -> Result<Command> {
         let start = self.scanner.pos();
         self.scanner.read_string("open")?;
         self.scanner.read_space1()?;
         let a =
             self.parse_account().map_err(|e| e.update("parsing account"))?;
-        Ok(Open {
+        Ok(Command::Open {
             range: self.scanner.range_from(start),
             account: a,
         })
     }
 
-    pub fn parse_transaction(&self) -> Result<Transaction> {
+    pub fn parse_transaction(&self) -> Result<Command> {
         let start = self.scanner.pos();
         let description = self.parse_quoted_string()?;
         self.scanner.read_rest_of_line()?;
@@ -316,7 +307,7 @@ impl<'a> Parser<'a> {
         }
         let range = self.scanner.range_from(start);
         self.scanner.read_rest_of_line()?;
-        Ok(Transaction {
+        Ok(Command::Transaction {
             range,
             description,
             bookings,
@@ -350,7 +341,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_assertion(&self) -> Result<Assertion> {
+    pub fn parse_assertion(&self) -> Result<Command> {
         let start = self.scanner.pos();
         self.scanner.read_string("balance")?;
         self.scanner.read_space1()?;
@@ -363,7 +354,7 @@ impl<'a> Parser<'a> {
         let commodity = self
             .parse_commodity()
             .map_err(|e| e.update("parsing commodity"))?;
-        Ok(Assertion {
+        Ok(Command::Assertion {
             range: self.scanner.range_from(start),
             account,
             amount,
@@ -371,14 +362,14 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_close(&self) -> Result<Close> {
+    pub fn parse_close(&self) -> Result<Command> {
         let start = self.scanner.pos();
         self.scanner.read_string("close")?;
         self.scanner.read_space1()?;
         let a = self
             .parse_account()
             .map_err(|e| e.update("parsing account").into())?;
-        Ok(Close {
+        Ok(Command::Close {
             range: self.scanner.range_from(start),
             account: a,
         })
@@ -623,7 +614,7 @@ mod tests {
     #[test]
     fn test_parse_open() {
         assert_eq!(
-            Ok(Open {
+            Ok(Command::Open {
                 range: Range::new(0, "open   Assets:Foo"),
                 account: Account {
                     range: Range::new(7, "Assets:Foo"),
@@ -671,7 +662,7 @@ mod tests {
     fn test_parse_transaction() {
         let s = "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD\nAssets:Foo Assets:Baz 8 USD";
         assert_eq!(
-            Ok(Transaction {
+            Ok(Command::Transaction {
                 range: Range::new(0, s),
                 description: QuotedString {
                     range: Range::new(0, r#""Message""#),
@@ -760,7 +751,7 @@ mod tests {
     #[test]
     fn test_parse_close() {
         assert_eq!(
-            Ok(Close {
+            Ok(Command::Close {
                 range: Range::new(0, "close  Assets:Foo"),
                 account: Account {
                     range: Range::new(7, "Assets:Foo"),
@@ -775,8 +766,6 @@ mod tests {
     }
 
     mod directive {
-        use crate::syntax::syntax::Price;
-
         use super::*;
         use pretty_assertions::assert_eq;
 
@@ -806,7 +795,7 @@ mod tests {
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
                     },
-                    command: Command::Open(Open {
+                    command: Command::Open {
                         range: Range::new(11, "open Assets:Foo"),
                         account: Account {
                             range: Range::new(16, "Assets:Foo"),
@@ -815,7 +804,7 @@ mod tests {
                                 Range::new(23, "Foo")
                             ]
                         }
-                    }),
+                    },
                 }),
                 Parser::new("2024-03-01 open Assets:Foo").parse_directive()
             )
@@ -829,7 +818,7 @@ mod tests {
                     date: Date {
                         range: Range::new(0, "2024-12-31"),
                     },
-                    command: Command::Transaction(Transaction {
+                    command: Command::Transaction {
                         range: Range::new(
                             11,
                             "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
@@ -861,7 +850,7 @@ mod tests {
                                 range: Range::new(50, "USD"),
                             }
                         },]
-                    }),
+                    },
                 }),
                 Parser::new(
                     "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
@@ -878,7 +867,7 @@ mod tests {
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
                     },
-                    command: Command::Close(Close {
+                    command: Command::Close {
                         range: Range::new(11, "close Assets:Foo"),
                         account: Account {
                             range: Range::new(17, "Assets:Foo"),
@@ -887,7 +876,7 @@ mod tests {
                                 Range::new(24, "Foo")
                             ]
                         }
-                    }),
+                    },
                 }),
                 Parser::new("2024-03-01 close Assets:Foo").parse_directive()
             )
@@ -901,7 +890,7 @@ mod tests {
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
                     },
-                    command: Command::Price(Price {
+                    command: Command::Price {
                         range: Range::new(11, "price FOO 1.543 BAR"),
                         commodity: Commodity {
                             range: Range::new(17, "FOO"),
@@ -912,7 +901,7 @@ mod tests {
                         target: Commodity {
                             range: Range::new(27, "BAR"),
                         }
-                    }),
+                    },
                 }),
                 Parser::new("2024-03-01 price FOO 1.543 BAR").parse_directive()
             )
@@ -929,7 +918,7 @@ mod tests {
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
                     },
-                    command: Command::Assertion(Assertion {
+                    command: Command::Assertion {
                         range: Range::new(11, "balance Assets:Foo 500.1 BAR"),
                         account: Account {
                             range: Range::new(19, "Assets:Foo"),
@@ -944,7 +933,7 @@ mod tests {
                         commodity: Commodity {
                             range: Range::new(36, "BAR"),
                         },
-                    }),
+                    },
                 }),
                 Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR")
                     .parse_directive()
