@@ -3,9 +3,8 @@ use std::path::PathBuf;
 
 use super::scanner::ParserError;
 use super::syntax::{
-    Account, Addon, Assertion, Booking, Close, Cmd, Command, Commodity, Date,
-    Decimal, Directive, Include, Open, Performance, Price, QuotedString,
-    Transaction,
+    Account, Addon, Assertion, Booking, Close, Cmd, Commodity, Date, Decimal,
+    Directive, Open, Performance, Price, QuotedString, Transaction,
 };
 
 pub struct Parser<'a> {
@@ -118,10 +117,8 @@ impl<'a> Parser<'a> {
 
     pub fn parse_directive(&self) -> Result<Directive> {
         match self.scanner.current() {
-            Some('i') => self.parse_include().map(Directive::Include),
-            Some(c) if c.is_ascii_digit() => {
-                self.parse_command().map(Directive::Dated)
-            }
+            Some('i') => self.parse_include(),
+            Some(c) if c.is_ascii_digit() => self.parse_command(),
             o => Err(self.error(
                 self.scanner.pos(),
                 None,
@@ -131,19 +128,19 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_include(&self) -> Result<Include> {
+    pub fn parse_include(&self) -> Result<Directive> {
         let start = self.scanner.pos();
         self.scanner.read_string("include")?;
         self.scanner.read_space1()?;
         let path =
             self.parse_quoted_string().map_err(|e| e.update("parsing path"))?;
-        Ok(Include {
+        Ok(Directive::Include {
             range: self.scanner.range_from(start),
             path,
         })
     }
 
-    pub fn parse_command(&self) -> Result<Command> {
+    pub fn parse_command(&self) -> Result<Directive> {
         let start = self.scanner.pos();
         let date = self.parse_date().map_err(|e| e.update("parsing date"))?;
         self.scanner.read_space1()?;
@@ -209,7 +206,7 @@ impl<'a> Parser<'a> {
         };
         let range = self.scanner.range_from(start);
         self.scanner.read_rest_of_line()?;
-        Ok(Command {
+        Ok(Directive::Command {
             range,
             date,
             command,
@@ -781,7 +778,7 @@ mod tests {
         #[test]
         fn parse_include() {
             assert_eq!(
-                Ok(Directive::Include(Include {
+                Ok(Directive::Include {
                     range: Range::new(
                         0,
                         r#"include "/foo/bar/baz/finance.knut""#
@@ -790,7 +787,7 @@ mod tests {
                         range: Range::new(8, r#""/foo/bar/baz/finance.knut""#),
                         content: Range::new(9, "/foo/bar/baz/finance.knut"),
                     }
-                })),
+                }),
                 Parser::new(r#"include "/foo/bar/baz/finance.knut""#)
                     .parse_directive()
             )
@@ -799,7 +796,7 @@ mod tests {
         #[test]
         fn parse_open() {
             assert_eq!(
-                Ok(Directive::Dated(Command {
+                Ok(Directive::Command {
                     range: Range::new(0, "2024-03-01 open Assets:Foo"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
@@ -814,7 +811,7 @@ mod tests {
                             ]
                         }
                     }),
-                })),
+                }),
                 Parser::new("2024-03-01 open Assets:Foo").parse_directive()
             )
         }
@@ -822,8 +819,7 @@ mod tests {
         #[test]
         fn parse_transaction() {
             assert_eq!(
-                Ok(Directive::Dated(
-                    Command {
+                Ok(Directive::Command {
                     range: Range::new(0, "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
                     date: Date {
                         range: Range::new(0, "2024-12-31"),
@@ -861,7 +857,7 @@ mod tests {
                             }
                         },]
                     }),
-                })),
+                }),
                 Parser::new(
                     "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
                 )
@@ -872,7 +868,7 @@ mod tests {
         #[test]
         fn parse_close() {
             assert_eq!(
-                Ok(Directive::Dated(Command {
+                Ok(Directive::Command {
                     range: Range::new(0, "2024-03-01 close Assets:Foo"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
@@ -887,7 +883,7 @@ mod tests {
                             ]
                         }
                     }),
-                })),
+                }),
                 Parser::new("2024-03-01 close Assets:Foo").parse_directive()
             )
         }
@@ -895,7 +891,7 @@ mod tests {
         #[test]
         fn parse_price() {
             assert_eq!(
-                Ok(Directive::Dated(Command {
+                Ok(Directive::Command {
                     range: Range::new(0, "2024-03-01 price FOO 1.543 BAR"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
@@ -912,7 +908,7 @@ mod tests {
                             range: Range::new(27, "BAR"),
                         }
                     }),
-                })),
+                }),
                 Parser::new("2024-03-01 price FOO 1.543 BAR").parse_directive()
             )
         }
@@ -920,7 +916,7 @@ mod tests {
         #[test]
         fn parse_assertion() {
             assert_eq!(
-                Ok(Directive::Dated(Command {
+                Ok(Directive::Command {
                     range: Range::new(
                         0,
                         "2024-03-01 balance Assets:Foo 500.1 BAR"
@@ -944,7 +940,7 @@ mod tests {
                             range: Range::new(36, "BAR"),
                         },
                     }),
-                })),
+                }),
                 Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR")
                     .parse_directive()
             )

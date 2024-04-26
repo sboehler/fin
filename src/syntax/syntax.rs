@@ -35,21 +35,15 @@ pub struct SourceFile<'a> {
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum Directive<'a> {
-    Include(Include<'a>),
-    Dated(Command<'a>),
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Include<'a> {
-    pub range: Range<'a>,
-    pub path: QuotedString<'a>,
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Command<'a> {
-    pub range: Range<'a>,
-    pub date: Date<'a>,
-    pub command: Cmd<'a>,
+    Include {
+        range: Range<'a>,
+        path: QuotedString<'a>,
+    },
+    Command {
+        range: Range<'a>,
+        date: Date<'a>,
+        command: Cmd<'a>,
+    },
 }
 
 #[derive(Eq, PartialEq, Debug)]
