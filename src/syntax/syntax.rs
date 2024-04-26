@@ -104,3 +104,17 @@ pub struct Close<'a> {
     pub range: Range<'a>,
     pub account: Account<'a>,
 }
+
+#[derive(Eq, PartialEq, Debug)]
+pub enum Addon<'a> {
+    Performance {
+        range: Range<'a>,
+        performance: Performance<'a>,
+    },
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Performance<'a> {
+    pub range: Range<'a>,
+    pub commodities: Vec<Commodity<'a>>,
+}

@@ -3,8 +3,9 @@ use std::path::PathBuf;
 
 use super::scanner::ParserError;
 use super::syntax::{
-    Account, Assertion, Booking, Close, Cmd, Command, Commodity, Date, Decimal,
-    Directive, Include, Open, Price, QuotedString, Transaction,
+    Account, Addon, Assertion, Booking, Close, Cmd, Command, Commodity, Date,
+    Decimal, Directive, Include, Open, Performance, Price, QuotedString,
+    Transaction,
 };
 
 pub struct Parser<'a> {
@@ -212,6 +213,56 @@ impl<'a> Parser<'a> {
             range,
             date,
             command,
+        })
+    }
+
+    pub fn parse_addon(&self) -> Result<Addon> {
+        let start = self.scanner.pos();
+        self.scanner.read_char('@')?;
+        match self.scanner.current() {
+            Some('p') => self
+                .parse_performance()
+                .map(|p| Addon::Performance {
+                    range: self.scanner.range_from(start),
+                    performance: p,
+                })
+                .map_err(|e| e.update("parsing performance")),
+            o => Err(self.error(
+                self.scanner.pos(),
+                Some("parsing addon".into()),
+                Token::Either(vec![Token::Custom("performance".into())]),
+                o.map(Token::Char).unwrap_or(Token::EOF),
+            )),
+        }
+    }
+
+    pub fn parse_performance(&self) -> Result<Performance> {
+        let start = self.scanner.pos();
+        self.scanner.read_string("performance".into())?;
+        self.scanner.read_char('(')?;
+        self.scanner.read_space();
+        let mut commodities = Vec::new();
+        while self
+            .scanner
+            .current()
+            .map(|c| c.is_alphanumeric())
+            .unwrap_or(false)
+        {
+            commodities.push(
+                self.parse_commodity()
+                    .map_err(|e| e.update("parsing commodity"))?,
+            );
+            self.scanner.read_space();
+            if let Some(',') = self.scanner.current() {
+                self.scanner.read_char(',')?;
+                self.scanner.read_space();
+            }
+        }
+        self.scanner.read_char(')')?;
+        let range = self.scanner.range_from(start);
+        Ok(Performance {
+            range,
+            commodities,
         })
     }
 
@@ -501,6 +552,70 @@ mod tests {
             )),
             Parser::new("foo").parse_decimal(),
         );
+    }
+    #[test]
+    fn test_parse_performance() {
+        assert_eq!(
+            Ok(Performance {
+                range: Range::new(0, "performance( USD  , VT)"),
+                commodities: vec![
+                    Commodity {
+                        range: Range::new(13, "USD")
+                    },
+                    Commodity {
+                        range: Range::new(20, "VT")
+                    },
+                ]
+            }),
+            Parser::new("performance( USD  , VT)").parse_performance()
+        );
+        assert_eq!(
+            Ok(Performance {
+                range: Range::new(0, "performance(  )"),
+                commodities: vec![]
+            }),
+            Parser::new("performance(  )").parse_performance()
+        )
+    }
+
+    mod addon {
+        use crate::syntax::{
+            parser::Parser,
+            scanner::Range,
+            syntax::{Addon, Commodity, Performance},
+        };
+        use pretty_assertions::assert_eq;
+
+        #[test]
+        fn performance() {
+            assert_eq!(
+                Ok(Addon::Performance {
+                    range: Range::new(0, "@performance( USD  , VT)"),
+                    performance: Performance {
+                        range: Range::new(1, "performance( USD  , VT)"),
+                        commodities: vec![
+                            Commodity {
+                                range: Range::new(14, "USD")
+                            },
+                            Commodity {
+                                range: Range::new(21, "VT")
+                            },
+                        ]
+                    }
+                }),
+                Parser::new("@performance( USD  , VT)").parse_addon()
+            );
+            assert_eq!(
+                Ok(Addon::Performance {
+                    range: Range::new(0, "@performance(  )"),
+                    performance: Performance {
+                        range: Range::new(1, "performance(  )"),
+                        commodities: vec![]
+                    }
+                }),
+                Parser::new("@performance(  )").parse_addon(),
+            )
+        }
     }
 
     #[test]
