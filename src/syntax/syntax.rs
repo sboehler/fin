@@ -42,12 +42,12 @@ pub enum Directive<'a> {
     Command {
         range: Range<'a>,
         date: Date<'a>,
-        command: Cmd<'a>,
+        command: Command<'a>,
     },
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub enum Cmd<'a> {
+pub enum Command<'a> {
     Price(Price<'a>),
     Open(Open<'a>),
     Transaction(Transaction<'a>),
