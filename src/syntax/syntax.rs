@@ -39,7 +39,7 @@ pub enum Directive<'a> {
         range: Range<'a>,
         path: QuotedString<'a>,
     },
-    Command {
+    Dated {
         range: Range<'a>,
         date: Date<'a>,
         command: Command<'a>,
@@ -88,12 +88,6 @@ pub struct Booking<'a> {
 pub enum Addon<'a> {
     Performance {
         range: Range<'a>,
-        performance: Performance<'a>,
+        commodities: Vec<Commodity<'a>>,
     },
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Performance<'a> {
-    pub range: Range<'a>,
-    pub commodities: Vec<Commodity<'a>>,
 }

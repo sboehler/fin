@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use super::scanner::ParserError;
 use super::syntax::{
     Account, Addon, Booking, Command, Commodity, Date, Decimal, Directive,
-    Performance, QuotedString,
+    QuotedString,
 };
 
 pub struct Parser<'a> {
@@ -202,7 +202,7 @@ impl<'a> Parser<'a> {
         };
         let range = self.scanner.range_from(start);
         self.scanner.read_rest_of_line()?;
-        Ok(Directive::Command {
+        Ok(Directive::Dated {
             range,
             date,
             command,
@@ -212,26 +212,25 @@ impl<'a> Parser<'a> {
     pub fn parse_addon(&self) -> Result<Addon> {
         let start = self.scanner.pos();
         self.scanner.read_char('@')?;
-        match self.scanner.current() {
-            Some('p') => self
-                .parse_performance()
-                .map(|p| Addon::Performance {
-                    range: self.scanner.range_from(start),
-                    performance: p,
-                })
+        let name = self.scanner.read_while_1(
+            Token::Either(vec![Token::Custom("@performance".into())]),
+            |c| c.is_alphabetic(),
+        )?;
+        match name.str {
+            "performance" => self
+                .parse_performance(start)
                 .map_err(|e| e.update("parsing performance")),
             o => Err(self.error(
                 self.scanner.pos(),
                 Some("parsing addon".into()),
-                Token::Either(vec![Token::Custom("performance".into())]),
-                o.map(Token::Char).unwrap_or(Token::EOF),
+                Token::Either(vec![Token::Custom("@performance".into())]),
+                Token::Custom(o.into()),
             )),
         }
     }
 
-    pub fn parse_performance(&self) -> Result<Performance> {
-        let start = self.scanner.pos();
-        self.scanner.read_string("performance".into())?;
+    pub fn parse_performance(&self, start: usize) -> Result<Addon> {
+        self.scanner.read_space();
         self.scanner.read_char('(')?;
         self.scanner.read_space();
         let mut commodities = Vec::new();
@@ -253,7 +252,7 @@ impl<'a> Parser<'a> {
         }
         self.scanner.read_char(')')?;
         let range = self.scanner.range_from(start);
-        Ok(Performance {
+        Ok(Addon::Performance {
             range,
             commodities,
         })
@@ -546,36 +545,12 @@ mod tests {
             Parser::new("foo").parse_decimal(),
         );
     }
-    #[test]
-    fn test_parse_performance() {
-        assert_eq!(
-            Ok(Performance {
-                range: Range::new(0, "performance( USD  , VT)"),
-                commodities: vec![
-                    Commodity {
-                        range: Range::new(13, "USD")
-                    },
-                    Commodity {
-                        range: Range::new(20, "VT")
-                    },
-                ]
-            }),
-            Parser::new("performance( USD  , VT)").parse_performance()
-        );
-        assert_eq!(
-            Ok(Performance {
-                range: Range::new(0, "performance(  )"),
-                commodities: vec![]
-            }),
-            Parser::new("performance(  )").parse_performance()
-        )
-    }
 
     mod addon {
         use crate::syntax::{
             parser::Parser,
             scanner::Range,
-            syntax::{Addon, Commodity, Performance},
+            syntax::{Addon, Commodity},
         };
         use pretty_assertions::assert_eq;
 
@@ -584,27 +559,22 @@ mod tests {
             assert_eq!(
                 Ok(Addon::Performance {
                     range: Range::new(0, "@performance( USD  , VT)"),
-                    performance: Performance {
-                        range: Range::new(1, "performance( USD  , VT)"),
-                        commodities: vec![
-                            Commodity {
-                                range: Range::new(14, "USD")
-                            },
-                            Commodity {
-                                range: Range::new(21, "VT")
-                            },
-                        ]
-                    }
+
+                    commodities: vec![
+                        Commodity {
+                            range: Range::new(14, "USD")
+                        },
+                        Commodity {
+                            range: Range::new(21, "VT")
+                        },
+                    ]
                 }),
                 Parser::new("@performance( USD  , VT)").parse_addon()
             );
             assert_eq!(
                 Ok(Addon::Performance {
                     range: Range::new(0, "@performance(  )"),
-                    performance: Performance {
-                        range: Range::new(1, "performance(  )"),
-                        commodities: vec![]
-                    }
+                    commodities: vec![]
                 }),
                 Parser::new("@performance(  )").parse_addon(),
             )
@@ -790,7 +760,7 @@ mod tests {
         #[test]
         fn parse_open() {
             assert_eq!(
-                Ok(Directive::Command {
+                Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 open Assets:Foo"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
@@ -813,7 +783,7 @@ mod tests {
         #[test]
         fn parse_transaction() {
             assert_eq!(
-                Ok(Directive::Command {
+                Ok(Directive::Dated {
                     range: Range::new(0, "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
                     date: Date {
                         range: Range::new(0, "2024-12-31"),
@@ -862,7 +832,7 @@ mod tests {
         #[test]
         fn parse_close() {
             assert_eq!(
-                Ok(Directive::Command {
+                Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 close Assets:Foo"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
@@ -885,7 +855,7 @@ mod tests {
         #[test]
         fn parse_price() {
             assert_eq!(
-                Ok(Directive::Command {
+                Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 price FOO 1.543 BAR"),
                     date: Date {
                         range: Range::new(0, "2024-03-01"),
@@ -910,7 +880,7 @@ mod tests {
         #[test]
         fn parse_assertion() {
             assert_eq!(
-                Ok(Directive::Command {
+                Ok(Directive::Dated {
                     range: Range::new(
                         0,
                         "2024-03-01 balance Assets:Foo 500.1 BAR"
