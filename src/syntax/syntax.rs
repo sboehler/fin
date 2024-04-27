@@ -90,4 +90,11 @@ pub enum Addon<'a> {
         range: Range<'a>,
         commodities: Vec<Commodity<'a>>,
     },
+    Accrual {
+        range: Range<'a>,
+        interval: Range<'a>,
+        start: Date<'a>,
+        end: Date<'a>,
+        account: Account<'a>,
+    },
 }

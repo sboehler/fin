@@ -238,6 +238,9 @@ impl<'a> Parser<'a> {
             "performance" => self
                 .parse_performance(start)
                 .map_err(|e| e.update("parsing performance")),
+            "accrue" => self
+                .parse_accrual(start)
+                .map_err(|e| e.update("parsing accrual")),
             o => Err(self.error(
                 self.scanner.pos(),
                 Some("parsing addon".into()),
@@ -273,6 +276,29 @@ impl<'a> Parser<'a> {
         Ok(Addon::Performance {
             range,
             commodities,
+        })
+    }
+
+    pub fn parse_accrual(&self, start: usize) -> Result<Addon> {
+        self.scanner.read_space1()?;
+        let interval =
+            self.parse_interval().map_err(|e| e.update("parsing interval"))?;
+        self.scanner.read_space1()?;
+        let start_date =
+            self.parse_date().map_err(|e| e.update("parsing start date"))?;
+        self.scanner.read_space1()?;
+        let end_date =
+            self.parse_date().map_err(|e| e.update("parsing end date"))?;
+        self.scanner.read_space1()?;
+        let account = self
+            .parse_account()
+            .map_err(|e| e.update("parsing accrual account"))?;
+        Ok(Addon::Accrual {
+            range: self.scanner.range_from(start),
+            interval: interval,
+            start: start_date,
+            end: end_date,
+            account: account,
         })
     }
 
@@ -596,7 +622,7 @@ mod tests {
         use crate::syntax::{
             parser::Parser,
             scanner::Range,
-            syntax::{Addon, Commodity},
+            syntax::{Account, Addon, Commodity, Date},
         };
         use pretty_assertions::assert_eq;
 
@@ -623,6 +649,36 @@ mod tests {
                     commodities: vec![]
                 }),
                 Parser::new("@performance(  )").parse_addon(),
+            )
+        }
+
+        #[test]
+        fn accrual() {
+            assert_eq!(
+                Ok(Addon::Accrual {
+                    range: Range::new(
+                        0,
+                        "@accrue monthly 2024-01-01 2024-12-31 Assets:Payables"
+                    ),
+                    interval: Range::new(8, "monthly"),
+                    start: Date {
+                        range: Range::new(16, "2024-01-01")
+                    },
+                    end: Date {
+                        range: Range::new(27, "2024-12-31")
+                    },
+                    account: Account {
+                        range: Range::new(38, "Assets:Payables"),
+                        segments: vec![
+                            Range::new(38, "Assets"),
+                            Range::new(45, "Payables")
+                        ]
+                    }
+                }),
+                Parser::new(
+                    "@accrue monthly 2024-01-01 2024-12-31 Assets:Payables"
+                )
+                .parse_addon()
             )
         }
     }
