@@ -98,6 +98,7 @@ pub enum Token {
     AlphaNum,
     Either(Vec<Token>),
     Decimal,
+    Interval,
     Any,
     Date,
     WhiteSpace,
@@ -123,6 +124,10 @@ impl std::fmt::Display for Token {
             Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
             Self::Digit => write!(f, "a digit (0-9)"),
             Self::Decimal => write!(f, "a decimal number"),
+            Self::Interval => write!(
+                f,
+                "a time interval (daily, monthly, quarterly, yearly, once)"
+            ),
             Self::Date => write!(f, "a date"),
             Self::AlphaNum => {
                 write!(f, "a character (a-z, A-Z) or a digit (0-9)")

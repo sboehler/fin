@@ -1,7 +1,7 @@
 use crate::syntax::scanner::{Result, Scanner, Token};
 use std::path::PathBuf;
 
-use super::scanner::ParserError;
+use super::scanner::{ParserError, Range};
 use super::syntax::{
     Account, Addon, Booking, Command, Commodity, Date, Decimal, Directive,
     QuotedString,
@@ -87,6 +87,24 @@ impl<'a> Parser<'a> {
         Ok(Date {
             range: self.scanner.range_from(start),
         })
+    }
+
+    pub fn parse_interval(&self) -> Result<Range> {
+        let start = self.scanner.pos();
+        match self.scanner.current() {
+            Some('d') => self.scanner.read_string("daily"),
+            Some('w') => self.scanner.read_string("weekly"),
+            Some('m') => self.scanner.read_string("monthly"),
+            Some('q') => self.scanner.read_string("quarterly"),
+            Some('y') => self.scanner.read_string("yearly"),
+            Some('o') => self.scanner.read_string("once"),
+            o => Err(self.error(
+                start,
+                None,
+                Token::Interval,
+                o.map_or(Token::EOF, Token::Char),
+            )),
+        }
     }
 
     pub fn parse_decimal(&self) -> Result<Decimal> {
@@ -511,6 +529,34 @@ mod tests {
             )),
             Parser::new("2024-0--0").parse_date()
         )
+    }
+
+    #[test]
+    fn test_parse_interval() {
+        assert_eq!(
+            Ok(Range::new(0, "daily")),
+            Parser::new("daily").parse_interval(),
+        );
+        assert_eq!(
+            Ok(Range::new(0, "weekly")),
+            Parser::new("weekly").parse_interval(),
+        );
+        assert_eq!(
+            Ok(Range::new(0, "monthly")),
+            Parser::new("monthly").parse_interval(),
+        );
+        assert_eq!(
+            Ok(Range::new(0, "quarterly")),
+            Parser::new("quarterly").parse_interval(),
+        );
+        assert_eq!(
+            Ok(Range::new(0, "yearly")),
+            Parser::new("yearly").parse_interval(),
+        );
+        assert_eq!(
+            Ok(Range::new(0, "once")),
+            Parser::new("once").parse_interval(),
+        );
     }
 
     #[test]
