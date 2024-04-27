@@ -1,9 +1,7 @@
 use super::scanner::Range;
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct Commodity<'a> {
-    pub range: Range<'a>,
-}
+pub struct Commodity<'a>(pub Range<'a>);
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Account<'a> {
@@ -12,14 +10,10 @@ pub struct Account<'a> {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Date<'a> {
-    pub range: Range<'a>,
-}
+pub struct Date<'a>(pub Range<'a>);
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Decimal<'a> {
-    pub range: Range<'a>,
-}
+pub struct Decimal<'a>(pub Range<'a>);
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct QuotedString<'a> {

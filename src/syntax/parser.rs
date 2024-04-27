@@ -66,9 +66,7 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_identifier()
             .map_err(|e| e.update("parsing commodity"))
-            .map(|range| Commodity {
-                range,
-            })
+            .map(Commodity)
     }
 
     pub fn parse_date(&self) -> Result<Date> {
@@ -84,9 +82,7 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
             .map_err(|e| e.update("parsing day".into()))?;
-        Ok(Date {
-            range: self.scanner.range_from(start),
-        })
+        Ok(Date(self.scanner.range_from(start)))
     }
 
     pub fn parse_interval(&self) -> Result<Range> {
@@ -117,9 +113,7 @@ impl<'a> Parser<'a> {
             self.scanner.read_char('.')?;
             self.scanner.read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
         }
-        Ok(Decimal {
-            range: self.scanner.range_from(start),
-        })
+        Ok(Decimal(self.scanner.range_from(start)))
     }
 
     pub fn parse_quoted_string(&self) -> Result<QuotedString> {
@@ -430,15 +424,11 @@ mod tests {
     #[test]
     fn test_parse_commodity() {
         assert_eq!(
-            Ok(Commodity {
-                range: Range::new(0, "USD"),
-            }),
+            Ok(Commodity(Range::new(0, "USD"))),
             Parser::new("USD").parse_commodity(),
         );
         assert_eq!(
-            Ok(Commodity {
-                range: Range::new(0, "1FOO"),
-            }),
+            Ok(Commodity(Range::new(0, "1FOO"))),
             Parser::new("1FOO  ").parse_commodity(),
         );
         assert_eq!(
@@ -511,15 +501,11 @@ mod tests {
     #[test]
     fn test_parse_date() {
         assert_eq!(
-            Ok(Date {
-                range: Range::new(0, "0202-02-02"),
-            }),
+            Ok(Date(Range::new(0, "0202-02-02"))),
             Parser::new("0202-02-02").parse_date(),
         );
         assert_eq!(
-            Ok(Date {
-                range: Range::new(0, "2024-02-02"),
-            }),
+            Ok(Date(Range::new(0, "2024-02-02"))),
             Parser::new("2024-02-02").parse_date(),
         );
         assert_eq!(
@@ -588,21 +574,15 @@ mod tests {
     #[test]
     fn test_parse_decimal() {
         assert_eq!(
-            Ok(Decimal {
-                range: Range::new(0, "0"),
-            }),
+            Ok(Decimal(Range::new(0, "0"))),
             Parser::new("0").parse_decimal(),
         );
         assert_eq!(
-            Ok(Decimal {
-                range: Range::new(0, "10.01"),
-            }),
+            Ok(Decimal(Range::new(0, "10.01"))),
             Parser::new("10.01").parse_decimal(),
         );
         assert_eq!(
-            Ok(Decimal {
-                range: Range::new(0, "-10.01"),
-            }),
+            Ok(Decimal(Range::new(0, "-10.01"))),
             Parser::new("-10.01").parse_decimal(),
         );
         assert_eq!(
@@ -633,12 +613,8 @@ mod tests {
                     range: Range::new(0, "@performance( USD  , VT)"),
 
                     commodities: vec![
-                        Commodity {
-                            range: Range::new(14, "USD")
-                        },
-                        Commodity {
-                            range: Range::new(21, "VT")
-                        },
+                        Commodity(Range::new(14, "USD")),
+                        Commodity(Range::new(21, "VT")),
                     ]
                 }),
                 Parser::new("@performance( USD  , VT)").parse_addon()
@@ -661,12 +637,8 @@ mod tests {
                         "@accrue monthly 2024-01-01 2024-12-31 Assets:Payables"
                     ),
                     interval: Range::new(8, "monthly"),
-                    start: Date {
-                        range: Range::new(16, "2024-01-01")
-                    },
-                    end: Date {
-                        range: Range::new(27, "2024-12-31")
-                    },
+                    start: Date(Range::new(16, "2024-01-01")),
+                    end: Date(Range::new(27, "2024-12-31")),
                     account: Account {
                         range: Range::new(38, "Assets:Payables"),
                         segments: vec![
@@ -719,12 +691,8 @@ mod tests {
                         Range::new(18, "Bar")
                     ]
                 },
-                quantity: Decimal {
-                    range: Range::new(22, "4.23"),
-                },
-                commodity: Commodity {
-                    range: Range::new(27, "BAZ"),
-                }
+                quantity: Decimal(Range::new(22, "4.23")),
+                commodity: Commodity(Range::new(27, "BAZ")),
             }),
             Parser::new("Assets:Foo Assets:Bar 4.23 BAZ").parse_booking()
         )
@@ -757,12 +725,8 @@ mod tests {
                                 Range::new(30, "Bar")
                             ]
                         },
-                        quantity: Decimal {
-                            range: Range::new(34, "4.23"),
-                        },
-                        commodity: Commodity {
-                            range: Range::new(39, "USD"),
-                        }
+                        quantity: Decimal(Range::new(34, "4.23")),
+                        commodity: Commodity(Range::new(39, "USD")),
                     },
                     Booking {
                         range: Range::new(43, "Assets:Foo Assets:Baz 8 USD"),
@@ -780,12 +744,8 @@ mod tests {
                                 Range::new(61, "Baz")
                             ]
                         },
-                        quantity: Decimal {
-                            range: Range::new(65, "8"),
-                        },
-                        commodity: Commodity {
-                            range: Range::new(67, "USD"),
-                        }
+                        quantity: Decimal(Range::new(65, "8")),
+                        commodity: Commodity(Range::new(67, "USD")),
                     }
                 ]
             }),
@@ -864,9 +824,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 open Assets:Foo"),
-                    date: Date {
-                        range: Range::new(0, "2024-03-01"),
-                    },
+                    date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Open {
                         range: Range::new(11, "open Assets:Foo"),
                         account: Account {
@@ -887,9 +845,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Range::new(0, "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
-                    date: Date {
-                        range: Range::new(0, "2024-12-31"),
-                    },
+                    date: Date (Range::new(0, "2024-12-31")),
                     command: Command::Transaction {
                         range: Range::new(
                             11,
@@ -915,12 +871,8 @@ mod tests {
                                     Range::new(41, "Bar")
                                 ]
                             },
-                            quantity: Decimal {
-                                range: Range::new(45, "4.23"),
-                            },
-                            commodity: Commodity {
-                                range: Range::new(50, "USD"),
-                            }
+                            quantity: Decimal( Range::new(45, "4.23")),
+                            commodity: Commodity (Range::new(50, "USD")),
                         },]
                     },
                 }),
@@ -936,9 +888,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 close Assets:Foo"),
-                    date: Date {
-                        range: Range::new(0, "2024-03-01"),
-                    },
+                    date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Close {
                         range: Range::new(11, "close Assets:Foo"),
                         account: Account {
@@ -959,20 +909,12 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 price FOO 1.543 BAR"),
-                    date: Date {
-                        range: Range::new(0, "2024-03-01"),
-                    },
+                    date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Price {
                         range: Range::new(11, "price FOO 1.543 BAR"),
-                        commodity: Commodity {
-                            range: Range::new(17, "FOO"),
-                        },
-                        price: Decimal {
-                            range: Range::new(21, "1.543"),
-                        },
-                        target: Commodity {
-                            range: Range::new(27, "BAR"),
-                        }
+                        commodity: Commodity(Range::new(17, "FOO")),
+                        price: Decimal(Range::new(21, "1.543")),
+                        target: Commodity(Range::new(27, "BAR")),
                     },
                 }),
                 Parser::new("2024-03-01 price FOO 1.543 BAR").parse_directive()
@@ -987,9 +929,7 @@ mod tests {
                         0,
                         "2024-03-01 balance Assets:Foo 500.1 BAR"
                     ),
-                    date: Date {
-                        range: Range::new(0, "2024-03-01"),
-                    },
+                    date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Assertion {
                         range: Range::new(11, "balance Assets:Foo 500.1 BAR"),
                         account: Account {
@@ -999,12 +939,8 @@ mod tests {
                                 Range::new(26, "Foo")
                             ],
                         },
-                        amount: Decimal {
-                            range: Range::new(30, "500.1"),
-                        },
-                        commodity: Commodity {
-                            range: Range::new(36, "BAR"),
-                        },
+                        amount: Decimal(Range::new(30, "500.1")),
+                        commodity: Commodity(Range::new(36, "BAR")),
                     },
                 }),
                 Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR")
