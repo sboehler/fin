@@ -93,8 +93,11 @@ pub type Result<T> = std::result::Result<T, ParserError>;
 #[derive(Debug, Eq, PartialEq)]
 pub enum Token {
     EOF,
+    BlankLine,
     Char(char),
     Digit,
+    Comment,
+    Directive,
     AlphaNum,
     Either(Vec<Token>),
     Decimal,
@@ -124,6 +127,9 @@ impl std::fmt::Display for Token {
             Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
             Self::Digit => write!(f, "a digit (0-9)"),
             Self::Decimal => write!(f, "a decimal number"),
+            Self::Directive => write!(f, "a directive"),
+            Self::BlankLine => write!(f, "a blank line"),
+            Self::Comment => write!(f, "a comment"),
             Self::Interval => write!(
                 f,
                 "a time interval (daily, monthly, quarterly, yearly, once)"
@@ -155,7 +161,7 @@ mod test_parser_error {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn test_read_while() {
+    fn test_parser_error() {
         assert_eq!(
             vec![
                 "",

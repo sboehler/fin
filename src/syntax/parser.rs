@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use super::scanner::{ParserError, Range};
 use super::syntax::{
     Account, Addon, Booking, Command, Commodity, Date, Decimal, Directive,
-    QuotedString,
+    QuotedString, SourceFile,
 };
 
 pub struct Parser<'a> {
@@ -127,10 +127,89 @@ impl<'a> Parser<'a> {
         })
     }
 
+    pub fn parse_file(&self) -> Result<SourceFile> {
+        let start = self.scanner.pos();
+        let mut directives = Vec::new();
+        while self.scanner.current().is_some() {
+            match self.scanner.current() {
+                Some('*') | Some('/') | Some('#') => {
+                    self.parse_comment()
+                        .map_err(|e| e.update("parsing comment"))?;
+                }
+                Some(c) if c.is_alphanumeric() || c == '@' => {
+                    let d = self.parse_directive().map_err(|e| {
+                        self.error(
+                            self.scanner.pos(),
+                            Some("parsing directive".into()),
+                            Token::Directive,
+                            Token::Error(Box::new(e)),
+                        )
+                    })?;
+                    directives.push(d)
+                }
+                Some(c) if c.is_whitespace() => {
+                    self.scanner
+                        .read_rest_of_line()
+                        .map_err(|e| e.update("parsing blank line"))?;
+                }
+                o => {
+                    return Err(self.error(
+                        start,
+                        None,
+                        Token::Either(vec![
+                            Token::Directive,
+                            Token::Comment,
+                            Token::BlankLine,
+                        ]),
+                        o.map_or(Token::EOF, Token::Char),
+                    ))
+                }
+            }
+        }
+        Ok(SourceFile {
+            range: self.scanner.range_from(start),
+            directives,
+        })
+    }
+
+    pub fn parse_comment(&self) -> Result<Range> {
+        let start = self.scanner.pos();
+        match self.scanner.current() {
+            Some('#') | Some('*') => {
+                self.scanner.read_until(|c| c == '\n');
+                let range = self.scanner.range_from(start);
+                self.scanner.read_rest_of_line()?;
+                Ok(range)
+            }
+            Some('/') => {
+                self.scanner.read_string("//")?;
+                self.scanner.read_until(|c| c == '\n');
+                let range = self.scanner.range_from(start);
+                self.scanner.read_rest_of_line()?;
+                Ok(range)
+            }
+            o => Err(self.error(
+                start,
+                None,
+                Token::Comment,
+                o.map_or(Token::EOF, Token::Char),
+            )),
+        }
+    }
+
     pub fn parse_directive(&self) -> Result<Directive> {
         match self.scanner.current() {
             Some('i') => self.parse_include(),
-            Some(c) if c.is_ascii_digit() => self.parse_command(),
+            Some(c) if c.is_ascii_digit() || c == '@' => {
+                self.parse_command().map_err(|e| {
+                    self.error(
+                        self.scanner.pos(),
+                        Some("parsing command".into()),
+                        Token::Directive,
+                        Token::Error(Box::new(e)),
+                    )
+                })
+            }
             o => Err(self.error(
                 self.scanner.pos(),
                 None,
@@ -154,6 +233,11 @@ impl<'a> Parser<'a> {
 
     pub fn parse_command(&self) -> Result<Directive> {
         let start = self.scanner.pos();
+        let mut addons = Vec::new();
+        while let Some('@') = self.scanner.current() {
+            addons.push(self.parse_addon()?);
+            self.scanner.read_rest_of_line()?;
+        }
         let date = self.parse_date().map_err(|e| e.update("parsing date"))?;
         self.scanner.read_space1()?;
         let command = match self.scanner.current() {
@@ -216,9 +300,22 @@ impl<'a> Parser<'a> {
         self.scanner.read_rest_of_line()?;
         Ok(Directive::Dated {
             range,
+            addons,
             date,
             command,
         })
+    }
+
+    pub fn parse_addonified_transaction(&self) -> Result<Command> {
+        let mut addons = Vec::new();
+        loop {
+            addons.push(self.parse_addon()?);
+            self.scanner.read_rest_of_line()?;
+            if self.scanner.current().map(|c| c != '@').unwrap_or(false) {
+                break;
+            }
+        }
+        self.parse_transaction()
     }
 
     pub fn parse_addon(&self) -> Result<Addon> {
@@ -336,14 +433,20 @@ impl<'a> Parser<'a> {
         self.scanner.read_rest_of_line()?;
         let mut bookings = Vec::new();
         loop {
-            bookings.push(self.parse_booking()?);
-            match self.scanner.current() {
-                Some(c) if c.is_alphanumeric() => continue,
-                _ => break,
+            bookings.push(self.parse_booking().map_err(|e| {
+                self.error(
+                    self.scanner.pos(),
+                    Some("parsing booking".into()),
+                    Token::Custom("booking".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?);
+            self.scanner.read_rest_of_line()?;
+            if !self.scanner.current().map_or(false, |c| c.is_alphanumeric()) {
+                break;
             }
         }
         let range = self.scanner.range_from(start);
-        self.scanner.read_rest_of_line()?;
         Ok(Command::Transaction {
             range,
             description,
@@ -368,7 +471,6 @@ impl<'a> Parser<'a> {
             .parse_commodity()
             .map_err(|e| e.update("parsing commodity"))?;
         let range = self.scanner.range_from(start);
-        self.scanner.read_rest_of_line()?;
         Ok(Booking {
             range: range,
             credit,
@@ -824,6 +926,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 open Assets:Foo"),
+                    addons: Vec::new(),
                     date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Open {
                         range: Range::new(11, "open Assets:Foo"),
@@ -845,6 +948,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Range::new(0, "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
+                    addons: Vec::new(),
                     date: Date (Range::new(0, "2024-12-31")),
                     command: Command::Transaction {
                         range: Range::new(
@@ -888,6 +992,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 close Assets:Foo"),
+                    addons: Vec::new(),
                     date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Close {
                         range: Range::new(11, "close Assets:Foo"),
@@ -909,6 +1014,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Range::new(0, "2024-03-01 price FOO 1.543 BAR"),
+                    addons: Vec::new(),
                     date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Price {
                         range: Range::new(11, "price FOO 1.543 BAR"),
@@ -929,6 +1035,7 @@ mod tests {
                         0,
                         "2024-03-01 balance Assets:Foo 500.1 BAR"
                     ),
+                    addons: Vec::new(),
                     date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Assertion {
                         range: Range::new(11, "balance Assets:Foo 500.1 BAR"),

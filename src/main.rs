@@ -17,5 +17,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     match &cli.command {
         commands::Commands::Print(p) => p.run(),
         commands::Commands::Parse(p) => p.run(),
+        commands::Commands::Syntax(p) => p.run(),
     }
 }

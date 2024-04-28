@@ -35,6 +35,7 @@ pub enum Directive<'a> {
     },
     Dated {
         range: Range<'a>,
+        addons: Vec<Addon<'a>>,
         date: Date<'a>,
         command: Command<'a>,
     },
