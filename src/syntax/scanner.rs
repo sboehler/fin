@@ -214,14 +214,20 @@ impl<'a> Range<'a> {
     }
 }
 
-pub struct Scanner<'a> {
-    pub source: &'a str,
+pub struct Scanner<'a, 'b> {
+    pub source: &'b str,
     pub filename: Option<PathBuf>,
     chars: RefCell<Peekable<CharIndices<'a>>>,
 }
 
-impl<'a> Scanner<'a> {
-    pub fn new_from_file(s: &'a str, filename: Option<PathBuf>) -> Scanner<'a> {
+impl<'a, 'b> Scanner<'a, 'b> {
+    pub fn new_from_file(
+        s: &'a str,
+        filename: Option<PathBuf>,
+    ) -> Scanner<'a, 'b>
+    where
+        'a: 'b,
+    {
         Scanner {
             source: s,
             filename,
@@ -229,11 +235,14 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn new(s: &'a str) -> Scanner<'a> {
+    pub fn new(s: &'a str) -> Scanner<'a, 'b>
+    where
+        'a: 'b,
+    {
         Scanner::new_from_file(s, None)
     }
 
-    pub fn range_from(&self, start: usize) -> Range {
+    pub fn range_from(&self, start: usize) -> Range<'b> {
         Range::new(start, &self.source[start..self.pos()])
     }
 
@@ -253,7 +262,7 @@ impl<'a> Scanner<'a> {
             .unwrap_or_else(|| self.source.as_bytes().len())
     }
 
-    pub fn read_while_1<P>(&self, token: Token, pred: P) -> Result<Range>
+    pub fn read_while_1<P>(&self, token: Token, pred: P) -> Result<Range<'b>>
     where
         P: Fn(char) -> bool,
     {
@@ -268,7 +277,7 @@ impl<'a> Scanner<'a> {
         Ok(self.read_while(pred))
     }
 
-    pub fn read_while<P>(&self, pred: P) -> Range
+    pub fn read_while<P>(&self, pred: P) -> Range<'b>
     where
         P: Fn(char) -> bool,
     {
@@ -279,18 +288,18 @@ impl<'a> Scanner<'a> {
         self.range_from(start)
     }
 
-    pub fn read_until<P>(&self, pred: P) -> Range
+    pub fn read_until<P>(&self, pred: P) -> Range<'b>
     where
         P: Fn(char) -> bool,
     {
         self.read_while(|v| !pred(v))
     }
 
-    pub fn read_all(&self) -> Range {
+    pub fn read_all(&self) -> Range<'b> {
         self.read_while(|_| true)
     }
 
-    pub fn read_char(&self, c: char) -> Result<Range> {
+    pub fn read_char(&self, c: char) -> Result<Range<'b>> {
         let start = self.pos();
         match self.current() {
             Some(d) if c == d => {
@@ -306,7 +315,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_string(&self, str: &str) -> Result<Range> {
+    pub fn read_string(&self, str: &str) -> Result<Range<'b>> {
         let start = self.pos();
         for c in str.chars() {
             self.read_char(c)?;
@@ -314,7 +323,7 @@ impl<'a> Scanner<'a> {
         Ok(self.range_from(start))
     }
 
-    pub fn read_identifier(&self) -> Result<Range> {
+    pub fn read_identifier(&self) -> Result<Range<'b>> {
         let start = self.pos();
         let ident = self.read_while(|c| c.is_alphanumeric());
         if ident.len() == 0 {
@@ -330,7 +339,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_1(&self) -> Result<Range> {
+    pub fn read_1(&self) -> Result<Range<'b>> {
         let start = self.pos();
         match self.advance() {
             Some(_) => Ok(self.range_from(start)),
@@ -338,7 +347,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_1_with<P>(&self, token: Token, pred: P) -> Result<Range>
+    pub fn read_1_with<P>(&self, token: Token, pred: P) -> Result<Range<'b>>
     where
         P: Fn(char) -> bool,
     {
@@ -358,7 +367,7 @@ impl<'a> Scanner<'a> {
         n: usize,
         token: Token,
         pred: P,
-    ) -> Result<Range>
+    ) -> Result<Range<'b>>
     where
         P: Fn(char) -> bool,
     {
@@ -382,7 +391,7 @@ impl<'a> Scanner<'a> {
         Ok(self.range_from(start))
     }
 
-    pub fn read_n(&self, n: usize) -> Result<Range> {
+    pub fn read_n(&self, n: usize) -> Result<Range<'b>> {
         let start = self.pos();
         for _ in 0..n {
             self.read_1()?;
@@ -390,7 +399,7 @@ impl<'a> Scanner<'a> {
         Ok(self.range_from(start))
     }
 
-    pub fn read_eol(&self) -> Result<Range> {
+    pub fn read_eol(&self) -> Result<Range<'b>> {
         let start = self.pos();
         match self.current() {
             None | Some('\n') => {
@@ -406,7 +415,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_space1(&self) -> Result<Range> {
+    pub fn read_space1(&self) -> Result<Range<'b>> {
         let start = self.pos();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
@@ -416,11 +425,11 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_space(&self) -> Range {
+    pub fn read_space(&self) -> Range<'b> {
         self.read_while(|c| c != '\n' && c.is_ascii_whitespace())
     }
 
-    pub fn read_rest_of_line(&self) -> Result<Range> {
+    pub fn read_rest_of_line(&self) -> Result<Range<'b>> {
         let start = self.pos();
         self.read_while(|c| c.is_whitespace() && c != '\n');
         self.read_eol()?;
