@@ -7,18 +7,21 @@ use super::syntax::{
     QuotedString, SourceFile,
 };
 
-pub struct Parser<'a, 'b> {
-    scanner: Scanner<'a, 'b>,
+pub struct Parser<'a> {
+    scanner: Scanner<'a>,
 }
 
-impl<'a, 'b> Parser<'a, 'b> {
-    pub fn new(s: &'b str) -> Parser {
+impl<'a> Parser<'a> {
+    pub fn new(s: &'a str) -> Parser<'a> {
         Parser {
             scanner: Scanner::new(s),
         }
     }
 
-    pub fn new_from_file(s: &str, filename: Option<PathBuf>) -> Parser {
+    pub fn new_from_file(
+        s: &'a str,
+        filename: Option<&'a PathBuf>,
+    ) -> Parser<'a> {
         Parser {
             scanner: Scanner::new_from_file(s, filename),
         }
@@ -33,7 +36,7 @@ impl<'a, 'b> Parser<'a, 'b> {
     ) -> ParserError {
         ParserError::new(
             &self.scanner.source,
-            self.scanner.filename.as_ref(),
+            self.scanner.filename,
             pos,
             msg,
             want,
@@ -41,7 +44,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         )
     }
 
-    pub fn parse_account(&self) -> Result<Account<'b>> {
+    pub fn parse_account(&self) -> Result<Account<'a>> {
         let start = self.scanner.pos();
         let account_type = self
             .scanner
@@ -62,14 +65,14 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_commodity(&self) -> Result<Commodity<'b>> {
+    pub fn parse_commodity(&self) -> Result<Commodity<'a>> {
         self.scanner
             .read_identifier()
             .map_err(|e| e.update("parsing commodity"))
             .map(Commodity)
     }
 
-    pub fn parse_date(&self) -> Result<Date<'b>> {
+    pub fn parse_date(&self) -> Result<Date<'a>> {
         let start = self.scanner.pos();
         self.scanner
             .read_n_with(4, Token::Digit, |c| c.is_ascii_digit())
@@ -85,7 +88,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(Date(self.scanner.range_from(start)))
     }
 
-    pub fn parse_interval(&self) -> Result<Range<'b>> {
+    pub fn parse_interval(&self) -> Result<Range<'a>> {
         let start = self.scanner.pos();
         match self.scanner.current() {
             Some('d') => self.scanner.read_string("daily"),
@@ -103,7 +106,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    pub fn parse_decimal(&self) -> Result<Decimal<'b>> {
+    pub fn parse_decimal(&self) -> Result<Decimal<'a>> {
         let start = self.scanner.pos();
         if let Some('-') = self.scanner.current() {
             self.scanner.read_char('-')?;
@@ -116,7 +119,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(Decimal(self.scanner.range_from(start)))
     }
 
-    pub fn parse_quoted_string(&self) -> Result<QuotedString<'b>> {
+    pub fn parse_quoted_string(&self) -> Result<QuotedString<'a>> {
         let start = self.scanner.pos();
         self.scanner.read_char('"')?;
         let content = self.scanner.read_while(|c| c != '"');
@@ -127,7 +130,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_file(&self) -> Result<SourceFile<'b>> {
+    pub fn parse_file(&self) -> Result<SourceFile<'a>> {
         let start = self.scanner.pos();
         let mut directives = Vec::new();
         while self.scanner.current().is_some() {
@@ -172,7 +175,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_comment(&self) -> Result<Range<'b>> {
+    pub fn parse_comment(&self) -> Result<Range<'a>> {
         let start = self.scanner.pos();
         match self.scanner.current() {
             Some('#') | Some('*') => {
@@ -197,7 +200,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    pub fn parse_directive(&self) -> Result<Directive<'b>> {
+    pub fn parse_directive(&self) -> Result<Directive<'a>> {
         match self.scanner.current() {
             Some('i') => self.parse_include(),
             Some(c) if c.is_ascii_digit() || c == '@' => {
@@ -219,7 +222,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    pub fn parse_include(&self) -> Result<Directive<'b>> {
+    pub fn parse_include(&self) -> Result<Directive<'a>> {
         let start = self.scanner.pos();
         self.scanner.read_string("include")?;
         self.scanner.read_space1()?;
@@ -231,7 +234,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_command(&self) -> Result<Directive<'b>> {
+    pub fn parse_command(&self) -> Result<Directive<'a>> {
         let start = self.scanner.pos();
         let mut addons = Vec::new();
         while let Some('@') = self.scanner.current() {
@@ -306,7 +309,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_addonified_transaction(&self) -> Result<Command<'b>> {
+    pub fn parse_addonified_transaction(&self) -> Result<Command<'a>> {
         let mut addons = Vec::new();
         loop {
             addons.push(self.parse_addon()?);
@@ -318,7 +321,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         self.parse_transaction()
     }
 
-    pub fn parse_addon(&self) -> Result<Addon<'b>> {
+    pub fn parse_addon(&self) -> Result<Addon<'a>> {
         let start = self.scanner.pos();
         self.scanner.read_char('@')?;
         let name = self.scanner.read_while_1(
@@ -341,7 +344,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    pub fn parse_performance(&self, start: usize) -> Result<Addon<'b>> {
+    pub fn parse_performance(&self, start: usize) -> Result<Addon<'a>> {
         self.scanner.read_space();
         self.scanner.read_char('(')?;
         self.scanner.read_space();
@@ -370,7 +373,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_accrual(&self, start: usize) -> Result<Addon<'b>> {
+    pub fn parse_accrual(&self, start: usize) -> Result<Addon<'a>> {
         self.scanner.read_space1()?;
         let interval =
             self.parse_interval().map_err(|e| e.update("parsing interval"))?;
@@ -393,7 +396,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_price(&self) -> Result<Command<'b>> {
+    pub fn parse_price(&self) -> Result<Command<'a>> {
         let start = self.scanner.pos();
         self.scanner.read_string("price")?;
         self.scanner.read_space1()?;
@@ -415,7 +418,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_open(&self) -> Result<Command<'b>> {
+    pub fn parse_open(&self) -> Result<Command<'a>> {
         let start = self.scanner.pos();
         self.scanner.read_string("open")?;
         self.scanner.read_space1()?;
@@ -427,7 +430,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_transaction(&self) -> Result<Command<'b>> {
+    pub fn parse_transaction(&self) -> Result<Command<'a>> {
         let start = self.scanner.pos();
         let description = self.parse_quoted_string()?;
         self.scanner.read_rest_of_line()?;
@@ -454,7 +457,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_booking(&self) -> Result<Booking<'b>> {
+    pub fn parse_booking(&self) -> Result<Booking<'a>> {
         let start = self.scanner.pos();
         let credit = self
             .parse_account()
@@ -480,7 +483,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_assertion(&self) -> Result<Command<'b>> {
+    pub fn parse_assertion(&self) -> Result<Command<'a>> {
         let start = self.scanner.pos();
         self.scanner.read_string("balance")?;
         self.scanner.read_space1()?;
@@ -501,7 +504,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         })
     }
 
-    pub fn parse_close(&self) -> Result<Command<'b>> {
+    pub fn parse_close(&self) -> Result<Command<'a>> {
         let start = self.scanner.pos();
         self.scanner.read_string("close")?;
         self.scanner.read_space1()?;
