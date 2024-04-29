@@ -15,7 +15,6 @@ struct Cli {
 fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     match &cli.command {
-        commands::Commands::Print(p) => p.run(),
         commands::Commands::Parse(p) => p.run(),
         commands::Commands::Syntax(p) => p.run(),
     }
