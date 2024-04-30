@@ -60,14 +60,20 @@ pub enum Command<'a> {
     },
     Assertion {
         range: Range<'a>,
-        account: Account<'a>,
-        amount: Decimal<'a>,
-        commodity: Commodity<'a>,
+        assertions: Vec<Assertion<'a>>,
     },
     Close {
         range: Range<'a>,
         account: Account<'a>,
     },
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Assertion<'a> {
+    pub range: Range<'a>,
+    pub account: Account<'a>,
+    pub amount: Decimal<'a>,
+    pub commodity: Commodity<'a>,
 }
 
 #[derive(Eq, PartialEq, Debug)]

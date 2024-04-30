@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::syntax::{
-    Addon, Command, Date, Directive, QuotedString, SourceFile,
+    Addon, Assertion, Command, Date, Directive, QuotedString, SourceFile,
 };
 
 pub fn format_file(
@@ -128,18 +128,36 @@ fn format_dated(
             Ok(())
         }
         Command::Assertion {
-            account,
-            amount,
-            commodity,
+            assertions,
             ..
-        } => write!(
-            w,
-            "{date} balance {account} {amount} {commodity}",
-            date = date.0.str,
-            account = account.range.str,
-            amount = amount.0.str,
-            commodity = commodity.0.str
-        ),
+        } => match &assertions[..] {
+            [Assertion {
+                account,
+                amount,
+                commodity,
+                ..
+            }] => write!(
+                w,
+                "{date} balance {account} {amount} {commodity}",
+                date = date.0.str,
+                account = account.range.str,
+                amount = amount.0.str,
+                commodity = commodity.0.str
+            ),
+            _ => {
+                writeln!(w, "{date} balance ", date = date.0.str)?;
+                for a in assertions {
+                    writeln!(
+                        w,
+                        "{account} {amount} {commodity}",
+                        account = a.account.range.str,
+                        amount = a.amount.0.str,
+                        commodity = a.commodity.0.str
+                    )?;
+                }
+                Ok(())
+            }
+        },
         Command::Close {
             account,
             ..

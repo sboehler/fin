@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use super::scanner::{ParserError, Range};
 use super::syntax::{
-    Account, Addon, Booking, Command, Commodity, Date, Decimal, Directive,
-    QuotedString, SourceFile,
+    Account, Addon, Assertion, Booking, Command, Commodity, Date, Decimal,
+    Directive, QuotedString, SourceFile,
 };
 
 pub struct Parser<'a> {
@@ -486,6 +486,45 @@ impl<'a> Parser<'a> {
         let start = self.scanner.pos();
         self.scanner.read_string("balance")?;
         self.scanner.read_space1()?;
+        let mut assertions = Vec::new();
+        if let Some('\n') = self.scanner.current() {
+            self.scanner.read_rest_of_line()?;
+            loop {
+                assertions.push(self.parse_sub_assertion().map_err(|e| {
+                    self.error(
+                        self.scanner.pos(),
+                        Some("parsing assertion".into()),
+                        Token::Custom("assertion".into()),
+                        Token::Error(Box::new(e)),
+                    )
+                })?);
+                self.scanner.read_rest_of_line()?;
+                if !self
+                    .scanner
+                    .current()
+                    .map_or(false, |c| c.is_alphanumeric())
+                {
+                    break;
+                }
+            }
+        } else {
+            assertions.push(self.parse_sub_assertion().map_err(|e| {
+                self.error(
+                    self.scanner.pos(),
+                    Some("parsing assertion".into()),
+                    Token::Custom("assertion".into()),
+                    Token::Error(Box::new(e)),
+                )
+            })?);
+        }
+        Ok(Command::Assertion {
+            range: self.scanner.range_from(start),
+            assertions: assertions,
+        })
+    }
+
+    pub fn parse_sub_assertion(&self) -> Result<Assertion<'a>> {
+        let start = self.scanner.pos();
         let account =
             self.parse_account().map_err(|e| e.update("parsing account"))?;
         self.scanner.read_space1()?;
@@ -495,7 +534,7 @@ impl<'a> Parser<'a> {
         let commodity = self
             .parse_commodity()
             .map_err(|e| e.update("parsing commodity"))?;
-        Ok(Command::Assertion {
+        Ok(Assertion {
             range: self.scanner.range_from(start),
             account,
             amount,
@@ -1041,15 +1080,18 @@ mod tests {
                     date: Date(Range::new(0, "2024-03-01")),
                     command: Command::Assertion {
                         range: Range::new(11, "balance Assets:Foo 500.1 BAR"),
-                        account: Account {
-                            range: Range::new(19, "Assets:Foo"),
-                            segments: vec![
-                                Range::new(19, "Assets"),
-                                Range::new(26, "Foo")
-                            ],
-                        },
-                        amount: Decimal(Range::new(30, "500.1")),
-                        commodity: Commodity(Range::new(36, "BAR")),
+                        assertions: vec![Assertion {
+                            range: Range::new(19, "Assets:Foo 500.1 BAR"),
+                            account: Account {
+                                range: Range::new(19, "Assets:Foo"),
+                                segments: vec![
+                                    Range::new(19, "Assets"),
+                                    Range::new(26, "Foo")
+                                ],
+                            },
+                            amount: Decimal(Range::new(30, "500.1")),
+                            commodity: Commodity(Range::new(36, "BAR")),
+                        }]
                     },
                 }),
                 Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR")
