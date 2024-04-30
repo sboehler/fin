@@ -4,12 +4,12 @@ use std::{error::Error, fs, path::PathBuf};
 
 #[derive(Args)]
 pub struct Command {
-    file: PathBuf,
+    file: Vec<PathBuf>,
 }
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        execute(&self.file)
+        self.file.iter().map(execute).collect()
     }
 }
 

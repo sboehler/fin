@@ -172,8 +172,8 @@ fn format_addon(w: &mut impl Write, a: &Addon) -> Result<()> {
             write!(w, "@performance(")?;
             for (i, c) in commodities.iter().enumerate() {
                 w.write(c.0.str.as_bytes())?;
-                if i < commodities.len() {
-                    write!(w, ", ")?;
+                if i < commodities.len() - 1 {
+                    write!(w, ",")?;
                 }
             }
             write!(w, ")")
