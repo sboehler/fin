@@ -146,7 +146,7 @@ impl Journal {
         self.days.values().rfind(|d| !d.transactions.is_empty()).map(|d| d.date)
     }
 
-    pub fn from_file(p: PathBuf) -> Result<Journal> {
+    pub fn from_file(p: &PathBuf) -> Result<Journal> {
         let ctx = Arc::new(Context::new());
         let mut j = Self::new(ctx);
         let (ch, t) = read_from_file(p.clone());

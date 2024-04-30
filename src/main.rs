@@ -1,6 +1,5 @@
 use clap::{command, Parser};
 use fin::commands;
-use std::error::Error;
 
 #[derive(Parser)]
 #[command(name = "fin")]
@@ -12,10 +11,14 @@ struct Cli {
     command: commands::Commands,
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     let cli = Cli::parse();
-    match &cli.command {
+    let r = match &cli.command {
         commands::Commands::Parse(p) => p.run(),
         commands::Commands::Format(p) => p.run(),
-    }
+    };
+    if let Err(e) = r {
+        println!("{}", e);
+        std::process::exit(1)
+    };
 }

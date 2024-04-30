@@ -9,15 +9,11 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        if let Err(e) = execute(self.file.clone()) {
-            println!("{}", e);
-            std::process::exit(1)
-        }
-        Ok(())
+        execute(&self.file)
     }
 }
 
-fn execute(path: PathBuf) -> Result<(), Box<dyn Error>> {
+fn execute(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     let s = fs::read_to_string(&path.clone())?;
     let f = parse_file(&path, &s)?;
     let mut b = Vec::new();
