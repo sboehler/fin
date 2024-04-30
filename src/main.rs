@@ -16,6 +16,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     match &cli.command {
         commands::Commands::Parse(p) => p.run(),
-        commands::Commands::Syntax(p) => p.run(),
+        commands::Commands::Format(p) => p.run(),
     }
 }

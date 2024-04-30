@@ -449,9 +449,8 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        let range = self.scanner.range_from(start);
         Ok(Command::Transaction {
-            range,
+            range: self.scanner.range_from(start),
             description,
             bookings,
         })

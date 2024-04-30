@@ -1,15 +1,15 @@
-use crate::syntax::{parser::Parser, syntax::SourceFile};
+use crate::syntax::{format::format_file, parser::Parser, syntax::SourceFile};
 use clap::Args;
 use std::{error::Error, fs, path::PathBuf};
 
 #[derive(Args)]
 pub struct Command {
-    journal: PathBuf,
+    file: PathBuf,
 }
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        if let Err(e) = execute(self.journal.clone()) {
+        if let Err(e) = execute(self.file.clone()) {
             println!("{}", e);
             std::process::exit(1)
         }
@@ -19,7 +19,10 @@ impl Command {
 
 fn execute(path: PathBuf) -> Result<(), Box<dyn Error>> {
     let s = fs::read_to_string(&path.clone())?;
-    parse_file(&path, &s)?;
+    let f = parse_file(&path, &s)?;
+    let mut b = Vec::new();
+    format_file(&mut b, &f)?;
+    fs::write(path, b)?;
     Ok(())
 }
 
