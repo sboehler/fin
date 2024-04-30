@@ -14,8 +14,8 @@ impl Command {
 }
 
 fn execute(path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    let s = fs::read_to_string(&path.clone())?;
-    let f = parse_file(&path, &s)?;
+    let s = fs::read_to_string(path)?;
+    let f = parse_file(path, &s)?;
     let mut b = Vec::new();
     format_file(&mut b, &f)?;
     fs::write(path, b)?;
