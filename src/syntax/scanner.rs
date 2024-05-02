@@ -209,8 +209,8 @@ impl Rng {
         }
     }
 
-    pub fn range(&self) -> std::ops::Range<usize> {
-        self.start..self.end
+    pub fn slice<'a>(&self, s: &'a str) -> &'a str {
+        &s[self.start..self.end]
     }
 
     pub fn len(&self) -> usize {
@@ -240,8 +240,11 @@ impl<'a> Scanner<'a> {
         Scanner::new_from_file(s, None)
     }
 
-    pub fn range_from(&self, start: usize) -> Rng {
-        Rng::new(start, &self.source[start..self.pos()])
+    pub fn rng(&self, start: usize) -> Rng {
+        Rng {
+            start,
+            end: self.pos(),
+        }
     }
 
     pub fn current(&self) -> Option<char> {
@@ -283,7 +286,7 @@ impl<'a> Scanner<'a> {
         while self.current().map(&pred).unwrap_or(false) {
             self.advance();
         }
-        self.range_from(start)
+        self.rng(start)
     }
 
     pub fn read_until<P>(&self, pred: P) -> Rng
@@ -302,7 +305,7 @@ impl<'a> Scanner<'a> {
         match self.current() {
             Some(d) if c == d => {
                 self.advance();
-                Ok(self.range_from(start))
+                Ok(self.rng(start))
             }
             o => Err(self.error(
                 self.pos(),
@@ -318,7 +321,7 @@ impl<'a> Scanner<'a> {
         for c in str.chars() {
             self.read_char(c)?;
         }
-        Ok(self.range_from(start))
+        Ok(self.rng(start))
     }
 
     pub fn read_identifier(&self) -> Result<Rng> {
@@ -333,14 +336,14 @@ impl<'a> Scanner<'a> {
                 got,
             ))
         } else {
-            Ok(self.range_from(start))
+            Ok(self.rng(start))
         }
     }
 
     pub fn read_1(&self) -> Result<Rng> {
         let start = self.pos();
         match self.advance() {
-            Some(_) => Ok(self.range_from(start)),
+            Some(_) => Ok(self.rng(start)),
             None => Err(self.error(start, None, Token::Any, Token::EOF)),
         }
     }
@@ -353,7 +356,7 @@ impl<'a> Scanner<'a> {
         match self.current() {
             Some(c) if pred(c) => {
                 self.advance();
-                Ok(self.range_from(start))
+                Ok(self.rng(start))
             }
             Some(c) => Err(self.error(start, None, token, Token::Char(c))),
             None => Err(self.error(start, None, token, Token::EOF)),
@@ -381,7 +384,7 @@ impl<'a> Scanner<'a> {
                 }
             };
         }
-        Ok(self.range_from(start))
+        Ok(self.rng(start))
     }
 
     pub fn read_n(&self, n: usize) -> Result<Rng> {
@@ -389,7 +392,7 @@ impl<'a> Scanner<'a> {
         for _ in 0..n {
             self.read_1()?;
         }
-        Ok(self.range_from(start))
+        Ok(self.rng(start))
     }
 
     pub fn read_eol(&self) -> Result<Rng> {
@@ -397,7 +400,7 @@ impl<'a> Scanner<'a> {
         match self.current() {
             None | Some('\n') => {
                 self.advance();
-                Ok(self.range_from(start))
+                Ok(self.rng(start))
             }
             Some(ch) => Err(self.error(
                 start,
@@ -426,7 +429,7 @@ impl<'a> Scanner<'a> {
         let start = self.pos();
         self.read_while(|c| c.is_whitespace() && c != '\n');
         self.read_eol()?;
-        Ok(self.range_from(start))
+        Ok(self.rng(start))
     }
 
     fn error(

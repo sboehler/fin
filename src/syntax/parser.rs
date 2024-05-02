@@ -60,7 +60,7 @@ impl<'a> Parser<'a> {
             );
         }
         Ok(Account {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             segments,
         })
     }
@@ -85,7 +85,7 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
             .map_err(|e| e.update("parsing day".into()))?;
-        Ok(Date(self.scanner.range_from(start)))
+        Ok(Date(self.scanner.rng(start)))
     }
 
     pub fn parse_interval(&self) -> Result<Rng> {
@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
             self.scanner.read_char('.')?;
             self.scanner.read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
         }
-        Ok(Decimal(self.scanner.range_from(start)))
+        Ok(Decimal(self.scanner.rng(start)))
     }
 
     pub fn parse_quoted_string(&self) -> Result<QuotedString> {
@@ -125,7 +125,7 @@ impl<'a> Parser<'a> {
         let content = self.scanner.read_while(|c| c != '"');
         self.scanner.read_char('"')?;
         Ok(QuotedString {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             content,
         })
     }
@@ -170,7 +170,7 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(SourceFile {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             directives,
         })
     }
@@ -180,14 +180,14 @@ impl<'a> Parser<'a> {
         match self.scanner.current() {
             Some('#') | Some('*') => {
                 self.scanner.read_until(|c| c == '\n');
-                let range = self.scanner.range_from(start);
+                let range = self.scanner.rng(start);
                 self.scanner.read_rest_of_line()?;
                 Ok(range)
             }
             Some('/') => {
                 self.scanner.read_string("//")?;
                 self.scanner.read_until(|c| c == '\n');
-                let range = self.scanner.range_from(start);
+                let range = self.scanner.rng(start);
                 self.scanner.read_rest_of_line()?;
                 Ok(range)
             }
@@ -229,7 +229,7 @@ impl<'a> Parser<'a> {
         let path =
             self.parse_quoted_string().map_err(|e| e.update("parsing path"))?;
         Ok(Directive::Include {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             path,
         })
     }
@@ -299,7 +299,7 @@ impl<'a> Parser<'a> {
                 ))
             }
         };
-        let range = self.scanner.range_from(start);
+        let range = self.scanner.rng(start);
         self.scanner.read_rest_of_line()?;
         Ok(Directive::Dated {
             range,
@@ -366,7 +366,7 @@ impl<'a> Parser<'a> {
             }
         }
         self.scanner.read_char(')')?;
-        let range = self.scanner.range_from(start);
+        let range = self.scanner.rng(start);
         Ok(Addon::Performance {
             range,
             commodities,
@@ -388,7 +388,7 @@ impl<'a> Parser<'a> {
             .parse_account()
             .map_err(|e| e.update("parsing accrual account"))?;
         Ok(Addon::Accrual {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             interval: interval,
             start: start_date,
             end: end_date,
@@ -411,7 +411,7 @@ impl<'a> Parser<'a> {
             .parse_commodity()
             .map_err(|e| e.update("parsing target commodity"))?;
         Ok(Command::Price {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             commodity,
             price,
             target,
@@ -425,7 +425,7 @@ impl<'a> Parser<'a> {
         let a =
             self.parse_account().map_err(|e| e.update("parsing account"))?;
         Ok(Command::Open {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             account: a,
         })
     }
@@ -450,7 +450,7 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(Command::Transaction {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             description,
             bookings,
         })
@@ -472,7 +472,7 @@ impl<'a> Parser<'a> {
         let commodity = self
             .parse_commodity()
             .map_err(|e| e.update("parsing commodity"))?;
-        let range = self.scanner.range_from(start);
+        let range = self.scanner.rng(start);
         Ok(Booking {
             range: range,
             credit,
@@ -518,7 +518,7 @@ impl<'a> Parser<'a> {
             })?);
         }
         Ok(Command::Assertion {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             assertions: assertions,
         })
     }
@@ -535,7 +535,7 @@ impl<'a> Parser<'a> {
             .parse_commodity()
             .map_err(|e| e.update("parsing commodity"))?;
         Ok(Assertion {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             account,
             amount,
             commodity,
@@ -550,7 +550,7 @@ impl<'a> Parser<'a> {
             .parse_account()
             .map_err(|e| e.update("parsing account").into())?;
         Ok(Command::Close {
-            range: self.scanner.range_from(start),
+            range: self.scanner.rng(start),
             account: a,
         })
     }
