@@ -9,10 +9,10 @@ use super::syntax::{
 
 pub fn format_file(
     w: &mut impl Write,
+    s: &str,
     source_file: &SourceFile,
 ) -> io::Result<()> {
-    let n = initialize(&source_file.directives);
-    let text = &source_file.range.str.as_bytes();
+    let n = initialize(s, &source_file.directives);
     let mut pos = 0;
     for d in &source_file.directives {
         match d {
@@ -20,9 +20,9 @@ pub fn format_file(
                 range,
                 path,
             } => {
-                w.write(&text[pos..range.start])?;
-                format_include(w, path)?;
-                pos = range.start + range.str.len();
+                w.write(s[pos..range.start].as_bytes())?;
+                format_include(w, s, path)?;
+                pos = range.end;
             }
             Directive::Dated {
                 range,
@@ -30,17 +30,17 @@ pub fn format_file(
                 date,
                 command,
             } => {
-                w.write(&text[pos..range.start])?;
-                format_dated(w, n, addons, date, command)?;
-                pos = range.start + range.str.len();
+                w.write(s[pos..range.start].as_bytes())?;
+                format_dated(w, s, n, addons, date, command)?;
+                pos = range.end;
             }
         }
     }
-    w.write(&text[pos..source_file.range.str.len()])?;
+    w.write(s[pos..source_file.range.end].as_bytes())?;
     Ok(())
 }
 
-fn initialize(directives: &Vec<Directive>) -> usize {
+fn initialize(text: &str, directives: &Vec<Directive>) -> usize {
     directives
         .iter()
         .flat_map(|d| match d {
@@ -57,27 +57,32 @@ fn initialize(directives: &Vec<Directive>) -> usize {
         .flatten()
         .map(|b| {
             max(
-                b.credit.range.str.chars().count(),
-                b.debit.range.str.chars().count(),
+                text[b.credit.range.range()].chars().count(),
+                text[b.debit.range.range()].chars().count(),
             )
         })
         .max()
         .unwrap_or_default()
 }
 
-fn format_include(w: &mut impl Write, path: &QuotedString) -> Result<()> {
-    write!(w, "include {}", path.range.str)
+fn format_include(
+    w: &mut impl Write,
+    text: &str,
+    path: &QuotedString,
+) -> Result<()> {
+    write!(w, "include {}", &text[path.range.range()])
 }
 
 fn format_dated(
     w: &mut impl Write,
+    text: &str,
     n: usize,
     addons: &Vec<Addon>,
     date: &Date,
     command: &Command,
 ) -> Result<()> {
     for a in addons {
-        format_addon(w, a)?;
+        format_addon(w, text, a)?;
         writeln!(w)?;
     }
     match command {
@@ -89,10 +94,10 @@ fn format_dated(
         } => write!(
             w,
             "{date} price {commodity} {price} {target}",
-            date = date.0.str,
-            commodity = commodity.0.str,
-            price = price.0.str,
-            target = target.0.str,
+            date = &text[date.0.range()],
+            commodity = &text[commodity.0.range()],
+            price = &text[price.0.range()],
+            target = &text[target.0.range()],
         ),
         Command::Open {
             account,
@@ -100,8 +105,8 @@ fn format_dated(
         } => write!(
             w,
             "{date} open {account}",
-            date = date.0.str,
-            account = account.range.str,
+            date = &text[date.0.range()],
+            account = &text[account.range.range()],
         ),
         Command::Transaction {
             description,
@@ -111,18 +116,18 @@ fn format_dated(
             writeln!(
                 w,
                 "{date} {description}",
-                date = date.0.str,
-                description = description.range.str
+                date = &text[date.0.range()],
+                description = &text[description.range.range()]
             )?;
             for b in bookings {
                 writeln!(
                     w,
                     "{credit:<width$} {debit:<width$} {amount:>10} {commodity}",
-                    credit = b.credit.range.str,
+                    credit = &text[b.credit.range.range()],
                     width = n,
-                    debit = b.debit.range.str,
-                    amount = b.quantity.0.str,
-                    commodity = b.commodity.0.str,
+                    debit = &text[b.debit.range.range()],
+                    amount = &text[b.quantity.0.range()],
+                    commodity = &text[b.commodity.0.range()],
                 )?;
             }
             Ok(())
@@ -139,20 +144,20 @@ fn format_dated(
             }] => write!(
                 w,
                 "{date} balance {account} {amount} {commodity}",
-                date = date.0.str,
-                account = account.range.str,
-                amount = amount.0.str,
-                commodity = commodity.0.str
+                date = &text[date.0.range()],
+                account = &text[account.range.range()],
+                amount = &text[amount.0.range()],
+                commodity = &text[commodity.0.range()]
             ),
             _ => {
-                writeln!(w, "{date} balance ", date = date.0.str)?;
+                writeln!(w, "{date} balance ", date = &text[date.0.range()])?;
                 for a in assertions {
                     writeln!(
                         w,
                         "{account} {amount} {commodity}",
-                        account = a.account.range.str,
-                        amount = a.amount.0.str,
-                        commodity = a.commodity.0.str
+                        account = &text[a.account.range.range()],
+                        amount = &text[a.amount.0.range()],
+                        commodity = &text[a.commodity.0.range()]
                     )?;
                 }
                 Ok(())
@@ -164,13 +169,13 @@ fn format_dated(
         } => write!(
             w,
             "{date} close {account}",
-            date = date.0.str,
-            account = account.range.str,
+            date = &text[date.0.range()],
+            account = &text[account.range.range()],
         ),
     }
 }
 
-fn format_addon(w: &mut impl Write, a: &Addon) -> Result<()> {
+fn format_addon(w: &mut impl Write, text: &str, a: &Addon) -> Result<()> {
     match a {
         Addon::Accrual {
             interval,
@@ -180,8 +185,11 @@ fn format_addon(w: &mut impl Write, a: &Addon) -> Result<()> {
             ..
         } => write!(
             w,
-            "@accrue {} {} {} {}",
-            interval.str, start.0.str, end.0.str, account.range.str
+            "@accrue {interval} {start} {end} {account}",
+            interval = &text[interval.range()],
+            start = &text[start.0.range()],
+            end = &text[end.0.range()],
+            account = &text[account.range.range()]
         ),
         Addon::Performance {
             commodities,
@@ -189,7 +197,7 @@ fn format_addon(w: &mut impl Write, a: &Addon) -> Result<()> {
         } => {
             write!(w, "@performance(")?;
             for (i, c) in commodities.iter().enumerate() {
-                w.write(c.0.str.as_bytes())?;
+                w.write(&text[c.0.range()].as_bytes())?;
                 if i < commodities.len() - 1 {
                     write!(w, ",")?;
                 }

@@ -1,7 +1,7 @@
 use crate::syntax::scanner::{Result, Scanner, Token};
 use std::path::PathBuf;
 
-use super::scanner::{ParserError, Range1};
+use super::scanner::{ParserError, Rng};
 use super::syntax::{
     Account, Addon, Assertion, Booking, Command, Commodity, Date, Decimal,
     Directive, QuotedString, SourceFile,
@@ -44,7 +44,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    pub fn parse_account(&self) -> Result<Account<'a>> {
+    pub fn parse_account(&self) -> Result<Account> {
         let start = self.scanner.pos();
         let account_type = self
             .scanner
@@ -65,14 +65,14 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_commodity(&self) -> Result<Commodity<'a>> {
+    pub fn parse_commodity(&self) -> Result<Commodity> {
         self.scanner
             .read_identifier()
             .map_err(|e| e.update("parsing commodity"))
             .map(Commodity)
     }
 
-    pub fn parse_date(&self) -> Result<Date<'a>> {
+    pub fn parse_date(&self) -> Result<Date> {
         let start = self.scanner.pos();
         self.scanner
             .read_n_with(4, Token::Digit, |c| c.is_ascii_digit())
@@ -88,7 +88,7 @@ impl<'a> Parser<'a> {
         Ok(Date(self.scanner.range_from(start)))
     }
 
-    pub fn parse_interval(&self) -> Result<Range1<'a>> {
+    pub fn parse_interval(&self) -> Result<Rng> {
         let start = self.scanner.pos();
         match self.scanner.current() {
             Some('d') => self.scanner.read_string("daily"),
@@ -106,7 +106,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_decimal(&self) -> Result<Decimal<'a>> {
+    pub fn parse_decimal(&self) -> Result<Decimal> {
         let start = self.scanner.pos();
         if let Some('-') = self.scanner.current() {
             self.scanner.read_char('-')?;
@@ -119,7 +119,7 @@ impl<'a> Parser<'a> {
         Ok(Decimal(self.scanner.range_from(start)))
     }
 
-    pub fn parse_quoted_string(&self) -> Result<QuotedString<'a>> {
+    pub fn parse_quoted_string(&self) -> Result<QuotedString> {
         let start = self.scanner.pos();
         self.scanner.read_char('"')?;
         let content = self.scanner.read_while(|c| c != '"');
@@ -130,7 +130,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_file(&self) -> Result<SourceFile<'a>> {
+    pub fn parse_file(&self) -> Result<SourceFile> {
         let start = self.scanner.pos();
         let mut directives = Vec::new();
         while self.scanner.current().is_some() {
@@ -175,7 +175,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_comment(&self) -> Result<Range1<'a>> {
+    pub fn parse_comment(&self) -> Result<Rng> {
         let start = self.scanner.pos();
         match self.scanner.current() {
             Some('#') | Some('*') => {
@@ -200,7 +200,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_directive(&self) -> Result<Directive<'a>> {
+    pub fn parse_directive(&self) -> Result<Directive> {
         match self.scanner.current() {
             Some('i') => self.parse_include(),
             Some(c) if c.is_ascii_digit() || c == '@' => {
@@ -222,7 +222,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_include(&self) -> Result<Directive<'a>> {
+    pub fn parse_include(&self) -> Result<Directive> {
         let start = self.scanner.pos();
         self.scanner.read_string("include")?;
         self.scanner.read_space1()?;
@@ -234,7 +234,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_command(&self) -> Result<Directive<'a>> {
+    pub fn parse_command(&self) -> Result<Directive> {
         let start = self.scanner.pos();
         let mut addons = Vec::new();
         while let Some('@') = self.scanner.current() {
@@ -309,7 +309,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_addonified_transaction(&self) -> Result<Command<'a>> {
+    pub fn parse_addonified_transaction(&self) -> Result<Command> {
         let mut addons = Vec::new();
         loop {
             addons.push(self.parse_addon()?);
@@ -321,14 +321,14 @@ impl<'a> Parser<'a> {
         self.parse_transaction()
     }
 
-    pub fn parse_addon(&self) -> Result<Addon<'a>> {
+    pub fn parse_addon(&self) -> Result<Addon> {
         let start = self.scanner.pos();
         self.scanner.read_char('@')?;
         let name = self.scanner.read_while_1(
             Token::Either(vec![Token::Custom("@performance".into())]),
             |c| c.is_alphabetic(),
         )?;
-        match name.str {
+        match &self.scanner.source[name.start..name.end] {
             "performance" => self
                 .parse_performance(start)
                 .map_err(|e| e.update("parsing performance")),
@@ -344,7 +344,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_performance(&self, start: usize) -> Result<Addon<'a>> {
+    pub fn parse_performance(&self, start: usize) -> Result<Addon> {
         self.scanner.read_space();
         self.scanner.read_char('(')?;
         self.scanner.read_space();
@@ -373,7 +373,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_accrual(&self, start: usize) -> Result<Addon<'a>> {
+    pub fn parse_accrual(&self, start: usize) -> Result<Addon> {
         self.scanner.read_space1()?;
         let interval =
             self.parse_interval().map_err(|e| e.update("parsing interval"))?;
@@ -396,7 +396,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_price(&self) -> Result<Command<'a>> {
+    pub fn parse_price(&self) -> Result<Command> {
         let start = self.scanner.pos();
         self.scanner.read_string("price")?;
         self.scanner.read_space1()?;
@@ -418,7 +418,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_open(&self) -> Result<Command<'a>> {
+    pub fn parse_open(&self) -> Result<Command> {
         let start = self.scanner.pos();
         self.scanner.read_string("open")?;
         self.scanner.read_space1()?;
@@ -430,7 +430,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_transaction(&self) -> Result<Command<'a>> {
+    pub fn parse_transaction(&self) -> Result<Command> {
         let start = self.scanner.pos();
         let description = self.parse_quoted_string()?;
         self.scanner.read_rest_of_line()?;
@@ -456,7 +456,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_booking(&self) -> Result<Booking<'a>> {
+    pub fn parse_booking(&self) -> Result<Booking> {
         let start = self.scanner.pos();
         let credit = self
             .parse_account()
@@ -482,7 +482,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_assertion(&self) -> Result<Command<'a>> {
+    pub fn parse_assertion(&self) -> Result<Command> {
         let start = self.scanner.pos();
         self.scanner.read_string("balance")?;
         self.scanner.read_space1()?;
@@ -523,7 +523,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_sub_assertion(&self) -> Result<Assertion<'a>> {
+    pub fn parse_sub_assertion(&self) -> Result<Assertion> {
         let start = self.scanner.pos();
         let account =
             self.parse_account().map_err(|e| e.update("parsing account"))?;
@@ -542,7 +542,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_close(&self) -> Result<Command<'a>> {
+    pub fn parse_close(&self) -> Result<Command> {
         let start = self.scanner.pos();
         self.scanner.read_string("close")?;
         self.scanner.read_space1()?;
@@ -560,18 +560,18 @@ impl<'a> Parser<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::syntax::scanner::Range1;
+    use crate::syntax::scanner::Rng;
 
     use super::*;
 
     #[test]
     fn test_parse_commodity() {
         assert_eq!(
-            Ok(Commodity(Range1::new(0, "USD"))),
+            Ok(Commodity(Rng::new(0, "USD"))),
             Parser::new("USD").parse_commodity(),
         );
         assert_eq!(
-            Ok(Commodity(Range1::new(0, "1FOO"))),
+            Ok(Commodity(Rng::new(0, "1FOO"))),
             Parser::new("1FOO  ").parse_commodity(),
         );
         assert_eq!(
@@ -602,17 +602,17 @@ mod tests {
     fn test_parse_account() {
         assert_eq!(
             Ok(Account {
-                range: Range1::new(0, "Sometype"),
-                segments: vec![Range1::new(0, "Sometype")],
+                range: Rng::new(0, "Sometype"),
+                segments: vec![Rng::new(0, "Sometype")],
             }),
             Parser::new("Sometype").parse_account(),
         );
         assert_eq!(
             Ok(Account {
-                range: Range1::new(0, "Liabilities:Debt"),
+                range: Rng::new(0, "Liabilities:Debt"),
                 segments: vec![
-                    Range1::new(0, "Liabilities"),
-                    Range1::new(12, "Debt")
+                    Rng::new(0, "Liabilities"),
+                    Rng::new(12, "Debt")
                 ],
             }),
             Parser::new("Liabilities:Debt  ").parse_account(),
@@ -644,11 +644,11 @@ mod tests {
     #[test]
     fn test_parse_date() {
         assert_eq!(
-            Ok(Date(Range1::new(0, "0202-02-02"))),
+            Ok(Date(Rng::new(0, "0202-02-02"))),
             Parser::new("0202-02-02").parse_date(),
         );
         assert_eq!(
-            Ok(Date(Range1::new(0, "2024-02-02"))),
+            Ok(Date(Rng::new(0, "2024-02-02"))),
             Parser::new("2024-02-02").parse_date(),
         );
         assert_eq!(
@@ -689,27 +689,27 @@ mod tests {
     #[test]
     fn test_parse_interval() {
         assert_eq!(
-            Ok(Range1::new(0, "daily")),
+            Ok(Rng::new(0, "daily")),
             Parser::new("daily").parse_interval(),
         );
         assert_eq!(
-            Ok(Range1::new(0, "weekly")),
+            Ok(Rng::new(0, "weekly")),
             Parser::new("weekly").parse_interval(),
         );
         assert_eq!(
-            Ok(Range1::new(0, "monthly")),
+            Ok(Rng::new(0, "monthly")),
             Parser::new("monthly").parse_interval(),
         );
         assert_eq!(
-            Ok(Range1::new(0, "quarterly")),
+            Ok(Rng::new(0, "quarterly")),
             Parser::new("quarterly").parse_interval(),
         );
         assert_eq!(
-            Ok(Range1::new(0, "yearly")),
+            Ok(Rng::new(0, "yearly")),
             Parser::new("yearly").parse_interval(),
         );
         assert_eq!(
-            Ok(Range1::new(0, "once")),
+            Ok(Rng::new(0, "once")),
             Parser::new("once").parse_interval(),
         );
     }
@@ -717,15 +717,15 @@ mod tests {
     #[test]
     fn test_parse_decimal() {
         assert_eq!(
-            Ok(Decimal(Range1::new(0, "0"))),
+            Ok(Decimal(Rng::new(0, "0"))),
             Parser::new("0").parse_decimal(),
         );
         assert_eq!(
-            Ok(Decimal(Range1::new(0, "10.01"))),
+            Ok(Decimal(Rng::new(0, "10.01"))),
             Parser::new("10.01").parse_decimal(),
         );
         assert_eq!(
-            Ok(Decimal(Range1::new(0, "-10.01"))),
+            Ok(Decimal(Rng::new(0, "-10.01"))),
             Parser::new("-10.01").parse_decimal(),
         );
         assert_eq!(
@@ -744,7 +744,7 @@ mod tests {
     mod addon {
         use crate::syntax::{
             parser::Parser,
-            scanner::Range1,
+            scanner::Rng,
             syntax::{Account, Addon, Commodity, Date},
         };
         use pretty_assertions::assert_eq;
@@ -753,18 +753,18 @@ mod tests {
         fn performance() {
             assert_eq!(
                 Ok(Addon::Performance {
-                    range: Range1::new(0, "@performance( USD  , VT)"),
+                    range: Rng::new(0, "@performance( USD  , VT)"),
 
                     commodities: vec![
-                        Commodity(Range1::new(14, "USD")),
-                        Commodity(Range1::new(21, "VT")),
+                        Commodity(Rng::new(14, "USD")),
+                        Commodity(Rng::new(21, "VT")),
                     ]
                 }),
                 Parser::new("@performance( USD  , VT)").parse_addon()
             );
             assert_eq!(
                 Ok(Addon::Performance {
-                    range: Range1::new(0, "@performance(  )"),
+                    range: Rng::new(0, "@performance(  )"),
                     commodities: vec![]
                 }),
                 Parser::new("@performance(  )").parse_addon(),
@@ -775,18 +775,18 @@ mod tests {
         fn accrual() {
             assert_eq!(
                 Ok(Addon::Accrual {
-                    range: Range1::new(
+                    range: Rng::new(
                         0,
                         "@accrue monthly 2024-01-01 2024-12-31 Assets:Payables"
                     ),
-                    interval: Range1::new(8, "monthly"),
-                    start: Date(Range1::new(16, "2024-01-01")),
-                    end: Date(Range1::new(27, "2024-12-31")),
+                    interval: Rng::new(8, "monthly"),
+                    start: Date(Rng::new(16, "2024-01-01")),
+                    end: Date(Rng::new(27, "2024-12-31")),
                     account: Account {
-                        range: Range1::new(38, "Assets:Payables"),
+                        range: Rng::new(38, "Assets:Payables"),
                         segments: vec![
-                            Range1::new(38, "Assets"),
-                            Range1::new(45, "Payables")
+                            Rng::new(38, "Assets"),
+                            Rng::new(45, "Payables")
                         ]
                     }
                 }),
@@ -802,13 +802,10 @@ mod tests {
     fn test_parse_open() {
         assert_eq!(
             Ok(Command::Open {
-                range: Range1::new(0, "open   Assets:Foo"),
+                range: Rng::new(0, "open   Assets:Foo"),
                 account: Account {
-                    range: Range1::new(7, "Assets:Foo"),
-                    segments: vec![
-                        Range1::new(7, "Assets"),
-                        Range1::new(14, "Foo")
-                    ]
+                    range: Rng::new(7, "Assets:Foo"),
+                    segments: vec![Rng::new(7, "Assets"), Rng::new(14, "Foo")]
                 }
             }),
             Parser::new("open   Assets:Foo").parse_open()
@@ -819,23 +816,17 @@ mod tests {
     fn test_parse_booking() {
         assert_eq!(
             Ok(Booking {
-                range: Range1::new(0, "Assets:Foo Assets:Bar 4.23 BAZ"),
+                range: Rng::new(0, "Assets:Foo Assets:Bar 4.23 BAZ"),
                 credit: Account {
-                    range: Range1::new(0, "Assets:Foo"),
-                    segments: vec![
-                        Range1::new(0, "Assets"),
-                        Range1::new(7, "Foo")
-                    ]
+                    range: Rng::new(0, "Assets:Foo"),
+                    segments: vec![Rng::new(0, "Assets"), Rng::new(7, "Foo")]
                 },
                 debit: Account {
-                    range: Range1::new(11, "Assets:Bar"),
-                    segments: vec![
-                        Range1::new(11, "Assets"),
-                        Range1::new(18, "Bar")
-                    ]
+                    range: Rng::new(11, "Assets:Bar"),
+                    segments: vec![Rng::new(11, "Assets"), Rng::new(18, "Bar")]
                 },
-                quantity: Decimal(Range1::new(22, "4.23")),
-                commodity: Commodity(Range1::new(27, "BAZ")),
+                quantity: Decimal(Rng::new(22, "4.23")),
+                commodity: Commodity(Rng::new(27, "BAZ")),
             }),
             Parser::new("Assets:Foo Assets:Bar 4.23 BAZ").parse_booking()
         )
@@ -846,52 +837,49 @@ mod tests {
         let s = "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD\nAssets:Foo Assets:Baz 8 USD";
         assert_eq!(
             Ok(Command::Transaction {
-                range: Range1::new(0, s),
+                range: Rng::new(0, s),
                 description: QuotedString {
-                    range: Range1::new(0, r#""Message""#),
-                    content: Range1::new(1, "Message"),
+                    range: Rng::new(0, r#""Message""#),
+                    content: Rng::new(1, "Message"),
                 },
                 bookings: vec![
                     Booking {
-                        range: Range1::new(
-                            12,
-                            "Assets:Foo Assets:Bar 4.23 USD"
-                        ),
+                        range: Rng::new(12, "Assets:Foo Assets:Bar 4.23 USD"),
                         credit: Account {
-                            range: Range1::new(12, "Assets:Foo"),
+                            range: Rng::new(12, "Assets:Foo"),
                             segments: vec![
-                                Range1::new(12, "Assets"),
-                                Range1::new(19, "Foo")
+                                Rng::new(12, "Assets"),
+                                Rng::new(19, "Foo")
                             ]
                         },
                         debit: Account {
-                            range: Range1::new(23, "Assets:Bar"),
+                            range: Rng::new(23, "Assets:Bar"),
                             segments: vec![
-                                Range1::new(23, "Assets"),
-                                Range1::new(30, "Bar")
+                                Rng::new(23, "Assets"),
+                                Rng::new(30, "Bar")
                             ]
                         },
-                        quantity: Decimal(Range1::new(34, "4.23")),
-                        commodity: Commodity(Range1::new(39, "USD")),
+                        quantity: Decimal(Rng::new(34, "4.23")),
+                        commodity: Commodity(Rng::new(39, "USD")),
                     },
                     Booking {
-                        range: Range1::new(43, "Assets:Foo Assets:Baz 8 USD"),
+                        range: Rng::new(43, "Assets:Foo Assets:Baz 8 USD"),
                         credit: Account {
-                            range: Range1::new(43, "Assets:Foo"),
+                            range: Rng::new(43, "Assets:Foo"),
                             segments: vec![
-                                Range1::new(43, "Assets"),
-                                Range1::new(50, "Foo")
+                                Rng::new(43, "Assets"),
+                                Rng::new(50, "Foo")
                             ]
                         },
                         debit: Account {
-                            range: Range1::new(54, "Assets:Baz"),
+                            range: Rng::new(54, "Assets:Baz"),
                             segments: vec![
-                                Range1::new(54, "Assets"),
-                                Range1::new(61, "Baz")
+                                Rng::new(54, "Assets"),
+                                Rng::new(61, "Baz")
                             ]
                         },
-                        quantity: Decimal(Range1::new(65, "8")),
-                        commodity: Commodity(Range1::new(67, "USD")),
+                        quantity: Decimal(Rng::new(65, "8")),
+                        commodity: Commodity(Rng::new(67, "USD")),
                     }
                 ]
             }),
@@ -930,13 +918,10 @@ mod tests {
     fn test_parse_close() {
         assert_eq!(
             Ok(Command::Close {
-                range: Range1::new(0, "close  Assets:Foo"),
+                range: Rng::new(0, "close  Assets:Foo"),
                 account: Account {
-                    range: Range1::new(7, "Assets:Foo"),
-                    segments: vec![
-                        Range1::new(7, "Assets"),
-                        Range1::new(14, "Foo")
-                    ]
+                    range: Rng::new(7, "Assets:Foo"),
+                    segments: vec![Rng::new(7, "Assets"), Rng::new(14, "Foo")]
                 }
             }),
             Parser::new("close  Assets:Foo").parse_close()
@@ -951,13 +936,13 @@ mod tests {
         fn parse_include() {
             assert_eq!(
                 Ok(Directive::Include {
-                    range: Range1::new(
+                    range: Rng::new(
                         0,
                         r#"include "/foo/bar/baz/finance.knut""#
                     ),
                     path: QuotedString {
-                        range: Range1::new(8, r#""/foo/bar/baz/finance.knut""#),
-                        content: Range1::new(9, "/foo/bar/baz/finance.knut"),
+                        range: Rng::new(8, r#""/foo/bar/baz/finance.knut""#),
+                        content: Rng::new(9, "/foo/bar/baz/finance.knut"),
                     }
                 }),
                 Parser::new(r#"include "/foo/bar/baz/finance.knut""#)
@@ -969,16 +954,16 @@ mod tests {
         fn parse_open() {
             assert_eq!(
                 Ok(Directive::Dated {
-                    range: Range1::new(0, "2024-03-01 open Assets:Foo"),
+                    range: Rng::new(0, "2024-03-01 open Assets:Foo"),
                     addons: Vec::new(),
-                    date: Date(Range1::new(0, "2024-03-01")),
+                    date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Open {
-                        range: Range1::new(11, "open Assets:Foo"),
+                        range: Rng::new(11, "open Assets:Foo"),
                         account: Account {
-                            range: Range1::new(16, "Assets:Foo"),
+                            range: Rng::new(16, "Assets:Foo"),
                             segments: vec![
-                                Range1::new(16, "Assets"),
-                                Range1::new(23, "Foo")
+                                Rng::new(16, "Assets"),
+                                Rng::new(23, "Foo")
                             ]
                         }
                     },
@@ -991,36 +976,36 @@ mod tests {
         fn parse_transaction() {
             assert_eq!(
                 Ok(Directive::Dated {
-                    range: Range1::new(0, "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
+                    range: Rng::new(0, "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
                     addons: Vec::new(),
-                    date: Date (Range1::new(0, "2024-12-31")),
+                    date: Date (Rng::new(0, "2024-12-31")),
                     command: Command::Transaction {
-                        range: Range1::new(
+                        range: Rng::new(
                             11,
                             "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
                         ),
                         description: QuotedString {
-                            range: Range1::new(11, r#""Message""#),
-                            content: Range1::new(12, "Message"),
+                            range: Rng::new(11, r#""Message""#),
+                            content: Rng::new(12, "Message"),
                         },
                         bookings: vec![Booking {
-                            range: Range1::new(23, "Assets:Foo Assets:Bar 4.23 USD"),
+                            range: Rng::new(23, "Assets:Foo Assets:Bar 4.23 USD"),
                             credit: Account {
-                                range: Range1::new(23, "Assets:Foo"),
+                                range: Rng::new(23, "Assets:Foo"),
                                 segments: vec![
-                                    Range1::new(23, "Assets"),
-                                    Range1::new(30, "Foo")
+                                    Rng::new(23, "Assets"),
+                                    Rng::new(30, "Foo")
                                 ]
                             },
                             debit: Account {
-                                range: Range1::new(34, "Assets:Bar"),
+                                range: Rng::new(34, "Assets:Bar"),
                                 segments: vec![
-                                    Range1::new(34, "Assets"),
-                                    Range1::new(41, "Bar")
+                                    Rng::new(34, "Assets"),
+                                    Rng::new(41, "Bar")
                                 ]
                             },
-                            quantity: Decimal( Range1::new(45, "4.23")),
-                            commodity: Commodity (Range1::new(50, "USD")),
+                            quantity: Decimal( Rng::new(45, "4.23")),
+                            commodity: Commodity (Rng::new(50, "USD")),
                         },]
                     },
                 }),
@@ -1035,16 +1020,16 @@ mod tests {
         fn parse_close() {
             assert_eq!(
                 Ok(Directive::Dated {
-                    range: Range1::new(0, "2024-03-01 close Assets:Foo"),
+                    range: Rng::new(0, "2024-03-01 close Assets:Foo"),
                     addons: Vec::new(),
-                    date: Date(Range1::new(0, "2024-03-01")),
+                    date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Close {
-                        range: Range1::new(11, "close Assets:Foo"),
+                        range: Rng::new(11, "close Assets:Foo"),
                         account: Account {
-                            range: Range1::new(17, "Assets:Foo"),
+                            range: Rng::new(17, "Assets:Foo"),
                             segments: vec![
-                                Range1::new(17, "Assets"),
-                                Range1::new(24, "Foo")
+                                Rng::new(17, "Assets"),
+                                Rng::new(24, "Foo")
                             ]
                         }
                     },
@@ -1057,14 +1042,14 @@ mod tests {
         fn parse_price() {
             assert_eq!(
                 Ok(Directive::Dated {
-                    range: Range1::new(0, "2024-03-01 price FOO 1.543 BAR"),
+                    range: Rng::new(0, "2024-03-01 price FOO 1.543 BAR"),
                     addons: Vec::new(),
-                    date: Date(Range1::new(0, "2024-03-01")),
+                    date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Price {
-                        range: Range1::new(11, "price FOO 1.543 BAR"),
-                        commodity: Commodity(Range1::new(17, "FOO")),
-                        price: Decimal(Range1::new(21, "1.543")),
-                        target: Commodity(Range1::new(27, "BAR")),
+                        range: Rng::new(11, "price FOO 1.543 BAR"),
+                        commodity: Commodity(Rng::new(17, "FOO")),
+                        price: Decimal(Rng::new(21, "1.543")),
+                        target: Commodity(Rng::new(27, "BAR")),
                     },
                 }),
                 Parser::new("2024-03-01 price FOO 1.543 BAR").parse_directive()
@@ -1075,25 +1060,25 @@ mod tests {
         fn parse_assertion() {
             assert_eq!(
                 Ok(Directive::Dated {
-                    range: Range1::new(
+                    range: Rng::new(
                         0,
                         "2024-03-01 balance Assets:Foo 500.1 BAR"
                     ),
                     addons: Vec::new(),
-                    date: Date(Range1::new(0, "2024-03-01")),
+                    date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Assertion {
-                        range: Range1::new(11, "balance Assets:Foo 500.1 BAR"),
+                        range: Rng::new(11, "balance Assets:Foo 500.1 BAR"),
                         assertions: vec![Assertion {
-                            range: Range1::new(19, "Assets:Foo 500.1 BAR"),
+                            range: Rng::new(19, "Assets:Foo 500.1 BAR"),
                             account: Account {
-                                range: Range1::new(19, "Assets:Foo"),
+                                range: Rng::new(19, "Assets:Foo"),
                                 segments: vec![
-                                    Range1::new(19, "Assets"),
-                                    Range1::new(26, "Foo")
+                                    Rng::new(19, "Assets"),
+                                    Rng::new(26, "Foo")
                                 ],
                             },
-                            amount: Decimal(Range1::new(30, "500.1")),
-                            commodity: Commodity(Range1::new(36, "BAR")),
+                            amount: Decimal(Rng::new(30, "500.1")),
+                            commodity: Commodity(Rng::new(36, "BAR")),
                         }]
                     },
                 }),

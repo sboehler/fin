@@ -1,101 +1,101 @@
-use super::scanner::Range1;
+use super::scanner::Rng;
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct Commodity<'a>(pub Range1<'a>);
+pub struct Commodity(pub Rng);
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct Account<'a> {
-    pub range: Range1<'a>,
-    pub segments: Vec<Range1<'a>>,
+pub struct Account {
+    pub range: Rng,
+    pub segments: Vec<Rng>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Date<'a>(pub Range1<'a>);
+pub struct Date(pub Rng);
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Decimal<'a>(pub Range1<'a>);
+pub struct Decimal(pub Rng);
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct QuotedString<'a> {
-    pub range: Range1<'a>,
-    pub content: Range1<'a>,
+pub struct QuotedString {
+    pub range: Rng,
+    pub content: Rng,
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct SourceFile<'a> {
-    pub range: Range1<'a>,
-    pub directives: Vec<Directive<'a>>,
+pub struct SourceFile {
+    pub range: Rng,
+    pub directives: Vec<Directive>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub enum Directive<'a> {
+pub enum Directive {
     Include {
-        range: Range1<'a>,
-        path: QuotedString<'a>,
+        range: Rng,
+        path: QuotedString,
     },
     Dated {
-        range: Range1<'a>,
-        addons: Vec<Addon<'a>>,
-        date: Date<'a>,
-        command: Command<'a>,
+        range: Rng,
+        addons: Vec<Addon>,
+        date: Date,
+        command: Command,
     },
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub enum Command<'a> {
+pub enum Command {
     Price {
-        range: Range1<'a>,
-        commodity: Commodity<'a>,
-        price: Decimal<'a>,
-        target: Commodity<'a>,
+        range: Rng,
+        commodity: Commodity,
+        price: Decimal,
+        target: Commodity,
     },
     Open {
-        range: Range1<'a>,
-        account: Account<'a>,
+        range: Rng,
+        account: Account,
     },
     Transaction {
-        range: Range1<'a>,
-        description: QuotedString<'a>,
-        bookings: Vec<Booking<'a>>,
+        range: Rng,
+        description: QuotedString,
+        bookings: Vec<Booking>,
     },
     Assertion {
-        range: Range1<'a>,
-        assertions: Vec<Assertion<'a>>,
+        range: Rng,
+        assertions: Vec<Assertion>,
     },
     Close {
-        range: Range1<'a>,
-        account: Account<'a>,
+        range: Rng,
+        account: Account,
     },
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Assertion<'a> {
-    pub range: Range1<'a>,
-    pub account: Account<'a>,
-    pub amount: Decimal<'a>,
-    pub commodity: Commodity<'a>,
+pub struct Assertion {
+    pub range: Rng,
+    pub account: Account,
+    pub amount: Decimal,
+    pub commodity: Commodity,
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Booking<'a> {
-    pub range: Range1<'a>,
-    pub credit: Account<'a>,
-    pub debit: Account<'a>,
-    pub quantity: Decimal<'a>,
-    pub commodity: Commodity<'a>,
+pub struct Booking {
+    pub range: Rng,
+    pub credit: Account,
+    pub debit: Account,
+    pub quantity: Decimal,
+    pub commodity: Commodity,
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub enum Addon<'a> {
+pub enum Addon {
     Performance {
-        range: Range1<'a>,
-        commodities: Vec<Commodity<'a>>,
+        range: Rng,
+        commodities: Vec<Commodity>,
     },
     Accrual {
-        range: Range1<'a>,
-        interval: Range1<'a>,
-        start: Date<'a>,
-        end: Date<'a>,
-        account: Account<'a>,
+        range: Rng,
+        interval: Rng,
+        start: Date,
+        end: Date,
+        account: Account,
     },
 }
