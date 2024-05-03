@@ -15,15 +15,15 @@ impl Command {
 
 fn execute(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     let s = fs::read_to_string(path)?;
-    let f = parse_file(path, &s)?;
+    let f = parse_file(&s)?;
     let mut b = Vec::new();
     format_file(&mut b, &s, &f)?;
     fs::write(path, b)?;
     Ok(())
 }
 
-fn parse_file(path: &PathBuf, s: &str) -> Result<SourceFile, Box<dyn Error>> {
-    let p = Parser::new_from_file(&s, Some(&path));
+fn parse_file(s: &str) -> Result<SourceFile, Box<dyn Error>> {
+    let p = Parser::new(&s);
     let sf = p.parse_file()?;
     Ok(sf)
 }

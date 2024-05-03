@@ -1,11 +1,10 @@
-use std::{cell::RefCell, iter::Peekable, path::PathBuf, str::CharIndices};
+use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct ParserError {
     got: Token,
     want: Token,
     msg: Option<String>,
-    file: Option<String>,
     line: usize,
     col: usize,
     context: Vec<(usize, String)>,
@@ -14,7 +13,6 @@ pub struct ParserError {
 impl ParserError {
     pub fn new(
         source: &str,
-        file: Option<&PathBuf>,
         pos: usize,
         msg: Option<String>,
         want: Token,
@@ -22,7 +20,6 @@ impl ParserError {
     ) -> ParserError {
         let (line, col) = Self::position(source, pos);
         let rng = line.saturating_sub(4)..=line;
-        let file = file.map(|p| p.to_string_lossy().to_string());
         let context = source
             .lines()
             .enumerate()
@@ -30,7 +27,6 @@ impl ParserError {
             .map(|(i, l)| (i, l.into()))
             .collect();
         ParserError {
-            file,
             line,
             col,
             context,
@@ -58,8 +54,7 @@ impl std::fmt::Display for ParserError {
         writeln!(f)?;
         write!(
             f,
-            "{file}:{line}:{col}:",
-            file = self.file.as_deref().unwrap_or(""),
+            "Line {line}, column {col}:",
             line = self.line,
             col = self.col,
         )?;
@@ -165,7 +160,7 @@ mod test_parser_error {
         assert_eq!(
             vec![
                 "",
-                "finance.knut:0:1: while parsing file",
+                "Line 0, column 1: while parsing file",
                 "",
                 "    0|asdf",
                 "       ^ want whitespace, got a character (a-z, A-Z) or a digit (0-9)",
@@ -176,7 +171,6 @@ mod test_parser_error {
                 got: Token::AlphaNum,
                 want: Token::WhiteSpace,
                 msg: Some("parsing file".into()),
-                file: Some("finance.knut".into()),
                 line: 0,
                 col: 1,
                 context: vec![(0, "asdf".into())]
@@ -220,21 +214,15 @@ impl Rng {
 
 pub struct Scanner<'a> {
     pub source: &'a str,
-    pub filename: Option<&'a PathBuf>,
     chars: RefCell<Peekable<CharIndices<'a>>>,
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new_from_file(s: &'a str, filename: Option<&'a PathBuf>) -> Scanner<'a> {
+    pub fn new(s: &'a str) -> Scanner<'a> {
         Scanner {
             source: s,
-            filename,
             chars: RefCell::new(s.char_indices().peekable()),
         }
-    }
-
-    pub fn new(s: &'a str) -> Scanner<'a> {
-        Scanner::new_from_file(s, None)
     }
 
     pub fn rng(&self, start: usize) -> Rng {
@@ -416,7 +404,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> ParserError {
-        ParserError::new(self.source, self.filename, pos, msg, want, got)
+        ParserError::new(self.source, pos, msg, want, got)
     }
 }
 
@@ -448,7 +436,6 @@ mod test_scanner {
         assert_eq!(
             Err(ParserError::new(
                 "aaasdff",
-                None,
                 7,
                 None,
                 Token::Char('q'),
@@ -466,7 +453,6 @@ mod test_scanner {
         assert_eq!(
             Err(ParserError::new(
                 "asdf",
-                None,
                 1,
                 None,
                 Token::Char('q'),
@@ -488,7 +474,6 @@ mod test_scanner {
         assert_eq!(
             Err(ParserError::new(
                 "asdf",
-                None,
                 2,
                 None,
                 Token::Char('q'),
@@ -520,7 +505,6 @@ mod test_scanner {
         assert_eq!(
             Err(ParserError::new(
                 "\n\n  \nfoo",
-                None,
                 5,
                 None,
                 Token::Either(vec![Token::Char('\n'), Token::EOF]),
@@ -539,14 +523,7 @@ mod test_scanner {
         assert_eq!(Ok(Rng::new(1, "o")), s.read_1());
         assert_eq!(Ok(Rng::new(2, "o")), s.read_1());
         assert_eq!(
-            Err(ParserError::new(
-                "foo",
-                None,
-                3,
-                None,
-                Token::Any,
-                Token::EOF
-            )),
+            Err(ParserError::new("foo", 3, None, Token::Any, Token::EOF)),
             s.read_1()
         );
         assert_eq!(Ok(Rng::new(3, "")), s.read_eol());
@@ -566,7 +543,6 @@ mod test_scanner {
         assert_eq!(
             Err(ParserError::new(
                 "asdf",
-                None,
                 2,
                 None,
                 Token::Digit,
@@ -583,14 +559,7 @@ mod test_scanner {
             s.read_1_with(Token::Char('f'), |c| c == 'f')
         );
         assert_eq!(
-            Err(ParserError::new(
-                "asdf",
-                None,
-                4,
-                None,
-                Token::Any,
-                Token::EOF
-            )),
+            Err(ParserError::new("asdf", 4, None, Token::Any, Token::EOF)),
             s.read_1_with(Token::Any, |_| true)
         );
         assert_eq!(Ok(Rng::new(4, "")), s.read_eol());
@@ -602,14 +571,7 @@ mod test_scanner {
         assert_eq!(Ok(Rng::new(0, "as")), s.read_n(2));
         assert_eq!(Ok(Rng::new(2, "")), s.read_n(0));
         assert_eq!(
-            Err(ParserError::new(
-                "asdf",
-                None,
-                4,
-                None,
-                Token::Any,
-                Token::EOF
-            )),
+            Err(ParserError::new("asdf", 4, None, Token::Any, Token::EOF)),
             s.read_n(3)
         );
         assert_eq!(Ok(Rng::new(4, "")), s.read_eol());
@@ -621,7 +583,6 @@ mod test_scanner {
         assert_eq!(
             Err(ParserError::new(
                 "a\n\n",
-                None,
                 0,
                 None,
                 Token::Either(vec![Token::Char('\n'), Token::EOF]),
@@ -646,7 +607,6 @@ mod test_scanner {
         assert_eq!(
             Err(ParserError::new(
                 s.source,
-                None,
                 5,
                 None,
                 Token::WhiteSpace,

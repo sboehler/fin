@@ -1,5 +1,4 @@
 use crate::syntax::scanner::{Result, Scanner, Token};
-use std::path::PathBuf;
 
 use super::scanner::{ParserError, Rng};
 use super::syntax::{
@@ -18,21 +17,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn new_from_file(s: &'a str, filename: Option<&'a PathBuf>) -> Parser<'a> {
-        Parser {
-            scanner: Scanner::new_from_file(s, filename),
-        }
-    }
-
     fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> ParserError {
-        ParserError::new(
-            &self.scanner.source,
-            self.scanner.filename,
-            pos,
-            msg,
-            want,
-            got,
-        )
+        ParserError::new(&self.scanner.source, pos, msg, want, got)
     }
 
     pub fn parse_account(&self) -> Result<Account> {
@@ -574,7 +560,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 " USD",
-                None,
                 0,
                 Some("parsing commodity".into()),
                 Token::AlphaNum,
@@ -585,7 +570,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 "/USD",
-                None,
                 0,
                 Some("parsing commodity".into()),
                 Token::AlphaNum,
@@ -614,7 +598,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 " USD",
-                None,
                 0,
                 Some("parsing account type".into()),
                 Token::AlphaNum,
@@ -625,7 +608,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 "/USD",
-                None,
                 0,
                 Some("parsing account type".into()),
                 Token::AlphaNum,
@@ -648,7 +630,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 "024-02-02",
-                None,
                 3,
                 Some("parsing year".into()),
                 Token::Digit,
@@ -659,7 +640,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 "2024-02-0",
-                None,
                 9,
                 Some("parsing day".into()),
                 Token::Digit,
@@ -670,7 +650,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 "2024-0--0",
-                None,
                 6,
                 Some("parsing month".into()),
                 Token::Digit,
@@ -725,7 +704,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 "foo",
-                None,
                 0,
                 None,
                 Token::Digit,
@@ -864,7 +842,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 "\"",
-                None,
                 1,
                 None,
                 Token::Char('"'),
@@ -878,7 +855,6 @@ mod tests {
         assert_eq!(
             Err(ParserError::new(
                 "\"\"   Assets Assets 12 USD",
-                None,
                 5,
                 None,
                 Token::Either(vec![Token::Char('\n'), Token::EOF]),
