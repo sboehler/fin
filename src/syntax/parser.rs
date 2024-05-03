@@ -3,7 +3,7 @@ use crate::syntax::scanner::{Result, Scanner, Token};
 use super::scanner::{ParserError, Rng};
 use super::syntax::{
     Account, Addon, Assertion, Booking, Command, Commodity, Date, Decimal, Directive, QuotedString,
-    SourceFile,
+    SyntaxTree,
 };
 
 pub struct Parser<'a> {
@@ -109,7 +109,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_file(&self) -> Result<SourceFile> {
+    pub fn parse(&self) -> Result<SyntaxTree> {
         let start = self.scanner.pos();
         let mut directives = Vec::new();
         while self.scanner.current().is_some() {
@@ -144,7 +144,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Ok(SourceFile {
+        Ok(SyntaxTree {
             range: self.scanner.rng(start),
             directives,
         })

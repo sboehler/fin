@@ -1,4 +1,4 @@
-use crate::journal;
+use crate::syntax;
 use clap::Args;
 use std::{error::Error, path::PathBuf};
 
@@ -9,8 +9,7 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        let j = journal::Journal::from_file(&self.journal)?;
-        println!("{} {}", j.min_date().unwrap(), j.max_date().unwrap());
+        syntax::parse(&self.journal)?;
         Ok(())
     }
 }

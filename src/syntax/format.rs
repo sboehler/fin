@@ -1,14 +1,11 @@
-use std::{
-    cmp::max,
-    io::{self, Result, Write},
-};
+use std::io::{self, Result, Write};
 
-use super::syntax::{Addon, Assertion, Command, Date, Directive, QuotedString, SourceFile};
+use super::syntax::{Addon, Assertion, Command, Date, Directive, QuotedString, SyntaxTree};
 
-pub fn format_file(w: &mut impl Write, s: &str, source_file: &SourceFile) -> io::Result<()> {
-    let n = initialize(s, &source_file.directives);
+pub fn format_file(w: &mut impl Write, s: &str, syntax_tree: &SyntaxTree) -> io::Result<()> {
+    let n = initialize(s, &syntax_tree.directives);
     let mut pos = 0;
-    for d in &source_file.directives {
+    for d in &syntax_tree.directives {
         match d {
             Directive::Include { range, path } => {
                 w.write(s[pos..range.start].as_bytes())?;
@@ -27,14 +24,14 @@ pub fn format_file(w: &mut impl Write, s: &str, source_file: &SourceFile) -> io:
             }
         }
     }
-    w.write(s[pos..source_file.range.end].as_bytes())?;
+    w.write(s[pos..syntax_tree.range.end].as_bytes())?;
     Ok(())
 }
 
 fn initialize(text: &str, directives: &Vec<Directive>) -> usize {
     directives
         .iter()
-        .flat_map(|d| match d {
+        .filter_map(|d| match d {
             Directive::Dated {
                 command: Command::Transaction { bookings, .. },
                 ..
@@ -42,12 +39,8 @@ fn initialize(text: &str, directives: &Vec<Directive>) -> usize {
             _ => None,
         })
         .flatten()
-        .map(|b| {
-            max(
-                b.credit.range.slice(text).chars().count(),
-                b.debit.range.slice(text).chars().count(),
-            )
-        })
+        .flat_map(|b| vec![&b.credit, &b.debit])
+        .map(|a| a.range.slice(text).chars().count())
         .max()
         .unwrap_or_default()
 }

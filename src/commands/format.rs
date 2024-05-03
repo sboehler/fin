@@ -1,4 +1,4 @@
-use crate::syntax::{format::format_file, parser::Parser, syntax::SourceFile};
+use crate::syntax::{format::format_file, parser::Parser, syntax::SyntaxTree};
 use clap::Args;
 use std::{error::Error, fs, path::PathBuf};
 
@@ -22,8 +22,8 @@ fn execute(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn parse_file(s: &str) -> Result<SourceFile, Box<dyn Error>> {
+fn parse_file(s: &str) -> Result<SyntaxTree, Box<dyn Error>> {
     let p = Parser::new(&s);
-    let sf = p.parse_file()?;
+    let sf = p.parse()?;
     Ok(sf)
 }
