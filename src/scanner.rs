@@ -166,12 +166,7 @@ impl<'a> Scanner<'a> {
         let pos = self.pos();
         match self.advance() {
             Some(d) if c == d => self.annotate(pos, ()),
-            o => Err(self.error(
-                pos,
-                None,
-                Character::Char(c),
-                Character::from_char(o),
-            )),
+            o => Err(self.error(pos, None, Character::Char(c), Character::from_char(o))),
         }
     }
 
@@ -200,9 +195,7 @@ impl<'a> Scanner<'a> {
                 Err(self.error(
                     pos,
                     Some("error while parsing identifier".into()),
-                    Character::Custom(
-                        "alphanumeric character to start the identifier".into(),
-                    ),
+                    Character::Custom("alphanumeric character to start the identifier".into()),
                     got,
                 ))
             }
@@ -232,24 +225,16 @@ impl<'a> Scanner<'a> {
         let pos = self.pos();
         match self.advance() {
             None | Some('\n') => self.annotate(pos, ()),
-            Some(ch) => Err(self.error(
-                pos,
-                None,
-                Character::Char('\n'),
-                Character::Char(ch),
-            )),
+            Some(ch) => Err(self.error(pos, None, Character::Char('\n'), Character::Char(ch))),
         }
     }
 
     pub fn consume_space1(&mut self) -> Result<Annotated<()>> {
         let pos = self.pos();
         match self.current() {
-            Some(ch) if !ch.is_ascii_whitespace() => Err(self.error(
-                pos,
-                None,
-                Character::WhiteSpace,
-                Character::Char(ch),
-            )),
+            Some(ch) if !ch.is_ascii_whitespace() => {
+                Err(self.error(pos, None, Character::WhiteSpace, Character::Char(ch)))
+            }
             _ => {
                 self.consume_space();
                 self.annotate(pos, ())

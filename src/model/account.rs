@@ -63,9 +63,7 @@ impl Account {
         match value.split(':').collect::<Vec<_>>().as_slice() {
             &[at, ref segments @ ..] => {
                 for segment in segments {
-                    if segment.is_empty()
-                        || segment.chars().any(|c| !c.is_alphanumeric())
-                    {
+                    if segment.is_empty() || segment.chars().any(|c| !c.is_alphanumeric()) {
                         return Err(format!("invalid segment: {}", segment));
                     }
                 }
@@ -156,11 +154,12 @@ impl Accounts {
         }
         let account = Account::parse(s)?;
         self.accounts.insert(s.to_string(), account.clone());
-        if let Some(parent) =
-            s.rfind(':').map(|i| self.create(&s[..i])).transpose()?
-        {
+        if let Some(parent) = s.rfind(':').map(|i| self.create(&s[..i])).transpose()? {
             self.parents.insert(account.clone(), parent.clone());
-            self.children.entry(parent).or_default().insert(account.clone());
+            self.children
+                .entry(parent)
+                .or_default()
+                .insert(account.clone());
         }
         Ok(account)
     }

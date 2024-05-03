@@ -8,9 +8,7 @@ pub struct Tag {
 
 impl Tag {
     pub fn new(tag: String) -> Tag {
-        Tag {
-            tag,
-        }
+        Tag { tag }
     }
 }
 

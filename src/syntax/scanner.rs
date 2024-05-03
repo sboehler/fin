@@ -225,10 +225,7 @@ pub struct Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new_from_file(
-        s: &'a str,
-        filename: Option<&'a PathBuf>,
-    ) -> Scanner<'a> {
+    pub fn new_from_file(s: &'a str, filename: Option<&'a PathBuf>) -> Scanner<'a> {
         Scanner {
             source: s,
             filename,
@@ -307,12 +304,7 @@ impl<'a> Scanner<'a> {
                 self.advance();
                 Ok(self.rng(start))
             }
-            o => Err(self.error(
-                self.pos(),
-                None,
-                Token::Char(c),
-                Token::from_char(o),
-            )),
+            o => Err(self.error(self.pos(), None, Token::Char(c), Token::from_char(o))),
         }
     }
 
@@ -371,17 +363,8 @@ impl<'a> Scanner<'a> {
         for _ in 0..n {
             match self.current() {
                 Some(c) if pred(c) => self.advance(),
-                Some(c) => {
-                    return Err(self.error(
-                        self.pos(),
-                        None,
-                        token,
-                        Token::Char(c),
-                    ))
-                }
-                None => {
-                    return Err(self.error(self.pos(), None, token, Token::EOF))
-                }
+                Some(c) => return Err(self.error(self.pos(), None, token, Token::Char(c))),
+                None => return Err(self.error(self.pos(), None, token, Token::EOF)),
             };
         }
         Ok(self.rng(start))
@@ -432,13 +415,7 @@ impl<'a> Scanner<'a> {
         Ok(self.rng(start))
     }
 
-    fn error(
-        &self,
-        pos: usize,
-        msg: Option<String>,
-        want: Token,
-        got: Token,
-    ) -> ParserError {
+    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> ParserError {
         ParserError::new(self.source, self.filename, pos, msg, want, got)
     }
 }
@@ -562,7 +539,14 @@ mod test_scanner {
         assert_eq!(Ok(Rng::new(1, "o")), s.read_1());
         assert_eq!(Ok(Rng::new(2, "o")), s.read_1());
         assert_eq!(
-            Err(ParserError::new("foo", None, 3, None, Token::Any, Token::EOF)),
+            Err(ParserError::new(
+                "foo",
+                None,
+                3,
+                None,
+                Token::Any,
+                Token::EOF
+            )),
             s.read_1()
         );
         assert_eq!(Ok(Rng::new(3, "")), s.read_eol());

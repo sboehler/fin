@@ -3,23 +3,14 @@ use std::{
     io::{self, Result, Write},
 };
 
-use super::syntax::{
-    Addon, Assertion, Command, Date, Directive, QuotedString, SourceFile,
-};
+use super::syntax::{Addon, Assertion, Command, Date, Directive, QuotedString, SourceFile};
 
-pub fn format_file(
-    w: &mut impl Write,
-    s: &str,
-    source_file: &SourceFile,
-) -> io::Result<()> {
+pub fn format_file(w: &mut impl Write, s: &str, source_file: &SourceFile) -> io::Result<()> {
     let n = initialize(s, &source_file.directives);
     let mut pos = 0;
     for d in &source_file.directives {
         match d {
-            Directive::Include {
-                range,
-                path,
-            } => {
+            Directive::Include { range, path } => {
                 w.write(s[pos..range.start].as_bytes())?;
                 format_include(w, s, path)?;
                 pos = range.end;
@@ -45,11 +36,7 @@ fn initialize(text: &str, directives: &Vec<Directive>) -> usize {
         .iter()
         .flat_map(|d| match d {
             Directive::Dated {
-                command:
-                    Command::Transaction {
-                        bookings,
-                        ..
-                    },
+                command: Command::Transaction { bookings, .. },
                 ..
             } => Some(bookings),
             _ => None,
@@ -65,11 +52,7 @@ fn initialize(text: &str, directives: &Vec<Directive>) -> usize {
         .unwrap_or_default()
 }
 
-fn format_include(
-    w: &mut impl Write,
-    text: &str,
-    path: &QuotedString,
-) -> Result<()> {
+fn format_include(w: &mut impl Write, text: &str, path: &QuotedString) -> Result<()> {
     write!(w, "include {}", path.range.slice(text))
 }
 
@@ -99,10 +82,7 @@ fn format_dated(
             price = price.0.slice(text),
             target = target.0.slice(text),
         ),
-        Command::Open {
-            account,
-            ..
-        } => write!(
+        Command::Open { account, .. } => write!(
             w,
             "{date} open {account}",
             date = date.0.slice(text),
@@ -132,10 +112,7 @@ fn format_dated(
             }
             Ok(())
         }
-        Command::Assertion {
-            assertions,
-            ..
-        } => match &assertions[..] {
+        Command::Assertion { assertions, .. } => match &assertions[..] {
             [Assertion {
                 account,
                 amount,
@@ -163,10 +140,7 @@ fn format_dated(
                 Ok(())
             }
         },
-        Command::Close {
-            account,
-            ..
-        } => write!(
+        Command::Close { account, .. } => write!(
             w,
             "{date} close {account}",
             date = date.0.slice(text),
@@ -191,10 +165,7 @@ fn format_addon(w: &mut impl Write, text: &str, a: &Addon) -> Result<()> {
             end = end.0.slice(text),
             account = account.range.slice(text)
         ),
-        Addon::Performance {
-            commodities,
-            ..
-        } => {
+        Addon::Performance { commodities, .. } => {
             write!(w, "@performance(")?;
             for (i, c) in commodities.iter().enumerate() {
                 w.write(c.0.slice(text).as_bytes())?;

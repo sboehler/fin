@@ -35,26 +35,16 @@ impl Error for JournalError {}
 
 pub type Result<T> = std::result::Result<T, JournalError>;
 
-pub fn read_from_file(
-    p: PathBuf,
-) -> (mpsc::Receiver<Result<Command>>, JoinHandle<()>) {
+pub fn read_from_file(p: PathBuf) -> (mpsc::Receiver<Result<Command>>, JoinHandle<()>) {
     let (tx, rx) = mpsc::channel();
     let context = Arc::new(Context::new());
     (rx, thread::spawn(move || parse_spawn(context, p, tx)))
 }
 
-fn parse_spawn(
-    context: Arc<Context>,
-    file: PathBuf,
-    tx: mpsc::Sender<Result<Command>>,
-) {
+fn parse_spawn(context: Arc<Context>, file: PathBuf, tx: mpsc::Sender<Result<Command>>) {
     match fs::read_to_string(&file) {
         Ok(text) => {
-            let parser = Parser::new_from_file(
-                context.clone(),
-                &text,
-                Some(file.clone()),
-            );
+            let parser = Parser::new_from_file(context.clone(), &text, Some(file.clone()));
             let mut handles = Vec::new();
             for directive in parser {
                 match directive {
@@ -63,9 +53,7 @@ fn parse_spawn(
                         let tx = tx.clone();
                         let path = file.parent().unwrap().join(path);
                         let context = context.clone();
-                        handles.push(thread::spawn(move || {
-                            parse_spawn(context, path, tx)
-                        }));
+                        handles.push(thread::spawn(move || parse_spawn(context, path, tx)));
                     }
                     Err(err) => {
                         tx.send(Err(JournalError::ParserError(err))).unwrap();
@@ -139,11 +127,17 @@ impl Journal {
     }
 
     pub fn min_date(&self) -> Option<NaiveDate> {
-        self.days.values().find(|d| !d.transactions.is_empty()).map(|d| d.date)
+        self.days
+            .values()
+            .find(|d| !d.transactions.is_empty())
+            .map(|d| d.date)
     }
 
     pub fn max_date(&self) -> Option<NaiveDate> {
-        self.days.values().rfind(|d| !d.transactions.is_empty()).map(|d| d.date)
+        self.days
+            .values()
+            .rfind(|d| !d.transactions.is_empty())
+            .map(|d| d.date)
     }
 
     pub fn from_file(p: &PathBuf) -> Result<Journal> {

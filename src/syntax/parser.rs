@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use super::scanner::{ParserError, Rng};
 use super::syntax::{
-    Account, Addon, Assertion, Booking, Command, Commodity, Date, Decimal,
-    Directive, QuotedString, SourceFile,
+    Account, Addon, Assertion, Booking, Command, Commodity, Date, Decimal, Directive, QuotedString,
+    SourceFile,
 };
 
 pub struct Parser<'a> {
@@ -18,22 +18,13 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn new_from_file(
-        s: &'a str,
-        filename: Option<&'a PathBuf>,
-    ) -> Parser<'a> {
+    pub fn new_from_file(s: &'a str, filename: Option<&'a PathBuf>) -> Parser<'a> {
         Parser {
             scanner: Scanner::new_from_file(s, filename),
         }
     }
 
-    fn error(
-        &self,
-        pos: usize,
-        msg: Option<String>,
-        want: Token,
-        got: Token,
-    ) -> ParserError {
+    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> ParserError {
         ParserError::new(
             &self.scanner.source,
             self.scanner.filename,
@@ -111,10 +102,12 @@ impl<'a> Parser<'a> {
         if let Some('-') = self.scanner.current() {
             self.scanner.read_char('-')?;
         }
-        self.scanner.read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
+        self.scanner
+            .read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
         if let Some('.') = self.scanner.current() {
             self.scanner.read_char('.')?;
-            self.scanner.read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
+            self.scanner
+                .read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
         }
         Ok(Decimal(self.scanner.rng(start)))
     }
@@ -159,11 +152,7 @@ impl<'a> Parser<'a> {
                     return Err(self.error(
                         start,
                         None,
-                        Token::Either(vec![
-                            Token::Directive,
-                            Token::Comment,
-                            Token::BlankLine,
-                        ]),
+                        Token::Either(vec![Token::Directive, Token::Comment, Token::BlankLine]),
                         o.map_or(Token::EOF, Token::Char),
                     ))
                 }
@@ -203,16 +192,14 @@ impl<'a> Parser<'a> {
     pub fn parse_directive(&self) -> Result<Directive> {
         match self.scanner.current() {
             Some('i') => self.parse_include(),
-            Some(c) if c.is_ascii_digit() || c == '@' => {
-                self.parse_command().map_err(|e| {
-                    self.error(
-                        self.scanner.pos(),
-                        Some("parsing command".into()),
-                        Token::Directive,
-                        Token::Error(Box::new(e)),
-                    )
-                })
-            }
+            Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command().map_err(|e| {
+                self.error(
+                    self.scanner.pos(),
+                    Some("parsing command".into()),
+                    Token::Directive,
+                    Token::Error(Box::new(e)),
+                )
+            }),
             o => Err(self.error(
                 self.scanner.pos(),
                 None,
@@ -226,8 +213,9 @@ impl<'a> Parser<'a> {
         let start = self.scanner.pos();
         self.scanner.read_string("include")?;
         self.scanner.read_space1()?;
-        let path =
-            self.parse_quoted_string().map_err(|e| e.update("parsing path"))?;
+        let path = self
+            .parse_quoted_string()
+            .map_err(|e| e.update("parsing path"))?;
         Ok(Directive::Include {
             range: self.scanner.rng(start),
             path,
@@ -367,22 +355,22 @@ impl<'a> Parser<'a> {
         }
         self.scanner.read_char(')')?;
         let range = self.scanner.rng(start);
-        Ok(Addon::Performance {
-            range,
-            commodities,
-        })
+        Ok(Addon::Performance { range, commodities })
     }
 
     pub fn parse_accrual(&self, start: usize) -> Result<Addon> {
         self.scanner.read_space1()?;
-        let interval =
-            self.parse_interval().map_err(|e| e.update("parsing interval"))?;
+        let interval = self
+            .parse_interval()
+            .map_err(|e| e.update("parsing interval"))?;
         self.scanner.read_space1()?;
-        let start_date =
-            self.parse_date().map_err(|e| e.update("parsing start date"))?;
+        let start_date = self
+            .parse_date()
+            .map_err(|e| e.update("parsing start date"))?;
         self.scanner.read_space1()?;
-        let end_date =
-            self.parse_date().map_err(|e| e.update("parsing end date"))?;
+        let end_date = self
+            .parse_date()
+            .map_err(|e| e.update("parsing end date"))?;
         self.scanner.read_space1()?;
         let account = self
             .parse_account()
@@ -404,8 +392,9 @@ impl<'a> Parser<'a> {
             .parse_commodity()
             .map_err(|e| e.update("parsing commodity"))?;
         self.scanner.read_space1()?;
-        let price =
-            self.parse_decimal().map_err(|e| e.update("parsing price"))?;
+        let price = self
+            .parse_decimal()
+            .map_err(|e| e.update("parsing price"))?;
         self.scanner.read_space1()?;
         let target = self
             .parse_commodity()
@@ -422,8 +411,9 @@ impl<'a> Parser<'a> {
         let start = self.scanner.pos();
         self.scanner.read_string("open")?;
         self.scanner.read_space1()?;
-        let a =
-            self.parse_account().map_err(|e| e.update("parsing account"))?;
+        let a = self
+            .parse_account()
+            .map_err(|e| e.update("parsing account"))?;
         Ok(Command::Open {
             range: self.scanner.rng(start),
             account: a,
@@ -445,7 +435,11 @@ impl<'a> Parser<'a> {
                 )
             })?);
             self.scanner.read_rest_of_line()?;
-            if !self.scanner.current().map_or(false, |c| c.is_alphanumeric()) {
+            if !self
+                .scanner
+                .current()
+                .map_or(false, |c| c.is_alphanumeric())
+            {
                 break;
             }
         }
@@ -466,8 +460,9 @@ impl<'a> Parser<'a> {
             .parse_account()
             .map_err(|e| e.update("parsing debit account"))?;
         self.scanner.read_space1()?;
-        let quantity =
-            self.parse_decimal().map_err(|e| e.update("parsing quantity"))?;
+        let quantity = self
+            .parse_decimal()
+            .map_err(|e| e.update("parsing quantity"))?;
         self.scanner.read_space1()?;
         let commodity = self
             .parse_commodity()
@@ -525,11 +520,13 @@ impl<'a> Parser<'a> {
 
     pub fn parse_sub_assertion(&self) -> Result<Assertion> {
         let start = self.scanner.pos();
-        let account =
-            self.parse_account().map_err(|e| e.update("parsing account"))?;
+        let account = self
+            .parse_account()
+            .map_err(|e| e.update("parsing account"))?;
         self.scanner.read_space1()?;
-        let amount =
-            self.parse_decimal().map_err(|e| e.update("parsing amount"))?;
+        let amount = self
+            .parse_decimal()
+            .map_err(|e| e.update("parsing amount"))?;
         self.scanner.read_space1()?;
         let commodity = self
             .parse_commodity()
@@ -610,10 +607,7 @@ mod tests {
         assert_eq!(
             Ok(Account {
                 range: Rng::new(0, "Liabilities:Debt"),
-                segments: vec![
-                    Rng::new(0, "Liabilities"),
-                    Rng::new(12, "Debt")
-                ],
+                segments: vec![Rng::new(0, "Liabilities"), Rng::new(12, "Debt")],
             }),
             Parser::new("Liabilities:Debt  ").parse_account(),
         );
@@ -775,25 +769,16 @@ mod tests {
         fn accrual() {
             assert_eq!(
                 Ok(Addon::Accrual {
-                    range: Rng::new(
-                        0,
-                        "@accrue monthly 2024-01-01 2024-12-31 Assets:Payables"
-                    ),
+                    range: Rng::new(0, "@accrue monthly 2024-01-01 2024-12-31 Assets:Payables"),
                     interval: Rng::new(8, "monthly"),
                     start: Date(Rng::new(16, "2024-01-01")),
                     end: Date(Rng::new(27, "2024-12-31")),
                     account: Account {
                         range: Rng::new(38, "Assets:Payables"),
-                        segments: vec![
-                            Rng::new(38, "Assets"),
-                            Rng::new(45, "Payables")
-                        ]
+                        segments: vec![Rng::new(38, "Assets"), Rng::new(45, "Payables")]
                     }
                 }),
-                Parser::new(
-                    "@accrue monthly 2024-01-01 2024-12-31 Assets:Payables"
-                )
-                .parse_addon()
+                Parser::new("@accrue monthly 2024-01-01 2024-12-31 Assets:Payables").parse_addon()
             )
         }
     }
@@ -847,17 +832,11 @@ mod tests {
                         range: Rng::new(12, "Assets:Foo Assets:Bar 4.23 USD"),
                         credit: Account {
                             range: Rng::new(12, "Assets:Foo"),
-                            segments: vec![
-                                Rng::new(12, "Assets"),
-                                Rng::new(19, "Foo")
-                            ]
+                            segments: vec![Rng::new(12, "Assets"), Rng::new(19, "Foo")]
                         },
                         debit: Account {
                             range: Rng::new(23, "Assets:Bar"),
-                            segments: vec![
-                                Rng::new(23, "Assets"),
-                                Rng::new(30, "Bar")
-                            ]
+                            segments: vec![Rng::new(23, "Assets"), Rng::new(30, "Bar")]
                         },
                         quantity: Decimal(Rng::new(34, "4.23")),
                         commodity: Commodity(Rng::new(39, "USD")),
@@ -866,17 +845,11 @@ mod tests {
                         range: Rng::new(43, "Assets:Foo Assets:Baz 8 USD"),
                         credit: Account {
                             range: Rng::new(43, "Assets:Foo"),
-                            segments: vec![
-                                Rng::new(43, "Assets"),
-                                Rng::new(50, "Foo")
-                            ]
+                            segments: vec![Rng::new(43, "Assets"), Rng::new(50, "Foo")]
                         },
                         debit: Account {
                             range: Rng::new(54, "Assets:Baz"),
-                            segments: vec![
-                                Rng::new(54, "Assets"),
-                                Rng::new(61, "Baz")
-                            ]
+                            segments: vec![Rng::new(54, "Assets"), Rng::new(61, "Baz")]
                         },
                         quantity: Decimal(Rng::new(65, "8")),
                         commodity: Commodity(Rng::new(67, "USD")),
@@ -936,17 +909,13 @@ mod tests {
         fn parse_include() {
             assert_eq!(
                 Ok(Directive::Include {
-                    range: Rng::new(
-                        0,
-                        r#"include "/foo/bar/baz/finance.knut""#
-                    ),
+                    range: Rng::new(0, r#"include "/foo/bar/baz/finance.knut""#),
                     path: QuotedString {
                         range: Rng::new(8, r#""/foo/bar/baz/finance.knut""#),
                         content: Rng::new(9, "/foo/bar/baz/finance.knut"),
                     }
                 }),
-                Parser::new(r#"include "/foo/bar/baz/finance.knut""#)
-                    .parse_directive()
+                Parser::new(r#"include "/foo/bar/baz/finance.knut""#).parse_directive()
             )
         }
 
@@ -961,10 +930,7 @@ mod tests {
                         range: Rng::new(11, "open Assets:Foo"),
                         account: Account {
                             range: Rng::new(16, "Assets:Foo"),
-                            segments: vec![
-                                Rng::new(16, "Assets"),
-                                Rng::new(23, "Foo")
-                            ]
+                            segments: vec![Rng::new(16, "Assets"), Rng::new(23, "Foo")]
                         }
                     },
                 }),
@@ -976,14 +942,14 @@ mod tests {
         fn parse_transaction() {
             assert_eq!(
                 Ok(Directive::Dated {
-                    range: Rng::new(0, "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
+                    range: Rng::new(
+                        0,
+                        "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
+                    ),
                     addons: Vec::new(),
-                    date: Date (Rng::new(0, "2024-12-31")),
+                    date: Date(Rng::new(0, "2024-12-31")),
                     command: Command::Transaction {
-                        range: Rng::new(
-                            11,
-                            "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
-                        ),
+                        range: Rng::new(11, "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
                         description: QuotedString {
                             range: Rng::new(11, r#""Message""#),
                             content: Rng::new(12, "Message"),
@@ -992,27 +958,19 @@ mod tests {
                             range: Rng::new(23, "Assets:Foo Assets:Bar 4.23 USD"),
                             credit: Account {
                                 range: Rng::new(23, "Assets:Foo"),
-                                segments: vec![
-                                    Rng::new(23, "Assets"),
-                                    Rng::new(30, "Foo")
-                                ]
+                                segments: vec![Rng::new(23, "Assets"), Rng::new(30, "Foo")]
                             },
                             debit: Account {
                                 range: Rng::new(34, "Assets:Bar"),
-                                segments: vec![
-                                    Rng::new(34, "Assets"),
-                                    Rng::new(41, "Bar")
-                                ]
+                                segments: vec![Rng::new(34, "Assets"), Rng::new(41, "Bar")]
                             },
-                            quantity: Decimal( Rng::new(45, "4.23")),
-                            commodity: Commodity (Rng::new(50, "USD")),
+                            quantity: Decimal(Rng::new(45, "4.23")),
+                            commodity: Commodity(Rng::new(50, "USD")),
                         },]
                     },
                 }),
-                Parser::new(
-                    "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
-                )
-                .parse_directive()
+                Parser::new("2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD")
+                    .parse_directive()
             );
         }
 
@@ -1027,10 +985,7 @@ mod tests {
                         range: Rng::new(11, "close Assets:Foo"),
                         account: Account {
                             range: Rng::new(17, "Assets:Foo"),
-                            segments: vec![
-                                Rng::new(17, "Assets"),
-                                Rng::new(24, "Foo")
-                            ]
+                            segments: vec![Rng::new(17, "Assets"), Rng::new(24, "Foo")]
                         }
                     },
                 }),
@@ -1060,10 +1015,7 @@ mod tests {
         fn parse_assertion() {
             assert_eq!(
                 Ok(Directive::Dated {
-                    range: Rng::new(
-                        0,
-                        "2024-03-01 balance Assets:Foo 500.1 BAR"
-                    ),
+                    range: Rng::new(0, "2024-03-01 balance Assets:Foo 500.1 BAR"),
                     addons: Vec::new(),
                     date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Assertion {
@@ -1072,18 +1024,14 @@ mod tests {
                             range: Rng::new(19, "Assets:Foo 500.1 BAR"),
                             account: Account {
                                 range: Rng::new(19, "Assets:Foo"),
-                                segments: vec![
-                                    Rng::new(19, "Assets"),
-                                    Rng::new(26, "Foo")
-                                ],
+                                segments: vec![Rng::new(19, "Assets"), Rng::new(26, "Foo")],
                             },
                             amount: Decimal(Rng::new(30, "500.1")),
                             commodity: Commodity(Rng::new(36, "BAR")),
                         }]
                     },
                 }),
-                Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR")
-                    .parse_directive()
+                Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR").parse_directive()
             )
         }
     }
