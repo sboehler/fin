@@ -1,4 +1,4 @@
-use crate::syntax;
+use crate::syntax::file::parse;
 use clap::Args;
 use std::{error::Error, path::PathBuf};
 
@@ -9,7 +9,7 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        syntax::parse(&self.journal)?;
+        parse(&self.journal)?;
         Ok(())
     }
 }
