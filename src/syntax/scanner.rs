@@ -1,216 +1,6 @@
+use super::error::SyntaxError;
+use super::syntax::{Result, Rng, Token};
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct ParserError {
-    got: Token,
-    want: Token,
-    msg: Option<String>,
-    line: usize,
-    col: usize,
-    context: Vec<(usize, String)>,
-}
-
-impl ParserError {
-    pub fn new(
-        source: &str,
-        pos: usize,
-        msg: Option<String>,
-        want: Token,
-        got: Token,
-    ) -> ParserError {
-        let (line, col) = Self::position(source, pos);
-        let rng = line.saturating_sub(4)..=line;
-        let context = source
-            .lines()
-            .enumerate()
-            .filter(|t| rng.contains(&t.0))
-            .map(|(i, l)| (i, l.into()))
-            .collect();
-        ParserError {
-            line,
-            col,
-            context,
-            msg,
-            want,
-            got,
-        }
-    }
-
-    fn position(t: &str, pos: usize) -> (usize, usize) {
-        let lines: Vec<_> = t[..pos].split(|c| c == '\n').collect();
-        let line = lines.len().saturating_sub(1);
-        let col = lines.last().map(|s| s.len()).unwrap_or(0);
-        (line, col)
-    }
-
-    pub fn update(mut self, msg: &str) -> Self {
-        self.msg = Some(msg.into());
-        self
-    }
-}
-
-impl std::fmt::Display for ParserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        writeln!(f)?;
-        write!(
-            f,
-            "Line {line}, column {col}:",
-            line = self.line,
-            col = self.col,
-        )?;
-        if let Some(ref s) = self.msg {
-            writeln!(f, " while {}", s)?;
-        } else {
-            writeln!(f)?;
-        }
-        writeln!(f)?;
-        for (n, line) in &self.context {
-            writeln!(f, "{:5}|{}", n, line)?;
-        }
-        writeln!(
-            f,
-            "{}^ want {}, got {}",
-            " ".repeat(self.col + 6),
-            self.want,
-            self.got
-        )?;
-        if let Token::Error(ref e) = self.got {
-            e.fmt(f)?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for ParserError {}
-
-pub type Result<T> = std::result::Result<T, ParserError>;
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum Token {
-    EOF,
-    BlankLine,
-    Char(char),
-    Digit,
-    Comment,
-    Directive,
-    AlphaNum,
-    Either(Vec<Token>),
-    Decimal,
-    Interval,
-    Any,
-    Date,
-    WhiteSpace,
-    Custom(String),
-    Error(Box<ParserError>),
-}
-
-impl Token {
-    pub fn from_char(ch: Option<char>) -> Self {
-        match ch {
-            None => Self::EOF,
-            Some(c) if c.is_whitespace() => Self::WhiteSpace,
-            Some(c) => Self::Char(c),
-        }
-    }
-}
-
-impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::EOF => write!(f, "EOF"),
-            Self::Error(_) => write!(f, "error"),
-            Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
-            Self::Digit => write!(f, "a digit (0-9)"),
-            Self::Decimal => write!(f, "a decimal number"),
-            Self::Directive => write!(f, "a directive"),
-            Self::BlankLine => write!(f, "a blank line"),
-            Self::Comment => write!(f, "a comment"),
-            Self::Interval => write!(
-                f,
-                "a time interval (daily, monthly, quarterly, yearly, once)"
-            ),
-            Self::Date => write!(f, "a date"),
-            Self::AlphaNum => {
-                write!(f, "a character (a-z, A-Z) or a digit (0-9)")
-            }
-            Self::Any => write!(f, "any character"),
-            Self::WhiteSpace => write!(f, "whitespace"),
-            Self::Custom(s) => write!(f, "{}", s),
-            Self::Either(chars) => {
-                for (i, ch) in chars.iter().enumerate() {
-                    write!(f, "{}", ch)?;
-                    if i < chars.len().saturating_sub(1) {
-                        write!(f, ", ")?;
-                    }
-                }
-                writeln!(f)?;
-                Ok(())
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-mod test_parser_error {
-    use super::*;
-    use pretty_assertions::assert_eq;
-
-    #[test]
-    fn test_parser_error() {
-        assert_eq!(
-            vec![
-                "",
-                "Line 0, column 1: while parsing file",
-                "",
-                "    0|asdf",
-                "       ^ want whitespace, got a character (a-z, A-Z) or a digit (0-9)",
-                ""
-            ]
-            .join("\n"),
-            ParserError {
-                got: Token::AlphaNum,
-                want: Token::WhiteSpace,
-                msg: Some("parsing file".into()),
-                line: 0,
-                col: 1,
-                context: vec![(0, "asdf".into())]
-            }
-            .to_string()
-        );
-        assert_eq!(ParserError::position("foo\nbar\n", 0), (0, 0));
-        assert_eq!(ParserError::position("foo\nbar\n", 1), (0, 1));
-        assert_eq!(ParserError::position("foo\nbar\n", 2), (0, 2));
-        assert_eq!(ParserError::position("foo\nbar\n", 3), (0, 3));
-        assert_eq!(ParserError::position("foo\nbar\n", 4), (1, 0));
-        assert_eq!(ParserError::position("foo\nbar\n", 5), (1, 1));
-        assert_eq!(ParserError::position("foo\nbar\n", 6), (1, 2));
-        assert_eq!(ParserError::position("foo\nbar\n", 7), (1, 3));
-        assert_eq!(ParserError::position("foo\nbar\n", 8), (2, 0));
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub struct Rng {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Rng {
-    pub fn new(start: usize, str: &str) -> Rng {
-        Rng {
-            start,
-            end: start + str.len(),
-        }
-    }
-
-    pub fn slice<'a>(&self, s: &'a str) -> &'a str {
-        &s[self.start..self.end]
-    }
-
-    pub fn len(&self) -> usize {
-        self.end - self.start
-    }
-}
 
 pub struct Scanner<'a> {
     pub source: &'a str,
@@ -403,8 +193,8 @@ impl<'a> Scanner<'a> {
         Ok(self.rng(start))
     }
 
-    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> ParserError {
-        ParserError::new(self.source, pos, msg, want, got)
+    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
+        SyntaxError::new(self.source, pos, msg, want, got)
     }
 }
 
@@ -434,7 +224,7 @@ mod test_scanner {
             s.read_while_1(Token::Char('f'), |c| c == 'f')
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "aaasdff",
                 7,
                 None,
@@ -451,7 +241,7 @@ mod test_scanner {
         let s = Scanner::new("asdf".into());
         assert_eq!(Ok(Rng::new(0, "a")), s.read_char('a'));
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "asdf",
                 1,
                 None,
@@ -472,7 +262,7 @@ mod test_scanner {
 
         assert_eq!(Ok(Rng::new(0, "as")), s.read_string("as"),);
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "asdf",
                 2,
                 None,
@@ -503,7 +293,7 @@ mod test_scanner {
         assert_eq!(Ok(Rng::new(1, "\n")), s.read_rest_of_line());
         assert_eq!(Ok(Rng::new(2, "  \n")), s.read_rest_of_line());
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "\n\n  \nfoo",
                 5,
                 None,
@@ -523,7 +313,7 @@ mod test_scanner {
         assert_eq!(Ok(Rng::new(1, "o")), s.read_1());
         assert_eq!(Ok(Rng::new(2, "o")), s.read_1());
         assert_eq!(
-            Err(ParserError::new("foo", 3, None, Token::Any, Token::EOF)),
+            Err(SyntaxError::new("foo", 3, None, Token::Any, Token::EOF)),
             s.read_1()
         );
         assert_eq!(Ok(Rng::new(3, "")), s.read_eol());
@@ -541,7 +331,7 @@ mod test_scanner {
             s.read_1_with(Token::Custom("no a".into()), |c| c != 'a')
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "asdf",
                 2,
                 None,
@@ -559,7 +349,7 @@ mod test_scanner {
             s.read_1_with(Token::Char('f'), |c| c == 'f')
         );
         assert_eq!(
-            Err(ParserError::new("asdf", 4, None, Token::Any, Token::EOF)),
+            Err(SyntaxError::new("asdf", 4, None, Token::Any, Token::EOF)),
             s.read_1_with(Token::Any, |_| true)
         );
         assert_eq!(Ok(Rng::new(4, "")), s.read_eol());
@@ -571,7 +361,7 @@ mod test_scanner {
         assert_eq!(Ok(Rng::new(0, "as")), s.read_n(2));
         assert_eq!(Ok(Rng::new(2, "")), s.read_n(0));
         assert_eq!(
-            Err(ParserError::new("asdf", 4, None, Token::Any, Token::EOF)),
+            Err(SyntaxError::new("asdf", 4, None, Token::Any, Token::EOF)),
             s.read_n(3)
         );
         assert_eq!(Ok(Rng::new(4, "")), s.read_eol());
@@ -581,7 +371,7 @@ mod test_scanner {
     fn test_read_eol() {
         let s = Scanner::new("a\n\n");
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "a\n\n",
                 0,
                 None,
@@ -605,7 +395,7 @@ mod test_scanner {
         assert_eq!(Ok(Rng::new(2, "a")), s.read_1());
         assert_eq!(Ok(Rng::new(3, "\t\t")), s.read_space1());
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 s.source,
                 5,
                 None,

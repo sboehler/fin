@@ -7,8 +7,8 @@ use std::{
 };
 
 use super::{
+    error::SyntaxError,
     parser::Parser,
-    scanner::ParserError,
     syntax::{Directive, SyntaxTree},
 };
 
@@ -20,7 +20,7 @@ pub struct ParsedFile {
 
 #[derive(Debug)]
 pub enum FileError {
-    ParserError(PathBuf, ParserError),
+    ParserError(PathBuf, SyntaxError),
     IO(PathBuf, io::Error),
     Cycle(PathBuf),
     InvalidPath(PathBuf),

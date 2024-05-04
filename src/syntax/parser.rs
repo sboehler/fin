@@ -1,10 +1,9 @@
-use crate::syntax::scanner::{Result, Scanner, Token};
-
-use super::scanner::{ParserError, Rng};
+use super::error::SyntaxError;
 use super::syntax::{
     Account, Addon, Assertion, Booking, Command, Commodity, Date, Decimal, Directive, QuotedString,
-    SyntaxTree,
+    Result, Rng, SyntaxTree, Token,
 };
+use crate::syntax::scanner::Scanner;
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
@@ -17,8 +16,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> ParserError {
-        ParserError::new(&self.scanner.source, pos, msg, want, got)
+    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
+        SyntaxError::new(&self.scanner.source, pos, msg, want, got)
     }
 
     pub fn parse_account(&self) -> Result<Account> {
@@ -543,7 +542,7 @@ impl<'a> Parser<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::syntax::scanner::Rng;
+    use crate::syntax::syntax::Rng;
 
     use super::*;
 
@@ -558,7 +557,7 @@ mod tests {
             Parser::new("1FOO  ").parse_commodity(),
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 " USD",
                 0,
                 Some("parsing commodity".into()),
@@ -568,7 +567,7 @@ mod tests {
             Parser::new(" USD").parse_commodity()
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "/USD",
                 0,
                 Some("parsing commodity".into()),
@@ -596,7 +595,7 @@ mod tests {
             Parser::new("Liabilities:Debt  ").parse_account(),
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 " USD",
                 0,
                 Some("parsing account type".into()),
@@ -606,7 +605,7 @@ mod tests {
             Parser::new(" USD").parse_account(),
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "/USD",
                 0,
                 Some("parsing account type".into()),
@@ -628,7 +627,7 @@ mod tests {
             Parser::new("2024-02-02").parse_date(),
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "024-02-02",
                 3,
                 Some("parsing year".into()),
@@ -638,7 +637,7 @@ mod tests {
             Parser::new("024-02-02").parse_date(),
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "2024-02-0",
                 9,
                 Some("parsing day".into()),
@@ -648,7 +647,7 @@ mod tests {
             Parser::new("2024-02-0").parse_date(),
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "2024-0--0",
                 6,
                 Some("parsing month".into()),
@@ -702,7 +701,7 @@ mod tests {
             Parser::new("-10.01").parse_decimal(),
         );
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "foo",
                 0,
                 None,
@@ -716,7 +715,7 @@ mod tests {
     mod addon {
         use crate::syntax::{
             parser::Parser,
-            scanner::Rng,
+            syntax::Rng,
             syntax::{Account, Addon, Commodity, Date},
         };
         use pretty_assertions::assert_eq;
@@ -840,7 +839,7 @@ mod tests {
     #[test]
     fn test_parse_transaction2() {
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "\"",
                 1,
                 None,
@@ -853,7 +852,7 @@ mod tests {
     #[test]
     fn test_parse_transaction3() {
         assert_eq!(
-            Err(ParserError::new(
+            Err(SyntaxError::new(
                 "\"\"   Assets Assets 12 USD",
                 5,
                 None,
