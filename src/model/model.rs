@@ -116,12 +116,6 @@ impl Booking {
         commodity: Rc<Commodity>,
         value: Decimal,
     ) -> Vec<Booking> {
-        let rev = quantity < Decimal::ZERO || quantity == Decimal::ZERO && value < Decimal::ZERO;
-        let (credit, debit, quantity, value) = if rev {
-            (&debit, &credit, -quantity, -value)
-        } else {
-            (&credit, &debit, quantity, value)
-        };
         vec![
             Booking {
                 account: credit.clone(),
