@@ -519,7 +519,7 @@ impl<'a> Parser<'a> {
         Ok(Assertion {
             range: self.scanner.rng(start),
             account,
-            amount,
+            balance: amount,
             commodity,
         })
     }
@@ -1001,7 +1001,7 @@ mod tests {
                                 range: Rng::new(19, "Assets:Foo"),
                                 segments: vec![Rng::new(19, "Assets"), Rng::new(26, "Foo")],
                             },
-                            amount: Decimal(Rng::new(30, "500.1")),
+                            balance: Decimal(Rng::new(30, "500.1")),
                             commodity: Commodity(Rng::new(36, "BAR")),
                         }]
                     },

@@ -1,6 +1,12 @@
-use std::{collections::BTreeMap, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap, path::Path, rc::Rc};
 
 use chrono::NaiveDate;
+
+use crate::syntax::{
+    self,
+    file::FileError,
+    syntax::{Command, Directive},
+};
 
 use super::{
     model::{Assertion, Close, Open, Price, Transaction},
@@ -8,6 +14,7 @@ use super::{
 };
 
 pub enum JournalError {
+    FileError(FileError),
     IO(),
 }
 
@@ -35,16 +42,20 @@ impl Day {
 }
 
 pub struct Journal {
-    pub registry: Rc<Registry>,
+    pub registry: Rc<RefCell<Registry>>,
     pub days: BTreeMap<NaiveDate, Day>,
 }
 
 impl Journal {
-    pub fn new(registry: Rc<Registry>) -> Self {
+    pub fn new(registry: Rc<RefCell<Registry>>) -> Self {
         Journal {
             registry,
             days: BTreeMap::new(),
         }
+    }
+
+    pub fn day(&mut self, d: NaiveDate) -> &mut Day {
+        self.days.entry(d).or_insert_with(|| Day::new(d))
     }
 
     pub fn min_date(&self) -> Option<NaiveDate> {

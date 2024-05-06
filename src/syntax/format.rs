@@ -108,7 +108,7 @@ fn format_dated(
         Command::Assertion { assertions, .. } => match &assertions[..] {
             [Assertion {
                 account,
-                amount,
+                balance: amount,
                 commodity,
                 ..
             }] => write!(
@@ -126,7 +126,7 @@ fn format_dated(
                         w,
                         "{account} {amount} {commodity}",
                         account = a.account.range.slice(text),
-                        amount = a.amount.0.slice(text),
+                        amount = a.balance.0.slice(text),
                         commodity = a.commodity.0.slice(text)
                     )?;
                 }

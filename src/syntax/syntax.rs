@@ -162,7 +162,7 @@ pub enum Command {
 pub struct Assertion {
     pub range: Rng,
     pub account: Account,
-    pub amount: Decimal,
+    pub balance: Decimal,
     pub commodity: Commodity,
 }
 

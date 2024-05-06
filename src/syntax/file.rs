@@ -3,7 +3,7 @@ use std::{
     error::Error,
     fmt::Display,
     fs, io,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use super::{
@@ -67,13 +67,13 @@ impl Error for FileError {}
 
 type Result<T> = std::result::Result<T, FileError>;
 
-pub fn parse(root: &PathBuf) -> Result<Vec<ParsedFile>> {
+pub fn parse(root: &Path) -> Result<Vec<ParsedFile>> {
     let mut res = Vec::new();
     let mut done = HashSet::new();
     let mut todo = VecDeque::new();
     todo.push_back(
         root.canonicalize()
-            .map_err(|e| FileError::IO(root.clone(), e))?,
+            .map_err(|e| FileError::IO(root.to_path_buf(), e))?,
     );
 
     while let Some(file) = todo.pop_front() {
