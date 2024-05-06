@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cmp, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -169,34 +169,48 @@ pub enum Interval {
     Yearly,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
-pub struct Period {
-    pub start: NaiveDate,
-    pub end: NaiveDate,
-}
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub struct Period(pub NaiveDate, pub NaiveDate);
 
 impl Period {
-    pub fn dates(&self, interval: Interval, n: Option<usize>) -> Vec<NaiveDate> {
+    pub fn dates(self, interval: Interval, n: Option<usize>) -> Partition {
         if interval == Interval::Once {
-            return vec![self.end];
+            return Partition {
+                period: self,
+                interval: interval,
+                periods: vec![self],
+            };
         }
-        let mut res = Vec::new();
-        let mut d = self.end;
+        let mut periods = Vec::new();
+        let mut d = self.1;
         let mut counter = 0;
-        while d >= self.start {
+        while d >= self.0 {
             match n {
                 Some(n) if counter == n => break,
                 Some(_) => counter += 1,
                 None => (),
             }
-            res.push(d);
+            let start = cmp::max(start_of(d, interval).unwrap(), self.0);
+            periods.push(Period(start, d));
             d = start_of(d, interval)
                 .and_then(|d| d.checked_sub_days(Days::new(1)))
                 .unwrap();
         }
-        res.reverse();
-        res
+        periods.reverse();
+        Partition {
+            period: self,
+            interval: interval,
+            periods,
+        }
     }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
+
+pub struct Partition {
+    pub period: Period,
+    pub interval: Interval,
+    pub periods: Vec<Period>,
 }
 
 /// StartOf returns the first date in the given period which
@@ -234,6 +248,7 @@ mod test_period {
 
     use super::Interval::*;
     use super::*;
+    use pretty_assertions::assert_eq;
 
     fn date(y: i32, m: u32, d: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
@@ -246,25 +261,29 @@ mod test_period {
     #[test]
     fn test_dates() {
         assert_eq!(
-            Period {
-                start: date(2022, 1, 1),
-                end: date(2022, 3, 20),
+            Period(date(2022, 1, 1), date(2022, 3, 20)).dates(Monthly, None),
+            Partition {
+                period: Period(date(2022, 1, 1), date(2022, 3, 20)),
+                interval: Monthly,
+                periods: vec![
+                    Period(date(2022, 1, 1), date(2022, 1, 31)),
+                    Period(date(2022, 2, 1), date(2022, 2, 28)),
+                    Period(date(2022, 3, 1), date(2022, 3, 20)),
+                ],
             }
-            .dates(Monthly, None),
-            vec![date(2022, 1, 31), date(2022, 2, 28), date(2022, 3, 20)]
         );
         assert_eq!(
-            Period {
-                start: date(2022, 1, 1),
-                end: date(2022, 12, 20),
+            Period(date(2022, 1, 1), date(2022, 12, 20)).dates(Monthly, Some(4)),
+            Partition {
+                period: Period(date(2022, 1, 1), date(2022, 12, 20)),
+                interval: Monthly,
+                periods: vec![
+                    Period(date(2022, 9, 1), date(2022, 9, 30)),
+                    Period(date(2022, 10, 1), date(2022, 10, 31)),
+                    Period(date(2022, 11, 1), date(2022, 11, 30)),
+                    Period(date(2022, 12, 1), date(2022, 12, 20))
+                ]
             }
-            .dates(Monthly, Some(4)),
-            vec![
-                date(2022, 9, 30),
-                date(2022, 10, 31),
-                date(2022, 11, 30),
-                date(2022, 12, 20)
-            ]
         )
     }
 

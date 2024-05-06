@@ -14,12 +14,12 @@ pub fn format_file(w: &mut impl Write, s: &str, syntax_tree: &SyntaxTree) -> io:
             }
             Directive::Dated {
                 range,
-                addons,
+                addon,
                 date,
                 command,
             } => {
                 w.write(s[pos..range.start].as_bytes())?;
-                format_dated(w, s, n, addons, date, command)?;
+                format_dated(w, s, n, addon, date, command)?;
                 pos = range.end;
             }
         }
@@ -53,11 +53,11 @@ fn format_dated(
     w: &mut impl Write,
     text: &str,
     n: usize,
-    addons: &Vec<Addon>,
+    addon: &Option<Addon>,
     date: &Date,
     command: &Command,
 ) -> Result<()> {
-    for a in addons {
+    if let Some(a) = addon {
         format_addon(w, text, a)?;
         writeln!(w)?;
     }

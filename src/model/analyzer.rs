@@ -1,18 +1,20 @@
-use std::{cell::RefCell, error::Error, fmt::Display, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
-use crate::syntax::{
-    error::SyntaxError,
-    file::ParsedFile,
-    syntax::{self},
+use crate::{
+    model::model::Period,
+    syntax::{
+        error::SyntaxError,
+        file::ParsedFile,
+        syntax::{self},
+    },
 };
 
 use super::{
-    error::ModelError,
-    journal::{Day, Journal},
-    model::{self, Assertion, Booking, Close, Open, Price, Transaction},
+    journal::Journal,
+    model::{self, Account, Assertion, Booking, Close, Interval, Open, Price, Transaction},
     registry::Registry,
 };
 
@@ -20,21 +22,6 @@ pub struct Analyzer {
     registry: Rc<RefCell<Registry>>,
     journal: RefCell<Journal>,
 }
-
-#[derive(Eq, PartialEq, Debug)]
-pub enum AnalyzerError {
-    InvalidDate,
-    InvalidDecimal,
-    ModelError(ModelError),
-}
-
-impl Display for AnalyzerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
-}
-
-impl Error for AnalyzerError {}
 
 type Result<T> = std::result::Result<T, SyntaxError>;
 
@@ -53,7 +40,7 @@ impl Analyzer {
         for d in &f.syntax_tree.directives {
             if let syntax::Directive::Dated {
                 date,
-                addons,
+                addon,
                 command,
                 ..
             } = d
@@ -69,10 +56,10 @@ impl Analyzer {
                         self.analyze_open(&f, date, account)?
                     }
                     syntax::Command::Transaction {
-                        range,
                         description,
                         bookings,
-                    } => todo!(),
+                        ..
+                    } => self.analyze_transaction(f, addon, date, description, bookings)?,
                     syntax::Command::Assertion { assertions, .. } => {
                         self.analyze_assertion(&f, date, assertions)?
                     }
@@ -118,7 +105,7 @@ impl Analyzer {
     fn analyze_transaction(
         &self,
         f: &ParsedFile,
-        addons: &Vec<syntax::Addon>,
+        addon: &Option<syntax::Addon>,
         date: &syntax::Date,
         description: &syntax::QuotedString,
         bookings: &Vec<syntax::Booking>,
@@ -145,14 +132,38 @@ impl Analyzer {
             postings: bookings,
             targets: None,
         };
+        let mut ts = match addon {
+            Some(syntax::Addon::Performance { commodities, .. }) => {
+                t.targets = Some(
+                    commodities
+                        .iter()
+                        .map(|c| self.analyze_commodity(f, c))
+                        .collect::<Result<Vec<_>>>()?,
+                );
+                vec![t]
+            }
+            Some(syntax::Addon::Accrual {
+                start,
+                end,
+                account,
+                interval,
+                ..
+            }) => self.expand(
+                t,
+                self.analyze_date(&f, start)?,
+                self.analyze_date(&f, end)?,
+                self.analyze_interval(&f, interval)?,
+                self.analyze_account(&f, account)?,
+            ),
+            None => vec![t],
+        };
 
-        // Ok(self
-        //     .journal
-        //     .borrow_mut()
-        //     .day(date)
-        //     .transactions
-        //     .append(vec![]));
-        Ok(())
+        Ok(self
+            .journal
+            .borrow_mut()
+            .day(date)
+            .transactions
+            .append(&mut ts))
     }
 
     fn analyze_assertion(
@@ -222,6 +233,24 @@ impl Analyzer {
         })
     }
 
+    fn analyze_interval(&self, f: &ParsedFile, d: &syntax::Rng) -> Result<Interval> {
+        match d.slice(&f.text) {
+            "daily" => Ok(Interval::Daily),
+            "weekly" => Ok(Interval::Weekly),
+            "monthly" => Ok(Interval::Monthly),
+            "quarterly" => Ok(Interval::Quarterly),
+            "yearly" => Ok(Interval::Yearly),
+            "once" => Ok(Interval::Once),
+            o => Err(SyntaxError::new(
+                &f.text,
+                d.start,
+                None,
+                syntax::Token::Decimal,
+                syntax::Token::Custom(o.into()),
+            )),
+        }
+    }
+
     fn analyze_commodity(
         &self,
         f: &ParsedFile,
@@ -254,5 +283,63 @@ impl Analyzer {
                     syntax::Token::Custom(c.range.slice(&f.text).to_string()),
                 )
             })
+    }
+
+    fn expand(
+        &self,
+        t: Transaction,
+        start: NaiveDate,
+        end: NaiveDate,
+        interval: Interval,
+        account: Rc<Account>,
+    ) -> Vec<Transaction> {
+        let mut res: Vec<Transaction> = Vec::new();
+
+        for b in t.postings {
+            if b.account.account_type.is_al() {
+                res.push(Transaction {
+                    date: t.date,
+                    description: t.description.clone(),
+                    postings: Booking::create(
+                        account.clone(),
+                        b.account.clone(),
+                        b.quantity,
+                        b.commodity.clone(),
+                        Decimal::ZERO,
+                    ),
+                    targets: t.targets.clone(),
+                })
+            }
+
+            if b.account.account_type.is_ie() {
+                let p = Period(start, end).dates(interval, None);
+                let amount = b.quantity / Decimal::from(p.periods.len());
+                let rem = b.quantity % Decimal::from(p.periods.len());
+                for (i, dt) in p.periods.iter().enumerate() {
+                    let a = match i {
+                        0 => amount + rem,
+                        _ => amount,
+                    };
+                    res.push(Transaction {
+                        date: dt.1,
+                        description: format!(
+                            "{} (accrual {}/{})",
+                            t.description,
+                            i + 1,
+                            p.periods.len()
+                        ),
+                        postings: Booking::create(
+                            account.clone(),
+                            b.account.clone(),
+                            a,
+                            b.commodity.clone(),
+                            Decimal::ZERO,
+                        ),
+                        targets: t.targets.clone(),
+                    });
+                }
+            }
+        }
+        res
     }
 }

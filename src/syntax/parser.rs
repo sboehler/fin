@@ -209,9 +209,9 @@ impl<'a> Parser<'a> {
 
     pub fn parse_command(&self) -> Result<Directive> {
         let start = self.scanner.pos();
-        let mut addons = Vec::new();
+        let mut addon = None;
         while let Some('@') = self.scanner.current() {
-            addons.push(self.parse_addon()?);
+            addon = Some(self.parse_addon()?);
             self.scanner.read_rest_of_line()?;
         }
         let date = self.parse_date().map_err(|e| e.update("parsing date"))?;
@@ -276,7 +276,7 @@ impl<'a> Parser<'a> {
         self.scanner.read_rest_of_line()?;
         Ok(Directive::Dated {
             range,
-            addons,
+            addon,
             date,
             command,
         })
@@ -899,7 +899,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Rng::new(0, "2024-03-01 open Assets:Foo"),
-                    addons: Vec::new(),
+                    addon: None,
                     date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Open {
                         range: Rng::new(11, "open Assets:Foo"),
@@ -921,7 +921,7 @@ mod tests {
                         0,
                         "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
                     ),
-                    addons: Vec::new(),
+                    addon: None,
                     date: Date(Rng::new(0, "2024-12-31")),
                     command: Command::Transaction {
                         range: Rng::new(11, "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
@@ -954,7 +954,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Rng::new(0, "2024-03-01 close Assets:Foo"),
-                    addons: Vec::new(),
+                    addon: None,
                     date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Close {
                         range: Rng::new(11, "close Assets:Foo"),
@@ -973,7 +973,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Rng::new(0, "2024-03-01 price FOO 1.543 BAR"),
-                    addons: Vec::new(),
+                    addon: None,
                     date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Price {
                         range: Rng::new(11, "price FOO 1.543 BAR"),
@@ -991,7 +991,7 @@ mod tests {
             assert_eq!(
                 Ok(Directive::Dated {
                     range: Rng::new(0, "2024-03-01 balance Assets:Foo 500.1 BAR"),
-                    addons: Vec::new(),
+                    addon: None,
                     date: Date(Rng::new(0, "2024-03-01")),
                     command: Command::Assertion {
                         range: Rng::new(11, "balance Assets:Foo 500.1 BAR"),

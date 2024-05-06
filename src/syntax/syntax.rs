@@ -125,7 +125,7 @@ pub enum Directive {
     },
     Dated {
         range: Rng,
-        addons: Vec<Addon>,
+        addon: Option<Addon>,
         date: Date,
         command: Command,
     },

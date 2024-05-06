@@ -1,12 +1,8 @@
-use std::{cell::RefCell, collections::BTreeMap, path::Path, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
 
-use crate::syntax::{
-    self,
-    file::FileError,
-    syntax::{Command, Directive},
-};
+use crate::syntax::file::FileError;
 
 use super::{
     model::{Assertion, Close, Open, Price, Transaction},
