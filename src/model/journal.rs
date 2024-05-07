@@ -42,6 +42,12 @@ pub struct Journal {
     pub days: BTreeMap<NaiveDate, Day>,
 }
 
+impl Default for Journal {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Journal {
     pub fn new() -> Self {
         Journal {

@@ -10,7 +10,7 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let files = parse_files(&self.journal)?;
-        Analyzer::analyze(files)?;
+        Analyzer::analyze_files(files)?;
         Ok(())
     }
 }

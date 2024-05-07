@@ -279,7 +279,7 @@ impl<'a> Parser<'a> {
             Token::Either(vec![Token::Custom("@performance".into())]),
             |c| c.is_alphabetic(),
         )?;
-        match name.slice(&self.scanner.source) {
+        match name.slice(self.scanner.source) {
             "performance" => self
                 .parse_performance(start)
                 .map_err(|e| e.update("parsing performance")),
