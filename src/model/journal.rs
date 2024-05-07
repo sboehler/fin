@@ -25,9 +25,9 @@ pub struct Day {
 }
 
 impl Day {
-    pub fn new(d: NaiveDate) -> Self {
+    pub fn new(date: NaiveDate) -> Self {
         Day {
-            date: d,
+            date,
             prices: Vec::new(),
             assertions: Vec::new(),
             openings: Vec::new(),
