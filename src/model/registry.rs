@@ -2,12 +2,18 @@ use std::{collections::HashMap, rc::Rc};
 
 use super::{
     error::ModelError,
-    model::{Account, Commodity},
+    {Account, Commodity},
 };
 
 pub struct Registry {
     commodities: HashMap<String, Rc<Commodity>>,
     accounts: HashMap<String, Rc<Account>>,
+}
+
+impl Default for Registry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Registry {

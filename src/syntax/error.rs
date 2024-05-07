@@ -1,4 +1,4 @@
-use super::syntax::Token;
+use super::Token;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct SyntaxError {
@@ -91,7 +91,7 @@ mod test_parser_error {
     #[test]
     fn test_parser_error() {
         assert_eq!(
-            vec![
+            [
                 "",
                 "Line 0, column 1: while parsing file",
                 "",

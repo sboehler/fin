@@ -5,8 +5,8 @@ use chrono::NaiveDate;
 use crate::syntax::file::FileError;
 
 use super::{
-    model::{Assertion, Close, Open, Price, Transaction},
     registry::Registry,
+    {Assertion, Close, Open, Price, Transaction},
 };
 
 pub enum JournalError {

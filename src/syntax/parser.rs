@@ -1,5 +1,5 @@
 use super::error::SyntaxError;
-use super::syntax::{
+use super::{
     Account, Addon, Assertion, Booking, Commodity, Date, Decimal, Directive, QuotedString, Result,
     Rng, SyntaxTree, Token,
 };
@@ -17,7 +17,7 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
-        SyntaxError::new(&self.scanner.source, pos, msg, want, got)
+        SyntaxError::new(self.scanner.source, pos, msg, want, got)
     }
 
     pub fn parse_account(&self) -> Result<Account> {
@@ -52,15 +52,15 @@ impl<'a> Parser<'a> {
         let start = self.scanner.pos();
         self.scanner
             .read_n_with(4, Token::Digit, |c| c.is_ascii_digit())
-            .map_err(|e| e.update("parsing year".into()))?;
+            .map_err(|e| e.update("parsing year"))?;
         self.scanner.read_char('-')?;
         self.scanner
             .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
-            .map_err(|e| e.update("parsing month".into()))?;
+            .map_err(|e| e.update("parsing month"))?;
         self.scanner.read_char('-')?;
         self.scanner
             .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
-            .map_err(|e| e.update("parsing day".into()))?;
+            .map_err(|e| e.update("parsing day"))?;
         Ok(Date(self.scanner.rng(start)))
     }
 
@@ -345,10 +345,10 @@ impl<'a> Parser<'a> {
             .map_err(|e| e.update("parsing accrual account"))?;
         Ok(Addon::Accrual {
             range: self.scanner.rng(start),
-            interval: interval,
+            interval,
             start: start_date,
             end: end_date,
-            account: account,
+            account,
         })
     }
 
@@ -443,7 +443,7 @@ impl<'a> Parser<'a> {
             .map_err(|e| e.update("parsing commodity"))?;
         let range = self.scanner.rng(start);
         Ok(Booking {
-            range: range,
+            range,
             credit,
             debit,
             quantity,
@@ -488,7 +488,7 @@ impl<'a> Parser<'a> {
         Ok(Directive::Assertion {
             date,
             range: self.scanner.rng(start),
-            assertions: assertions,
+            assertions,
         })
     }
 
@@ -518,7 +518,7 @@ impl<'a> Parser<'a> {
         self.scanner.read_space1()?;
         let a = self
             .parse_account()
-            .map_err(|e| e.update("parsing account").into())?;
+            .map_err(|e| e.update("parsing account"))?;
         Ok(Directive::Close {
             range: self.scanner.rng(start),
             date,
@@ -531,7 +531,7 @@ impl<'a> Parser<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::syntax::syntax::Rng;
+    use crate::syntax::Rng;
 
     use super::*;
 
@@ -704,8 +704,7 @@ mod tests {
     mod addon {
         use crate::syntax::{
             parser::Parser,
-            syntax::Rng,
-            syntax::{Account, Addon, Commodity, Date},
+            Rng, {Account, Addon, Commodity, Date},
         };
         use pretty_assertions::assert_eq;
 

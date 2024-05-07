@@ -1,5 +1,5 @@
 use super::error::SyntaxError;
-use super::syntax::{Result, Rng, Token};
+use super::{Result, Rng, Token};
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 
 pub struct Scanner<'a> {
@@ -97,13 +97,12 @@ impl<'a> Scanner<'a> {
     pub fn read_identifier(&self) -> Result<Rng> {
         let start = self.pos();
         let ident = self.read_while(|c| c.is_alphanumeric());
-        if ident.len() == 0 {
-            let got = Token::from_char(self.current());
+        if ident.is_empty() {
             Err(self.error(
                 start,
                 Some("parsing identifier".into()),
                 Token::AlphaNum,
-                got,
+                Token::from_char(self.current()),
             ))
         } else {
             Ok(self.rng(start))
@@ -206,9 +205,9 @@ mod test_scanner {
     #[test]
     fn test_read_while() {
         let s = Scanner::new("aaasdff");
-        assert_eq!(Rng::new(0, "aaasd".into()), s.read_while(|c| c != 'f'));
-        assert_eq!(Rng::new(5, "ff".into()), s.read_while(|c| c == 'f'));
-        assert_eq!(Rng::new(7, "".into()), s.read_while(|c| c == 'q'));
+        assert_eq!(Rng::new(0, "aaasd"), s.read_while(|c| c != 'f'));
+        assert_eq!(Rng::new(5, "ff"), s.read_while(|c| c == 'f'));
+        assert_eq!(Rng::new(7, ""), s.read_while(|c| c == 'q'));
         assert_eq!(Ok(Rng::new(7, "")), s.read_eol());
     }
 
@@ -216,11 +215,11 @@ mod test_scanner {
     fn test_read_while_1() {
         let s = Scanner::new("aaasdff");
         assert_eq!(
-            Ok(Rng::new(0, "aaasd".into())),
+            Ok(Rng::new(0, "aaasd")),
             s.read_while_1(Token::Any, |c| c != 'f')
         );
         assert_eq!(
-            Ok(Rng::new(5, "ff".into())),
+            Ok(Rng::new(5, "ff")),
             s.read_while_1(Token::Char('f'), |c| c == 'f')
         );
         assert_eq!(
@@ -238,7 +237,7 @@ mod test_scanner {
 
     #[test]
     fn test_read_char() {
-        let s = Scanner::new("asdf".into());
+        let s = Scanner::new("asdf");
         assert_eq!(Ok(Rng::new(0, "a")), s.read_char('a'));
         assert_eq!(
             Err(SyntaxError::new(

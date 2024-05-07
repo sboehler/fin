@@ -9,7 +9,7 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        self.file.iter().map(execute).collect()
+        self.file.iter().try_for_each(execute)
     }
 }
 

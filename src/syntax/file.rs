@@ -9,7 +9,7 @@ use std::{
 use super::{
     error::SyntaxError,
     parser::Parser,
-    syntax::{Directive, Rng, SyntaxTree},
+    {Directive, Rng, SyntaxTree},
 };
 
 pub struct ParsedFile {

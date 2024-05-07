@@ -2,14 +2,14 @@ use std::io::{self, Result, Write};
 
 use super::{
     file::ParsedFile,
-    syntax::{Addon, Assertion, Directive},
+    {Addon, Assertion, Directive},
 };
 
 pub fn format_file(w: &mut impl Write, file: &ParsedFile) -> io::Result<()> {
     let n = initialize(file);
     let mut pos = 0;
     for d in &file.syntax_tree.directives {
-        w.write(file.text[pos..d.range().start].as_bytes())?;
+        w.write_all(file.text[pos..d.range().start].as_bytes())?;
         match d {
             Directive::Include { path, .. } => {
                 write!(w, "include {}", file.extract(path.range))?;
@@ -109,7 +109,7 @@ pub fn format_file(w: &mut impl Write, file: &ParsedFile) -> io::Result<()> {
         }
         pos = d.range().end
     }
-    w.write(file.text[pos..file.syntax_tree.range.end].as_bytes())?;
+    w.write_all(file.text[pos..file.syntax_tree.range.end].as_bytes())?;
     Ok(())
 }
 
@@ -147,7 +147,7 @@ fn format_addon(w: &mut impl Write, f: &ParsedFile, a: &Addon) -> Result<()> {
         Addon::Performance { commodities, .. } => {
             write!(w, "@performance(")?;
             for (i, c) in commodities.iter().enumerate() {
-                w.write(f.extract(c.0).as_bytes())?;
+                w.write_all(f.extract(c.0).as_bytes())?;
                 if i < commodities.len() - 1 {
                     write!(w, ",")?;
                 }
