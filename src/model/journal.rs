@@ -43,9 +43,9 @@ pub struct Journal {
 }
 
 impl Journal {
-    pub fn new(registry: Rc<RefCell<Registry>>) -> Self {
+    pub fn new() -> Self {
         Journal {
-            registry,
+            registry: Rc::new(RefCell::new(Registry::new())),
             days: BTreeMap::new(),
         }
     }

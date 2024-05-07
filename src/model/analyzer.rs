@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::rc::Rc;
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -13,29 +13,28 @@ use crate::{
 };
 
 use super::{
-    journal::Journal, registry::Registry, Account, Assertion, Booking, Close, Commodity, Interval,
-    Open, Price, Transaction,
+    journal::Journal, Account, Assertion, Booking, Close, Commodity, Interval, Open, Price,
+    Transaction,
 };
 
 pub struct Analyzer {
-    registry: Rc<RefCell<Registry>>,
-    journal: RefCell<Journal>,
+    journal: Journal,
 }
 
 type Result<T> = std::result::Result<T, SyntaxError>;
 
 impl Analyzer {
-    pub fn analyze(mut self, files: Vec<ParsedFile>) -> Result<Journal> {
-        self.registry = Rc::new(RefCell::new(Registry::new()));
-        self.journal = RefCell::new(Journal::new(self.registry.clone()));
-
+    pub fn analyze(files: Vec<ParsedFile>) -> Result<Journal> {
+        let mut analyzer = Self {
+            journal: Journal::new(),
+        };
         for f in &files {
-            self.analyze_file(f)?
+            analyzer.analyze_file(f)?
         }
-        Ok(self.journal.replace(Journal::new(self.registry.clone())))
+        Ok(analyzer.journal)
     }
 
-    fn analyze_file(&self, f: &ParsedFile) -> Result<()> {
+    fn analyze_file(&mut self, f: &ParsedFile) -> Result<()> {
         for d in &f.syntax_tree.directives {
             match d {
                 syntax::Directive::Price {
@@ -68,7 +67,7 @@ impl Analyzer {
     }
 
     fn analyze_price(
-        &self,
+        &mut self,
         f: &ParsedFile,
         date: &syntax::Date,
         commodity: &syntax::Commodity,
@@ -76,31 +75,32 @@ impl Analyzer {
         target: &syntax::Commodity,
     ) -> Result<()> {
         let date = self.analyze_date(f, date)?;
-        self.journal.borrow_mut().day(date).prices.push(Price {
+        let commodity = self.analyze_commodity(f, commodity)?;
+        let price = self.analyze_decimal(f, price)?;
+        let target = self.analyze_commodity(f, target)?;
+        self.journal.day(date).prices.push(Price {
             date,
-            commodity: self.analyze_commodity(f, commodity)?,
-            price: self.analyze_decimal(f, price)?,
-            target: self.analyze_commodity(f, target)?,
+            commodity,
+            price,
+            target,
         });
         Ok(())
     }
 
     fn analyze_open(
-        &self,
+        &mut self,
         f: &ParsedFile,
         date: &syntax::Date,
         account: &syntax::Account,
     ) -> Result<()> {
         let date = self.analyze_date(f, date)?;
-        self.journal.borrow_mut().day(date).openings.push(Open {
-            date,
-            account: self.analyze_account(f, account)?,
-        });
+        let account = self.analyze_account(f, account)?;
+        self.journal.day(date).openings.push(Open { date, account });
         Ok(())
     }
 
     fn analyze_transaction(
-        &self,
+        &mut self,
         f: &ParsedFile,
         addon: &Option<syntax::Addon>,
         date: &syntax::Date,
@@ -145,26 +145,22 @@ impl Analyzer {
                 account,
                 interval,
                 ..
-            }) => self.expand(
-                t,
-                self.analyze_date(f, start)?,
-                self.analyze_date(f, end)?,
-                self.analyze_interval(f, interval)?,
-                self.analyze_account(f, account)?,
-            ),
+            }) => {
+                let start = self.analyze_date(f, start)?;
+                let end = self.analyze_date(f, end)?;
+                let interval = self.analyze_interval(f, interval)?;
+                let account = self.analyze_account(f, account)?;
+                self.expand(t, start, end, interval, account)
+            }
             None => vec![t],
         };
 
-        self.journal
-            .borrow_mut()
-            .day(date)
-            .transactions
-            .append(&mut ts);
+        self.journal.day(date).transactions.append(&mut ts);
         Ok(())
     }
 
     fn analyze_assertion(
-        &self,
+        &mut self,
         f: &ParsedFile,
         date: &syntax::Date,
         assertions: &[syntax::Assertion],
@@ -181,29 +177,26 @@ impl Analyzer {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        self.journal
-            .borrow_mut()
-            .day(date)
-            .assertions
-            .append(&mut res);
+        self.journal.day(date).assertions.append(&mut res);
         Ok(())
     }
 
     fn analyze_close(
-        &self,
+        &mut self,
         f: &ParsedFile,
         date: &syntax::Date,
         account: &syntax::Account,
     ) -> Result<()> {
         let date = self.analyze_date(f, date)?;
-        self.journal.borrow_mut().day(date).closings.push(Close {
-            date,
-            account: self.analyze_account(f, account)?,
-        });
+        let account = self.analyze_account(f, account)?;
+        self.journal
+            .day(date)
+            .closings
+            .push(Close { date, account });
         Ok(())
     }
 
-    fn analyze_date(&self, f: &ParsedFile, d: &syntax::Date) -> Result<NaiveDate> {
+    fn analyze_date(&mut self, f: &ParsedFile, d: &syntax::Date) -> Result<NaiveDate> {
         NaiveDate::parse_from_str(d.0.slice(&f.text), "%Y-%m-%d").map_err(|e| {
             SyntaxError::new(
                 &f.text,
@@ -231,7 +224,7 @@ impl Analyzer {
         })
     }
 
-    fn analyze_interval(&self, f: &ParsedFile, d: &syntax::Rng) -> Result<Interval> {
+    fn analyze_interval(&mut self, f: &ParsedFile, d: &syntax::Rng) -> Result<Interval> {
         match d.slice(&f.text) {
             "daily" => Ok(Interval::Daily),
             "weekly" => Ok(Interval::Weekly),
@@ -249,8 +242,13 @@ impl Analyzer {
         }
     }
 
-    fn analyze_commodity(&self, f: &ParsedFile, c: &syntax::Commodity) -> Result<Rc<Commodity>> {
-        self.registry
+    fn analyze_commodity(
+        &mut self,
+        f: &ParsedFile,
+        c: &syntax::Commodity,
+    ) -> Result<Rc<Commodity>> {
+        self.journal
+            .registry
             .borrow_mut()
             .commodity(c.0.slice(&f.text))
             .map_err(|e| {
@@ -264,8 +262,9 @@ impl Analyzer {
             })
     }
 
-    fn analyze_account(&self, f: &ParsedFile, c: &syntax::Account) -> Result<Rc<Account>> {
-        self.registry
+    fn analyze_account(&mut self, f: &ParsedFile, c: &syntax::Account) -> Result<Rc<Account>> {
+        self.journal
+            .registry
             .borrow_mut()
             .account(c.range.slice(&f.text))
             .map_err(|e| {

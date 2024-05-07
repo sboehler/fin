@@ -1,4 +1,4 @@
-use crate::syntax::file::parse_files;
+use crate::{model::analyzer::Analyzer, syntax::file::parse_files};
 use clap::Args;
 use std::{error::Error, path::PathBuf};
 
@@ -9,7 +9,8 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        parse_files(&self.journal)?;
+        let files = parse_files(&self.journal)?;
+        Analyzer::analyze(files)?;
         Ok(())
     }
 }
