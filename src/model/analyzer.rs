@@ -45,9 +45,9 @@ impl Analyzer {
                     price,
                     target,
                     ..
-                } => self.analyze_price(&f, date, commodity, price, target)?,
+                } => self.analyze_price(f, date, commodity, price, target)?,
                 syntax::Directive::Open { date, account, .. } => {
-                    self.analyze_open(&f, date, account)?
+                    self.analyze_open(f, date, account)?
                 }
                 syntax::Directive::Transaction {
                     date,
@@ -58,9 +58,9 @@ impl Analyzer {
                 } => self.analyze_transaction(f, addon, date, description, bookings)?,
                 syntax::Directive::Assertion {
                     date, assertions, ..
-                } => self.analyze_assertion(&f, date, assertions)?,
+                } => self.analyze_assertion(f, date, assertions)?,
                 syntax::Directive::Close { date, account, .. } => {
-                    self.analyze_close(&f, date, account)?
+                    self.analyze_close(f, date, account)?
                 }
                 syntax::Directive::Include { .. } => (),
             }
@@ -146,10 +146,10 @@ impl Analyzer {
                 ..
             }) => self.expand(
                 t,
-                self.analyze_date(&f, start)?,
-                self.analyze_date(&f, end)?,
-                self.analyze_interval(&f, interval)?,
-                self.analyze_account(&f, account)?,
+                self.analyze_date(f, start)?,
+                self.analyze_date(f, end)?,
+                self.analyze_interval(f, interval)?,
+                self.analyze_account(f, account)?,
             ),
             None => vec![t],
         };
