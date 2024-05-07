@@ -73,4 +73,21 @@ impl Journal {
             .rfind(|d| !d.transactions.is_empty())
             .map(|d| d.date)
     }
+
+    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, NaiveDate, Day> {
+        self.days.iter()
+    }
+    pub fn iter_mut(&mut self) -> std::collections::btree_map::IterMut<'_, NaiveDate, Day> {
+        self.days.iter_mut()
+    }
+}
+
+impl IntoIterator for Journal {
+    type Item = (NaiveDate, Day);
+
+    type IntoIter = std::collections::btree_map::IntoIter<NaiveDate, Day>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.days.into_iter()
+    }
 }
