@@ -1,7 +1,7 @@
 use super::error::SyntaxError;
 use super::syntax::{
-    Account, Addon, Assertion, Booking, Command, Commodity, Date, Decimal, Directive, QuotedString,
-    Result, Rng, SyntaxTree, Token,
+    Account, Addon, Assertion, Booking, Commodity, Date, Decimal, Directive, QuotedString, Result,
+    Rng, SyntaxTree, Token,
 };
 use crate::syntax::scanner::Scanner;
 
@@ -210,14 +210,15 @@ impl<'a> Parser<'a> {
     pub fn parse_command(&self) -> Result<Directive> {
         let start = self.scanner.pos();
         let mut addon = None;
-        while let Some('@') = self.scanner.current() {
+        if let Some('@') = self.scanner.current() {
             addon = Some(self.parse_addon()?);
             self.scanner.read_rest_of_line()?;
         }
         let date = self.parse_date().map_err(|e| e.update("parsing date"))?;
         self.scanner.read_space1()?;
+
         let command = match self.scanner.current() {
-            Some('p') => self.parse_price().map_err(|e| {
+            Some('p') => self.parse_price(start, date).map_err(|e| {
                 self.error(
                     start,
                     Some("parsing 'price' directive".into()),
@@ -225,7 +226,7 @@ impl<'a> Parser<'a> {
                     Token::Error(Box::new(e)),
                 )
             })?,
-            Some('o') => self.parse_open().map_err(|e| {
+            Some('o') => self.parse_open(start, date).map_err(|e| {
                 self.error(
                     start,
                     Some("parsing 'open' directive".into()),
@@ -233,7 +234,7 @@ impl<'a> Parser<'a> {
                     Token::Error(Box::new(e)),
                 )
             })?,
-            Some('"') => self.parse_transaction().map_err(|e| {
+            Some('"') => self.parse_transaction(start, addon, date).map_err(|e| {
                 self.error(
                     start,
                     Some("parsing 'transaction' directive".into()),
@@ -241,7 +242,7 @@ impl<'a> Parser<'a> {
                     Token::Error(Box::new(e)),
                 )
             })?,
-            Some('b') => self.parse_assertion().map_err(|e| {
+            Some('b') => self.parse_assertion(start, date).map_err(|e| {
                 self.error(
                     start,
                     Some("parsing 'balance' directive".into()),
@@ -249,7 +250,7 @@ impl<'a> Parser<'a> {
                     Token::Error(Box::new(e)),
                 )
             })?,
-            Some('c') => self.parse_close().map_err(|e| {
+            Some('c') => self.parse_close(start, date).map_err(|e| {
                 self.error(
                     start,
                     Some("parsing 'close' directive".into()),
@@ -272,26 +273,8 @@ impl<'a> Parser<'a> {
                 ))
             }
         };
-        let range = self.scanner.rng(start);
         self.scanner.read_rest_of_line()?;
-        Ok(Directive::Dated {
-            range,
-            addon,
-            date,
-            command,
-        })
-    }
-
-    pub fn parse_addonified_transaction(&self) -> Result<Command> {
-        let mut addons = Vec::new();
-        loop {
-            addons.push(self.parse_addon()?);
-            self.scanner.read_rest_of_line()?;
-            if self.scanner.current().map(|c| c != '@').unwrap_or(false) {
-                break;
-            }
-        }
-        self.parse_transaction()
+        Ok(command)
     }
 
     pub fn parse_addon(&self) -> Result<Addon> {
@@ -369,8 +352,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_price(&self) -> Result<Command> {
-        let start = self.scanner.pos();
+    pub fn parse_price(&self, start: usize, date: Date) -> Result<Directive> {
         self.scanner.read_string("price")?;
         self.scanner.read_space1()?;
         let commodity = self
@@ -384,29 +366,34 @@ impl<'a> Parser<'a> {
         let target = self
             .parse_commodity()
             .map_err(|e| e.update("parsing target commodity"))?;
-        Ok(Command::Price {
+        Ok(Directive::Price {
             range: self.scanner.rng(start),
+            date,
             commodity,
             price,
             target,
         })
     }
 
-    pub fn parse_open(&self) -> Result<Command> {
-        let start = self.scanner.pos();
+    pub fn parse_open(&self, start: usize, date: Date) -> Result<Directive> {
         self.scanner.read_string("open")?;
         self.scanner.read_space1()?;
         let a = self
             .parse_account()
             .map_err(|e| e.update("parsing account"))?;
-        Ok(Command::Open {
+        Ok(Directive::Open {
             range: self.scanner.rng(start),
+            date,
             account: a,
         })
     }
 
-    pub fn parse_transaction(&self) -> Result<Command> {
-        let start = self.scanner.pos();
+    pub fn parse_transaction(
+        &self,
+        start: usize,
+        addon: Option<Addon>,
+        date: Date,
+    ) -> Result<Directive> {
         let description = self.parse_quoted_string()?;
         self.scanner.read_rest_of_line()?;
         let mut bookings = Vec::new();
@@ -428,8 +415,10 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        Ok(Command::Transaction {
+        Ok(Directive::Transaction {
             range: self.scanner.rng(start),
+            addon,
+            date,
             description,
             bookings,
         })
@@ -462,8 +451,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_assertion(&self) -> Result<Command> {
-        let start = self.scanner.pos();
+    pub fn parse_assertion(&self, start: usize, date: Date) -> Result<Directive> {
         self.scanner.read_string("balance")?;
         self.scanner.read_space1()?;
         let mut assertions = Vec::new();
@@ -497,7 +485,8 @@ impl<'a> Parser<'a> {
                 )
             })?);
         }
-        Ok(Command::Assertion {
+        Ok(Directive::Assertion {
+            date,
             range: self.scanner.rng(start),
             assertions: assertions,
         })
@@ -524,15 +513,15 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_close(&self) -> Result<Command> {
-        let start = self.scanner.pos();
+    pub fn parse_close(&self, start: usize, date: Date) -> Result<Directive> {
         self.scanner.read_string("close")?;
         self.scanner.read_space1()?;
         let a = self
             .parse_account()
             .map_err(|e| e.update("parsing account").into())?;
-        Ok(Command::Close {
+        Ok(Directive::Close {
             range: self.scanner.rng(start),
+            date,
             account: a,
         })
     }
@@ -763,14 +752,15 @@ mod tests {
     #[test]
     fn test_parse_open() {
         assert_eq!(
-            Ok(Command::Open {
+            Ok(Directive::Open {
                 range: Rng::new(0, "open   Assets:Foo"),
+                date: Date(Rng::new(0, "")),
                 account: Account {
                     range: Rng::new(7, "Assets:Foo"),
                     segments: vec![Rng::new(7, "Assets"), Rng::new(14, "Foo")]
                 }
             }),
-            Parser::new("open   Assets:Foo").parse_open()
+            Parser::new("open   Assets:Foo").parse_open(0, Date(Rng::new(0, "")))
         )
     }
 
@@ -798,8 +788,10 @@ mod tests {
     fn test_parse_transaction() {
         let s = "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD\nAssets:Foo Assets:Baz 8 USD";
         assert_eq!(
-            Ok(Command::Transaction {
+            Ok(Directive::Transaction {
                 range: Rng::new(0, s),
+                addon: None,
+                date: Date(Rng::new(0, "")),
                 description: QuotedString {
                     range: Rng::new(0, r#""Message""#),
                     content: Rng::new(1, "Message"),
@@ -833,7 +825,7 @@ mod tests {
                     }
                 ]
             }),
-            Parser::new(s).parse_transaction()
+            Parser::new(s).parse_transaction(0, None, Date(Rng::new(0, "")))
         );
     }
     #[test]
@@ -846,7 +838,7 @@ mod tests {
                 Token::Char('"'),
                 Token::EOF
             ),),
-            Parser::new("\"").parse_transaction()
+            Parser::new("\"").parse_transaction(0, None, Date(Rng::new(0, "")))
         );
     }
     #[test]
@@ -859,20 +851,25 @@ mod tests {
                 Token::Either(vec![Token::Char('\n'), Token::EOF]),
                 Token::Char('A'),
             ),),
-            Parser::new("\"\"   Assets Assets 12 USD").parse_transaction()
+            Parser::new("\"\"   Assets Assets 12 USD").parse_transaction(
+                0,
+                None,
+                Date(Rng::new(0, ""))
+            )
         )
     }
     #[test]
     fn test_parse_close() {
         assert_eq!(
-            Ok(Command::Close {
+            Ok(Directive::Close {
                 range: Rng::new(0, "close  Assets:Foo"),
+                date: Date(Rng::new(0, "")),
                 account: Account {
                     range: Rng::new(7, "Assets:Foo"),
                     segments: vec![Rng::new(7, "Assets"), Rng::new(14, "Foo")]
                 }
             }),
-            Parser::new("close  Assets:Foo").parse_close()
+            Parser::new("close  Assets:Foo").parse_close(0, Date(Rng::new(0, "")))
         )
     }
 
@@ -897,16 +894,12 @@ mod tests {
         #[test]
         fn parse_open() {
             assert_eq!(
-                Ok(Directive::Dated {
+                Ok(Directive::Open {
                     range: Rng::new(0, "2024-03-01 open Assets:Foo"),
-                    addon: None,
                     date: Date(Rng::new(0, "2024-03-01")),
-                    command: Command::Open {
-                        range: Rng::new(11, "open Assets:Foo"),
-                        account: Account {
-                            range: Rng::new(16, "Assets:Foo"),
-                            segments: vec![Rng::new(16, "Assets"), Rng::new(23, "Foo")]
-                        }
+                    account: Account {
+                        range: Rng::new(16, "Assets:Foo"),
+                        segments: vec![Rng::new(16, "Assets"), Rng::new(23, "Foo")]
                     },
                 }),
                 Parser::new("2024-03-01 open Assets:Foo").parse_directive()
@@ -916,33 +909,30 @@ mod tests {
         #[test]
         fn parse_transaction() {
             assert_eq!(
-                Ok(Directive::Dated {
+                Ok(Directive::Transaction {
                     range: Rng::new(
                         0,
                         "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"
                     ),
                     addon: None,
                     date: Date(Rng::new(0, "2024-12-31")),
-                    command: Command::Transaction {
-                        range: Rng::new(11, "\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD"),
-                        description: QuotedString {
-                            range: Rng::new(11, r#""Message""#),
-                            content: Rng::new(12, "Message"),
-                        },
-                        bookings: vec![Booking {
-                            range: Rng::new(23, "Assets:Foo Assets:Bar 4.23 USD"),
-                            credit: Account {
-                                range: Rng::new(23, "Assets:Foo"),
-                                segments: vec![Rng::new(23, "Assets"), Rng::new(30, "Foo")]
-                            },
-                            debit: Account {
-                                range: Rng::new(34, "Assets:Bar"),
-                                segments: vec![Rng::new(34, "Assets"), Rng::new(41, "Bar")]
-                            },
-                            quantity: Decimal(Rng::new(45, "4.23")),
-                            commodity: Commodity(Rng::new(50, "USD")),
-                        },]
+                    description: QuotedString {
+                        range: Rng::new(11, r#""Message""#),
+                        content: Rng::new(12, "Message"),
                     },
+                    bookings: vec![Booking {
+                        range: Rng::new(23, "Assets:Foo Assets:Bar 4.23 USD"),
+                        credit: Account {
+                            range: Rng::new(23, "Assets:Foo"),
+                            segments: vec![Rng::new(23, "Assets"), Rng::new(30, "Foo")]
+                        },
+                        debit: Account {
+                            range: Rng::new(34, "Assets:Bar"),
+                            segments: vec![Rng::new(34, "Assets"), Rng::new(41, "Bar")]
+                        },
+                        quantity: Decimal(Rng::new(45, "4.23")),
+                        commodity: Commodity(Rng::new(50, "USD")),
+                    },]
                 }),
                 Parser::new("2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD")
                     .parse_directive()
@@ -952,17 +942,13 @@ mod tests {
         #[test]
         fn parse_close() {
             assert_eq!(
-                Ok(Directive::Dated {
+                Ok(Directive::Close {
                     range: Rng::new(0, "2024-03-01 close Assets:Foo"),
-                    addon: None,
                     date: Date(Rng::new(0, "2024-03-01")),
-                    command: Command::Close {
-                        range: Rng::new(11, "close Assets:Foo"),
-                        account: Account {
-                            range: Rng::new(17, "Assets:Foo"),
-                            segments: vec![Rng::new(17, "Assets"), Rng::new(24, "Foo")]
-                        }
-                    },
+                    account: Account {
+                        range: Rng::new(17, "Assets:Foo"),
+                        segments: vec![Rng::new(17, "Assets"), Rng::new(24, "Foo")]
+                    }
                 }),
                 Parser::new("2024-03-01 close Assets:Foo").parse_directive()
             )
@@ -971,16 +957,12 @@ mod tests {
         #[test]
         fn parse_price() {
             assert_eq!(
-                Ok(Directive::Dated {
+                Ok(Directive::Price {
                     range: Rng::new(0, "2024-03-01 price FOO 1.543 BAR"),
-                    addon: None,
                     date: Date(Rng::new(0, "2024-03-01")),
-                    command: Command::Price {
-                        range: Rng::new(11, "price FOO 1.543 BAR"),
-                        commodity: Commodity(Rng::new(17, "FOO")),
-                        price: Decimal(Rng::new(21, "1.543")),
-                        target: Commodity(Rng::new(27, "BAR")),
-                    },
+                    commodity: Commodity(Rng::new(17, "FOO")),
+                    price: Decimal(Rng::new(21, "1.543")),
+                    target: Commodity(Rng::new(27, "BAR")),
                 }),
                 Parser::new("2024-03-01 price FOO 1.543 BAR").parse_directive()
             )
@@ -989,22 +971,18 @@ mod tests {
         #[test]
         fn parse_assertion() {
             assert_eq!(
-                Ok(Directive::Dated {
+                Ok(Directive::Assertion {
                     range: Rng::new(0, "2024-03-01 balance Assets:Foo 500.1 BAR"),
-                    addon: None,
                     date: Date(Rng::new(0, "2024-03-01")),
-                    command: Command::Assertion {
-                        range: Rng::new(11, "balance Assets:Foo 500.1 BAR"),
-                        assertions: vec![Assertion {
-                            range: Rng::new(19, "Assets:Foo 500.1 BAR"),
-                            account: Account {
-                                range: Rng::new(19, "Assets:Foo"),
-                                segments: vec![Rng::new(19, "Assets"), Rng::new(26, "Foo")],
-                            },
-                            balance: Decimal(Rng::new(30, "500.1")),
-                            commodity: Commodity(Rng::new(36, "BAR")),
-                        }]
-                    },
+                    assertions: vec![Assertion {
+                        range: Rng::new(19, "Assets:Foo 500.1 BAR"),
+                        account: Account {
+                            range: Rng::new(19, "Assets:Foo"),
+                            segments: vec![Rng::new(19, "Assets"), Rng::new(26, "Foo")],
+                        },
+                        balance: Decimal(Rng::new(30, "500.1")),
+                        commodity: Commodity(Rng::new(36, "BAR")),
+                    }]
                 }),
                 Parser::new("2024-03-01 balance Assets:Foo 500.1 BAR").parse_directive()
             )

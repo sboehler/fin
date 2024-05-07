@@ -9,13 +9,19 @@ use std::{
 use super::{
     error::SyntaxError,
     parser::Parser,
-    syntax::{Directive, SyntaxTree},
+    syntax::{Directive, Rng, SyntaxTree},
 };
 
 pub struct ParsedFile {
     pub file: PathBuf,
     pub text: String,
     pub syntax_tree: SyntaxTree,
+}
+
+impl ParsedFile {
+    pub fn extract(&self, rng: Rng) -> &str {
+        rng.slice(&self.text)
+    }
 }
 
 #[derive(Debug)]
@@ -67,7 +73,7 @@ impl Error for FileError {}
 
 type Result<T> = std::result::Result<T, FileError>;
 
-pub fn parse(root: &Path) -> Result<Vec<ParsedFile>> {
+pub fn parse_files(root: &Path) -> Result<Vec<ParsedFile>> {
     let mut res = Vec::new();
     let mut done = HashSet::new();
     let mut todo = VecDeque::new();
@@ -102,4 +108,19 @@ pub fn parse(root: &Path) -> Result<Vec<ParsedFile>> {
         });
     }
     Ok(res)
+}
+
+pub fn parse_file(file: &Path) -> Result<ParsedFile> {
+    let file = file
+        .canonicalize()
+        .map_err(|e| FileError::IO(file.to_path_buf(), e))?;
+    let text = fs::read_to_string(&file).map_err(|e| FileError::IO(file.clone(), e))?;
+    let syntax_tree = Parser::new(&text)
+        .parse()
+        .map_err(|e| FileError::ParserError(file.clone(), e))?;
+    Ok(ParsedFile {
+        file,
+        text,
+        syntax_tree,
+    })
 }

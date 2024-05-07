@@ -1,148 +1,134 @@
 use std::io::{self, Result, Write};
 
-use super::syntax::{Addon, Assertion, Command, Date, Directive, QuotedString, SyntaxTree};
+use super::{
+    file::ParsedFile,
+    syntax::{Addon, Assertion, Directive},
+};
 
-pub fn format_file(w: &mut impl Write, s: &str, syntax_tree: &SyntaxTree) -> io::Result<()> {
-    let n = initialize(s, &syntax_tree.directives);
+pub fn format_file(w: &mut impl Write, file: &ParsedFile) -> io::Result<()> {
+    let n = initialize(file);
     let mut pos = 0;
-    for d in &syntax_tree.directives {
+    for d in &file.syntax_tree.directives {
+        w.write(file.text[pos..d.range().start].as_bytes())?;
         match d {
-            Directive::Include { range, path } => {
-                w.write(s[pos..range.start].as_bytes())?;
-                format_include(w, s, path)?;
-                pos = range.end;
+            Directive::Include { path, .. } => {
+                write!(w, "include {}", file.extract(path.range))?;
             }
-            Directive::Dated {
-                range,
-                addon,
+            Directive::Price {
                 date,
-                command,
+                commodity,
+                price,
+                target,
+                ..
             } => {
-                w.write(s[pos..range.start].as_bytes())?;
-                format_dated(w, s, n, addon, date, command)?;
-                pos = range.end;
+                write!(
+                    w,
+                    "{date} price {commodity} {price} {target}",
+                    date = file.extract(date.0),
+                    commodity = file.extract(commodity.0),
+                    price = file.extract(price.0),
+                    target = file.extract(target.0),
+                )?;
+            }
+            Directive::Open { date, account, .. } => {
+                write!(
+                    w,
+                    "{date} open {account}",
+                    date = file.extract(date.0),
+                    account = file.extract(account.range),
+                )?;
+            }
+            Directive::Transaction {
+                date,
+                addon,
+                description,
+                bookings,
+                ..
+            } => {
+                if let Some(a) = addon {
+                    format_addon(w, file, a)?;
+                    writeln!(w)?;
+                }
+                writeln!(
+                    w,
+                    "{date} {description}",
+                    date = file.extract(date.0),
+                    description = file.extract(description.range)
+                )?;
+                for b in bookings {
+                    writeln!(
+                        w,
+                        "{credit:<width$} {debit:<width$} {amount:>10} {commodity}",
+                        credit = file.extract(b.credit.range),
+                        width = n,
+                        debit = file.extract(b.debit.range),
+                        amount = file.extract(b.quantity.0),
+                        commodity = file.extract(b.commodity.0),
+                    )?;
+                }
+            }
+            Directive::Assertion {
+                date, assertions, ..
+            } => {
+                match &assertions[..] {
+                    [Assertion {
+                        account,
+                        balance: amount,
+                        commodity,
+                        ..
+                    }] => write!(
+                        w,
+                        "{date} balance {account} {amount} {commodity}",
+                        date = file.extract(date.0),
+                        account = file.extract(account.range),
+                        amount = file.extract(amount.0),
+                        commodity = file.extract(commodity.0)
+                    )?,
+                    _ => {
+                        writeln!(w, "{date} balance ", date = file.extract(date.0))?;
+                        for a in assertions {
+                            writeln!(
+                                w,
+                                "{account} {amount} {commodity}",
+                                account = file.extract(a.account.range),
+                                amount = file.extract(a.balance.0),
+                                commodity = file.extract(a.commodity.0)
+                            )?;
+                        }
+                    }
+                };
+            }
+            Directive::Close { date, account, .. } => {
+                write!(
+                    w,
+                    "{date} close {account}",
+                    date = file.extract(date.0),
+                    account = file.extract(account.range),
+                )?;
             }
         }
+        pos = d.range().end
     }
-    w.write(s[pos..syntax_tree.range.end].as_bytes())?;
+    w.write(file.text[pos..file.syntax_tree.range.end].as_bytes())?;
     Ok(())
 }
 
-fn initialize(text: &str, directives: &Vec<Directive>) -> usize {
-    directives
+fn initialize(f: &ParsedFile) -> usize {
+    f.syntax_tree
+        .directives
         .iter()
         .filter_map(|d| match d {
-            Directive::Dated {
-                command: Command::Transaction { bookings, .. },
-                ..
-            } => Some(bookings),
+            Directive::Transaction { bookings, .. } => Some(bookings),
             _ => None,
         })
         .flatten()
         .flat_map(|b| vec![&b.credit, &b.debit])
-        .map(|a| a.range.slice(text).chars().count())
+        .map(|a| a.range.slice(&f.text).chars().count())
         .max()
         .unwrap_or_default()
 }
 
-fn format_include(w: &mut impl Write, text: &str, path: &QuotedString) -> Result<()> {
-    write!(w, "include {}", path.range.slice(text))
-}
-
-fn format_dated(
-    w: &mut impl Write,
-    text: &str,
-    n: usize,
-    addon: &Option<Addon>,
-    date: &Date,
-    command: &Command,
-) -> Result<()> {
-    if let Some(a) = addon {
-        format_addon(w, text, a)?;
-        writeln!(w)?;
-    }
-    match command {
-        Command::Price {
-            commodity,
-            price,
-            target,
-            ..
-        } => write!(
-            w,
-            "{date} price {commodity} {price} {target}",
-            date = date.0.slice(text),
-            commodity = commodity.0.slice(text),
-            price = price.0.slice(text),
-            target = target.0.slice(text),
-        ),
-        Command::Open { account, .. } => write!(
-            w,
-            "{date} open {account}",
-            date = date.0.slice(text),
-            account = account.range.slice(text),
-        ),
-        Command::Transaction {
-            description,
-            bookings,
-            ..
-        } => {
-            writeln!(
-                w,
-                "{date} {description}",
-                date = date.0.slice(text),
-                description = description.range.slice(text)
-            )?;
-            for b in bookings {
-                writeln!(
-                    w,
-                    "{credit:<width$} {debit:<width$} {amount:>10} {commodity}",
-                    credit = b.credit.range.slice(text),
-                    width = n,
-                    debit = b.debit.range.slice(text),
-                    amount = b.quantity.0.slice(text),
-                    commodity = b.commodity.0.slice(text),
-                )?;
-            }
-            Ok(())
-        }
-        Command::Assertion { assertions, .. } => match &assertions[..] {
-            [Assertion {
-                account,
-                balance: amount,
-                commodity,
-                ..
-            }] => write!(
-                w,
-                "{date} balance {account} {amount} {commodity}",
-                date = date.0.slice(text),
-                account = account.range.slice(text),
-                amount = amount.0.slice(text),
-                commodity = commodity.0.slice(text)
-            ),
-            _ => {
-                writeln!(w, "{date} balance ", date = date.0.slice(text))?;
-                for a in assertions {
-                    writeln!(
-                        w,
-                        "{account} {amount} {commodity}",
-                        account = a.account.range.slice(text),
-                        amount = a.balance.0.slice(text),
-                        commodity = a.commodity.0.slice(text)
-                    )?;
-                }
-                Ok(())
-            }
-        },
-        Command::Close { account, .. } => write!(
-            w,
-            "{date} close {account}",
-            date = date.0.slice(text),
-            account = account.range.slice(text),
-        ),
-    }
-}
-
-fn format_addon(w: &mut impl Write, text: &str, a: &Addon) -> Result<()> {
+fn format_addon(w: &mut impl Write, f: &ParsedFile, a: &Addon) -> Result<()> {
     match a {
         Addon::Accrual {
             interval,
@@ -153,15 +139,15 @@ fn format_addon(w: &mut impl Write, text: &str, a: &Addon) -> Result<()> {
         } => write!(
             w,
             "@accrue {interval} {start} {end} {account}",
-            interval = interval.slice(text),
-            start = start.0.slice(text),
-            end = end.0.slice(text),
-            account = account.range.slice(text)
+            interval = f.extract(*interval),
+            start = f.extract(start.0),
+            end = f.extract(end.0),
+            account = f.extract(account.range)
         ),
         Addon::Performance { commodities, .. } => {
             write!(w, "@performance(")?;
             for (i, c) in commodities.iter().enumerate() {
-                w.write(c.0.slice(text).as_bytes())?;
+                w.write(f.extract(c.0).as_bytes())?;
                 if i < commodities.len() - 1 {
                     write!(w, ",")?;
                 }

@@ -38,35 +38,31 @@ impl Analyzer {
 
     fn analyze_file(&self, f: &ParsedFile) -> Result<()> {
         for d in &f.syntax_tree.directives {
-            if let syntax::Directive::Dated {
-                date,
-                addon,
-                command,
-                ..
-            } = d
-            {
-                match command {
-                    syntax::Command::Price {
-                        commodity,
-                        price,
-                        target,
-                        ..
-                    } => self.analyze_price(&f, date, commodity, price, target)?,
-                    syntax::Command::Open { account, .. } => {
-                        self.analyze_open(&f, date, account)?
-                    }
-                    syntax::Command::Transaction {
-                        description,
-                        bookings,
-                        ..
-                    } => self.analyze_transaction(f, addon, date, description, bookings)?,
-                    syntax::Command::Assertion { assertions, .. } => {
-                        self.analyze_assertion(&f, date, assertions)?
-                    }
-                    syntax::Command::Close { account, .. } => {
-                        self.analyze_close(&f, date, account)?
-                    }
+            match d {
+                syntax::Directive::Price {
+                    date,
+                    commodity,
+                    price,
+                    target,
+                    ..
+                } => self.analyze_price(&f, date, commodity, price, target)?,
+                syntax::Directive::Open { date, account, .. } => {
+                    self.analyze_open(&f, date, account)?
                 }
+                syntax::Directive::Transaction {
+                    date,
+                    addon,
+                    description,
+                    bookings,
+                    ..
+                } => self.analyze_transaction(f, addon, date, description, bookings)?,
+                syntax::Directive::Assertion {
+                    date, assertions, ..
+                } => self.analyze_assertion(&f, date, assertions)?,
+                syntax::Directive::Close { date, account, .. } => {
+                    self.analyze_close(&f, date, account)?
+                }
+                syntax::Directive::Include { .. } => (),
             }
         }
         Ok(())

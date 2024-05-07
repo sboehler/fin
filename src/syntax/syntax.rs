@@ -123,39 +123,48 @@ pub enum Directive {
         range: Rng,
         path: QuotedString,
     },
-    Dated {
-        range: Rng,
-        addon: Option<Addon>,
-        date: Date,
-        command: Command,
-    },
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub enum Command {
     Price {
         range: Rng,
+        date: Date,
         commodity: Commodity,
         price: Decimal,
         target: Commodity,
     },
     Open {
         range: Rng,
+        date: Date,
         account: Account,
     },
     Transaction {
         range: Rng,
+        addon: Option<Addon>,
+        date: Date,
         description: QuotedString,
         bookings: Vec<Booking>,
     },
     Assertion {
         range: Rng,
+        date: Date,
         assertions: Vec<Assertion>,
     },
     Close {
         range: Rng,
+        date: Date,
         account: Account,
     },
+}
+
+impl Directive {
+    pub fn range(&self) -> Rng {
+        match self {
+            Directive::Include { range, .. } => *range,
+            Directive::Price { range, .. } => *range,
+            Directive::Open { range, .. } => *range,
+            Directive::Transaction { range, .. } => *range,
+            Directive::Assertion { range, .. } => *range,
+            Directive::Close { range, .. } => *range,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
