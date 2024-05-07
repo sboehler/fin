@@ -44,8 +44,8 @@ impl<'a> Parser<'a> {
     pub fn parse_commodity(&self) -> Result<Commodity> {
         self.scanner
             .read_identifier()
-            .map_err(|e| e.update("parsing commodity"))
             .map(Commodity)
+            .map_err(|e| e.update("parsing commodity"))
     }
 
     pub fn parse_date(&self) -> Result<Date> {
@@ -73,12 +73,7 @@ impl<'a> Parser<'a> {
             Some('q') => self.scanner.read_string("quarterly"),
             Some('y') => self.scanner.read_string("yearly"),
             Some('o') => self.scanner.read_string("once"),
-            o => Err(self.error(
-                start,
-                None,
-                Token::Interval,
-                o.map_or(Token::EOF, Token::Char),
-            )),
+            o => Err(self.error(start, None, Token::Interval, Token::from_char(o))),
         }
     }
 
@@ -111,13 +106,13 @@ impl<'a> Parser<'a> {
     pub fn parse(&self) -> Result<SyntaxTree> {
         let start = self.scanner.pos();
         let mut directives = Vec::new();
-        while self.scanner.current().is_some() {
-            match self.scanner.current() {
-                Some('*') | Some('/') | Some('#') => {
+        while let Some(c) = self.scanner.current() {
+            match c {
+                '*' | '/' | '#' => {
                     self.parse_comment()
                         .map_err(|e| e.update("parsing comment"))?;
                 }
-                Some(c) if c.is_alphanumeric() || c == '@' => {
+                c if c.is_alphanumeric() || c == '@' => {
                     let d = self.parse_directive().map_err(|e| {
                         self.error(
                             self.scanner.pos(),
@@ -128,7 +123,7 @@ impl<'a> Parser<'a> {
                     })?;
                     directives.push(d)
                 }
-                Some(c) if c.is_whitespace() => {
+                c if c.is_whitespace() => {
                     self.scanner
                         .read_rest_of_line()
                         .map_err(|e| e.update("parsing blank line"))?;
@@ -138,7 +133,7 @@ impl<'a> Parser<'a> {
                         start,
                         None,
                         Token::Either(vec![Token::Directive, Token::Comment, Token::BlankLine]),
-                        o.map_or(Token::EOF, Token::Char),
+                        Token::Char(o),
                     ))
                 }
             }
@@ -189,7 +184,7 @@ impl<'a> Parser<'a> {
                 self.scanner.pos(),
                 None,
                 Token::Custom("directive".into()),
-                o.map(Token::Char).unwrap_or(Token::EOF),
+                Token::from_char(o),
             )),
         }
     }
@@ -269,7 +264,7 @@ impl<'a> Parser<'a> {
                         Token::Custom("opening quote (\")".into()),
                         Token::Custom("close".into()),
                     ]),
-                    o.map(Token::Char).unwrap_or(Token::EOF),
+                    Token::from_char(o),
                 ))
             }
         };
@@ -284,7 +279,7 @@ impl<'a> Parser<'a> {
             Token::Either(vec![Token::Custom("@performance".into())]),
             |c| c.is_alphabetic(),
         )?;
-        match &self.scanner.source[name.start..name.end] {
+        match name.slice(&self.scanner.source) {
             "performance" => self
                 .parse_performance(start)
                 .map_err(|e| e.update("parsing performance")),
@@ -305,12 +300,7 @@ impl<'a> Parser<'a> {
         self.scanner.read_char('(')?;
         self.scanner.read_space();
         let mut commodities = Vec::new();
-        while self
-            .scanner
-            .current()
-            .map(|c| c.is_alphanumeric())
-            .unwrap_or(false)
-        {
+        while self.scanner.current().map_or(false, char::is_alphanumeric) {
             commodities.push(
                 self.parse_commodity()
                     .map_err(|e| e.update("parsing commodity"))?,
@@ -322,8 +312,10 @@ impl<'a> Parser<'a> {
             }
         }
         self.scanner.read_char(')')?;
-        let range = self.scanner.rng(start);
-        Ok(Addon::Performance { range, commodities })
+        Ok(Addon::Performance {
+            range: self.scanner.rng(start),
+            commodities,
+        })
     }
 
     pub fn parse_accrual(&self, start: usize) -> Result<Addon> {
@@ -407,11 +399,7 @@ impl<'a> Parser<'a> {
                 )
             })?);
             self.scanner.read_rest_of_line()?;
-            if !self
-                .scanner
-                .current()
-                .map_or(false, |c| c.is_alphanumeric())
-            {
+            if !self.scanner.current().map_or(false, char::is_alphanumeric) {
                 break;
             }
         }
@@ -441,9 +429,8 @@ impl<'a> Parser<'a> {
         let commodity = self
             .parse_commodity()
             .map_err(|e| e.update("parsing commodity"))?;
-        let range = self.scanner.rng(start);
         Ok(Booking {
-            range,
+            range: self.scanner.rng(start),
             credit,
             debit,
             quantity,
@@ -467,11 +454,7 @@ impl<'a> Parser<'a> {
                     )
                 })?);
                 self.scanner.read_rest_of_line()?;
-                if !self
-                    .scanner
-                    .current()
-                    .map_or(false, |c| c.is_alphanumeric())
-                {
+                if !self.scanner.current().map_or(false, char::is_alphanumeric) {
                     break;
                 }
             }
@@ -486,8 +469,8 @@ impl<'a> Parser<'a> {
             })?);
         }
         Ok(Directive::Assertion {
-            date,
             range: self.scanner.rng(start),
+            date,
             assertions,
         })
     }
@@ -516,13 +499,13 @@ impl<'a> Parser<'a> {
     pub fn parse_close(&self, start: usize, date: Date) -> Result<Directive> {
         self.scanner.read_string("close")?;
         self.scanner.read_space1()?;
-        let a = self
+        let account = self
             .parse_account()
             .map_err(|e| e.update("parsing account"))?;
         Ok(Directive::Close {
             range: self.scanner.rng(start),
             date,
-            account: a,
+            account,
         })
     }
 }

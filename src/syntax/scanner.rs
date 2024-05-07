@@ -34,21 +34,15 @@ impl<'a> Scanner<'a> {
         self.chars
             .borrow_mut()
             .peek()
-            .map(|t| t.0)
-            .unwrap_or_else(|| self.source.as_bytes().len())
+            .map_or_else(|| self.source.as_bytes().len(), |t| t.0)
     }
 
     pub fn read_while_1<P>(&self, token: Token, pred: P) -> Result<Rng>
     where
         P: Fn(char) -> bool,
     {
-        if !self.current().map(&pred).unwrap_or(false) {
-            return Err(self.error(
-                self.pos(),
-                None,
-                token,
-                self.current().map(Token::Char).unwrap_or(Token::EOF),
-            ));
+        if !self.current().map_or(false, &pred) {
+            return Err(self.error(self.pos(), None, token, Token::from_char(self.current())));
         }
         Ok(self.read_while(pred))
     }
@@ -58,7 +52,7 @@ impl<'a> Scanner<'a> {
         P: Fn(char) -> bool,
     {
         let start = self.pos();
-        while self.current().map(&pred).unwrap_or(false) {
+        while self.current().map_or(false, &pred) {
             self.advance();
         }
         self.rng(start)
@@ -96,8 +90,7 @@ impl<'a> Scanner<'a> {
 
     pub fn read_identifier(&self) -> Result<Rng> {
         let start = self.pos();
-        let ident = self.read_while(|c| c.is_alphanumeric());
-        if ident.is_empty() {
+        if self.read_while(char::is_alphanumeric).is_empty() {
             Err(self.error(
                 start,
                 Some("parsing identifier".into()),
