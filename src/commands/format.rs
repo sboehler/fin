@@ -1,4 +1,4 @@
-use crate::syntax::{file::parse_file, format::format_file};
+use crate::syntax::{format::format_file, parse_file};
 use clap::Args;
 use std::{error::Error, fs, path::PathBuf};
 
@@ -14,9 +14,9 @@ impl Command {
 }
 
 fn execute(path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    let f = parse_file(path)?;
+    let syntax_tree = parse_file(path)?;
     let mut w = Vec::new();
-    format_file(&mut w, &f)?;
+    format_file(&mut w, &syntax_tree)?;
     fs::write(path, &w)?;
     Ok(())
 }

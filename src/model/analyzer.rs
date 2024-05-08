@@ -5,7 +5,10 @@ use rust_decimal::Decimal;
 
 use crate::{
     model::Period,
-    syntax::{cst, error::SyntaxError, file::File},
+    syntax::{
+        cst::{self, SyntaxTree},
+        error::SyntaxError,
+    },
 };
 
 use super::{
@@ -15,15 +18,15 @@ use super::{
 
 pub struct Analyzer<'a> {
     journal: &'a mut Journal,
-    file: &'a File,
+    file: &'a SyntaxTree,
 }
 
 type Result<T> = std::result::Result<T, SyntaxError>;
 
 impl<'a> Analyzer<'a> {
-    pub fn analyze_files(files: Vec<File>) -> Result<Journal> {
+    pub fn analyze_files(files: &Vec<SyntaxTree>) -> Result<Journal> {
         let mut journal = Journal::new();
-        for file in &files {
+        for file in files {
             Analyzer {
                 journal: &mut journal,
                 file,
@@ -34,7 +37,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn analyze(&mut self) -> Result<()> {
-        for d in &self.file.syntax_tree.directives {
+        for d in &self.file.directives {
             match d {
                 cst::Directive::Price {
                     date,
@@ -113,7 +116,7 @@ impl<'a> Analyzer<'a> {
             .collect::<Vec<_>>();
         let mut t = Transaction {
             date,
-            description: description.content.slice(&self.file.text).to_string(),
+            description: description.content.text().to_string(),
             postings: bookings,
             targets: None,
         };
@@ -175,31 +178,31 @@ impl<'a> Analyzer<'a> {
     }
 
     fn analyze_date(&mut self, d: &cst::Date) -> Result<NaiveDate> {
-        NaiveDate::parse_from_str(d.0.slice(&self.file.text), "%Y-%m-%d").map_err(|e| {
+        NaiveDate::parse_from_str(d.0.text(), "%Y-%m-%d").map_err(|e| {
             SyntaxError::new(
-                &self.file.text,
+                self.file.range.file.clone(),
                 d.0.start,
                 Some(e.to_string()),
                 cst::Token::Date,
-                cst::Token::Custom(d.0.slice(&self.file.text).to_string()),
+                cst::Token::Custom(d.0.text().to_string()),
             )
         })
     }
 
     fn analyze_decimal(&self, d: &cst::Decimal) -> Result<rust_decimal::Decimal> {
-        rust_decimal::Decimal::from_str_exact(d.0.slice(&self.file.text)).map_err(|e| {
+        rust_decimal::Decimal::from_str_exact(d.0.text()).map_err(|e| {
             SyntaxError::new(
-                &self.file.text,
+                self.file.range.file.clone(),
                 d.0.start,
                 Some(e.to_string()),
                 cst::Token::Decimal,
-                cst::Token::Custom(d.0.slice(&self.file.text).to_string()),
+                cst::Token::Custom(d.0.text().to_string()),
             )
         })
     }
 
     fn analyze_interval(&mut self, d: &cst::Rng) -> Result<Interval> {
-        match d.slice(&self.file.text) {
+        match d.text() {
             "daily" => Ok(Interval::Daily),
             "weekly" => Ok(Interval::Weekly),
             "monthly" => Ok(Interval::Monthly),
@@ -207,7 +210,7 @@ impl<'a> Analyzer<'a> {
             "yearly" => Ok(Interval::Yearly),
             "once" => Ok(Interval::Once),
             o => Err(SyntaxError::new(
-                &self.file.text,
+                self.file.range.file.clone(),
                 d.start,
                 None,
                 cst::Token::Decimal,
@@ -220,14 +223,14 @@ impl<'a> Analyzer<'a> {
         self.journal
             .registry
             .borrow_mut()
-            .commodity(c.0.slice(&self.file.text))
+            .commodity(c.0.text())
             .map_err(|e| {
                 SyntaxError::new(
-                    &self.file.text,
+                    self.file.range.file.clone(),
                     c.0.start,
                     Some(e.to_string()),
                     cst::Token::Custom("identifier".into()),
-                    cst::Token::Custom(c.0.slice(&self.file.text).to_string()),
+                    cst::Token::Custom(c.0.text().to_string()),
                 )
             })
     }
@@ -236,14 +239,14 @@ impl<'a> Analyzer<'a> {
         self.journal
             .registry
             .borrow_mut()
-            .account(c.range.slice(&self.file.text))
+            .account(c.range.text())
             .map_err(|e| {
                 SyntaxError::new(
-                    &self.file.text,
+                    self.file.range.file.clone(),
                     c.range.start,
                     Some(e.to_string()),
                     cst::Token::Custom("account".into()),
-                    cst::Token::Custom(c.range.slice(&self.file.text).to_string()),
+                    cst::Token::Custom(c.range.text().to_string()),
                 )
             })
     }

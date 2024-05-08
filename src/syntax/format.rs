@@ -1,18 +1,15 @@
 use std::io::{self, Result, Write};
 
-use super::{
-    cst::{Addon, Assertion, Directive},
-    file::File,
-};
+use super::cst::{Addon, Assertion, Directive, SyntaxTree};
 
-pub fn format_file(w: &mut impl Write, file: &File) -> io::Result<()> {
-    let n = initialize(file);
+pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxTree) -> io::Result<()> {
+    let n = initialize(syntax_tree);
     let mut pos = 0;
-    for d in &file.syntax_tree.directives {
-        w.write_all(file.text[pos..d.range().start].as_bytes())?;
+    for d in &syntax_tree.directives {
+        w.write_all(syntax_tree.range.file.text[pos..d.range().start].as_bytes())?;
         match d {
             Directive::Include { path, .. } => {
-                write!(w, "include {}", file.extract(path.range))?;
+                write!(w, "include {}", path.range.text())?;
             }
             Directive::Price {
                 date,
@@ -24,18 +21,18 @@ pub fn format_file(w: &mut impl Write, file: &File) -> io::Result<()> {
                 write!(
                     w,
                     "{date} price {commodity} {price} {target}",
-                    date = file.extract(date.0),
-                    commodity = file.extract(commodity.0),
-                    price = file.extract(price.0),
-                    target = file.extract(target.0),
+                    date = date.0.text(),
+                    commodity = commodity.0.text(),
+                    price = price.0.text(),
+                    target = target.0.text(),
                 )?;
             }
             Directive::Open { date, account, .. } => {
                 write!(
                     w,
                     "{date} open {account}",
-                    date = file.extract(date.0),
-                    account = file.extract(account.range),
+                    date = date.0.text(),
+                    account = account.range.text(),
                 )?;
             }
             Directive::Transaction {
@@ -46,24 +43,24 @@ pub fn format_file(w: &mut impl Write, file: &File) -> io::Result<()> {
                 ..
             } => {
                 if let Some(a) = addon {
-                    format_addon(w, file, a)?;
+                    format_addon(w, a)?;
                     writeln!(w)?;
                 }
                 writeln!(
                     w,
                     "{date} {description}",
-                    date = file.extract(date.0),
-                    description = file.extract(description.range)
+                    date = date.0.text(),
+                    description = description.range.text()
                 )?;
                 for b in bookings {
                     writeln!(
                         w,
                         "{credit:<width$} {debit:<width$} {amount:>10} {commodity}",
-                        credit = file.extract(b.credit.range),
+                        credit = b.credit.range.text(),
                         width = n,
-                        debit = file.extract(b.debit.range),
-                        amount = file.extract(b.quantity.0),
-                        commodity = file.extract(b.commodity.0),
+                        debit = b.debit.range.text(),
+                        amount = b.quantity.0.text(),
+                        commodity = b.commodity.0.text(),
                     )?;
                 }
             }
@@ -79,20 +76,20 @@ pub fn format_file(w: &mut impl Write, file: &File) -> io::Result<()> {
                     }] => write!(
                         w,
                         "{date} balance {account} {amount} {commodity}",
-                        date = file.extract(date.0),
-                        account = file.extract(account.range),
-                        amount = file.extract(amount.0),
-                        commodity = file.extract(commodity.0)
+                        date = date.0.text(),
+                        account = account.range.text(),
+                        amount = amount.0.text(),
+                        commodity = commodity.0.text()
                     )?,
                     _ => {
-                        writeln!(w, "{date} balance ", date = file.extract(date.0))?;
+                        writeln!(w, "{date} balance ", date = date.0.text())?;
                         for a in assertions {
                             writeln!(
                                 w,
                                 "{account} {amount} {commodity}",
-                                account = file.extract(a.account.range),
-                                amount = file.extract(a.balance.0),
-                                commodity = file.extract(a.commodity.0)
+                                account = a.account.range.text(),
+                                amount = a.balance.0.text(),
+                                commodity = a.commodity.0.text()
                             )?;
                         }
                     }
@@ -102,19 +99,19 @@ pub fn format_file(w: &mut impl Write, file: &File) -> io::Result<()> {
                 write!(
                     w,
                     "{date} close {account}",
-                    date = file.extract(date.0),
-                    account = file.extract(account.range),
+                    date = date.0.text(),
+                    account = account.range.text(),
                 )?;
             }
         }
         pos = d.range().end
     }
-    w.write_all(file.text[pos..file.syntax_tree.range.end].as_bytes())?;
+    w.write_all(syntax_tree.range.file.text[pos..syntax_tree.range.end].as_bytes())?;
     Ok(())
 }
 
-fn initialize(f: &File) -> usize {
-    f.syntax_tree
+fn initialize(syntax_tree: &SyntaxTree) -> usize {
+    syntax_tree
         .directives
         .iter()
         .filter_map(|d| match d {
@@ -123,12 +120,12 @@ fn initialize(f: &File) -> usize {
         })
         .flatten()
         .flat_map(|b| vec![&b.credit, &b.debit])
-        .map(|a| a.range.slice(&f.text).chars().count())
+        .map(|a| a.range.text().chars().count())
         .max()
         .unwrap_or_default()
 }
 
-fn format_addon(w: &mut impl Write, f: &File, a: &Addon) -> Result<()> {
+fn format_addon(w: &mut impl Write, a: &Addon) -> Result<()> {
     match a {
         Addon::Accrual {
             interval,
@@ -139,15 +136,15 @@ fn format_addon(w: &mut impl Write, f: &File, a: &Addon) -> Result<()> {
         } => write!(
             w,
             "@accrue {interval} {start} {end} {account}",
-            interval = f.extract(*interval),
-            start = f.extract(start.0),
-            end = f.extract(end.0),
-            account = f.extract(account.range)
+            interval = interval.text(),
+            start = start.0.text(),
+            end = end.0.text(),
+            account = account.range.text()
         ),
         Addon::Performance { commodities, .. } => {
             write!(w, "@performance(")?;
             for (i, c) in commodities.iter().enumerate() {
-                w.write_all(f.extract(c.0).as_bytes())?;
+                w.write_all(c.0.text().as_bytes())?;
                 if i < commodities.len() - 1 {
                     write!(w, ",")?;
                 }

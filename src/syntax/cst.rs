@@ -1,21 +1,21 @@
-use super::error::SyntaxError;
+use std::rc::Rc;
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+use super::{error::SyntaxError, file::File};
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Rng {
+    pub file: Rc<File>,
     pub start: usize,
     pub end: usize,
 }
 
 impl Rng {
-    pub fn new(start: usize, str: &str) -> Rng {
-        Rng {
-            start,
-            end: start + str.len(),
-        }
+    pub fn new(file: Rc<File>, start: usize, end: usize) -> Rng {
+        Rng { file, start, end }
     }
 
-    pub fn slice<'a>(&self, s: &'a str) -> &'a str {
-        &s[self.start..self.end]
+    pub fn text(&self) -> &str {
+        &self.file.text[self.start..self.end]
     }
 
     pub fn len(&self) -> usize {
@@ -159,12 +159,12 @@ pub enum Directive {
 impl Directive {
     pub fn range(&self) -> Rng {
         match self {
-            Directive::Include { range, .. } => *range,
-            Directive::Price { range, .. } => *range,
-            Directive::Open { range, .. } => *range,
-            Directive::Transaction { range, .. } => *range,
-            Directive::Assertion { range, .. } => *range,
-            Directive::Close { range, .. } => *range,
+            Directive::Include { range, .. } => range.clone(),
+            Directive::Price { range, .. } => range.clone(),
+            Directive::Open { range, .. } => range.clone(),
+            Directive::Transaction { range, .. } => range.clone(),
+            Directive::Assertion { range, .. } => range.clone(),
+            Directive::Close { range, .. } => range.clone(),
         }
     }
 }

@@ -1,40 +1,30 @@
-use std::{error::Error, fmt::Display, io, path::PathBuf};
+use std::{error::Error, fmt::Display, io, path::PathBuf, rc::Rc};
 
-use super::cst::Token;
+use super::{cst::Token, file::File};
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct SyntaxError {
-    got: Token,
-    want: Token,
-    msg: Option<String>,
-    line: usize,
-    col: usize,
-    context: Vec<(usize, String)>,
+    pub file: Rc<File>,
+    pub pos: usize,
+    pub msg: Option<String>,
+    pub want: Token,
+    pub got: Token,
 }
 
 impl SyntaxError {
     pub fn new(
-        source: &str,
+        file: Rc<File>,
         pos: usize,
         msg: Option<String>,
         want: Token,
         got: Token,
     ) -> SyntaxError {
-        let (line, col) = Self::position(source, pos);
-        let rng = line.saturating_sub(4)..=line;
-        let context = source
-            .lines()
-            .enumerate()
-            .filter(|t| rng.contains(&t.0))
-            .map(|(i, l)| (i, l.into()))
-            .collect();
         SyntaxError {
-            line,
-            col,
-            context,
+            file,
+            pos,
             msg,
-            want,
             got,
+            want,
         }
     }
 
@@ -53,26 +43,33 @@ impl SyntaxError {
 
 impl std::fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let (line, col) = Self::position(&self.file.text, self.pos);
+        let start = line.saturating_sub(4);
+        let context = self
+            .file
+            .text
+            .lines()
+            .enumerate()
+            .skip(start)
+            .take(line - start + 1)
+            .map(|(i, l)| (i, l.to_string()))
+            .collect::<Vec<(usize, String)>>();
         writeln!(f)?;
-        write!(
-            f,
-            "Line {line}, column {col}:",
-            line = self.line,
-            col = self.col,
-        )?;
+        write!(f, "Line {line}, column {col}:", line = line, col = col,)?;
         if let Some(ref s) = self.msg {
             writeln!(f, " while {}", s)?;
         } else {
             writeln!(f)?;
         }
         writeln!(f)?;
-        for (n, line) in &self.context {
+
+        for (n, line) in context {
             writeln!(f, "{:5}|{}", n, line)?;
         }
         writeln!(
             f,
             "{}^ want {}, got {}",
-            " ".repeat(self.col + 6),
+            " ".repeat(col + 6),
             self.want,
             self.got
         )?;
@@ -106,9 +103,8 @@ mod test_parser_error {
                 got: Token::AlphaNum,
                 want: Token::WhiteSpace,
                 msg: Some("parsing file".into()),
-                line: 0,
-                col: 1,
-                context: vec![(0, "asdf".into())]
+                pos: 1,
+                file: File::mem("asdf"),
             }
             .to_string()
         );
