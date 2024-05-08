@@ -74,20 +74,22 @@ impl Journal {
             .map(|d| d.date)
     }
 
-    pub fn iter(&self) -> std::collections::btree_map::Iter<'_, NaiveDate, Day> {
-        self.days.iter()
+    pub fn iter_mut(
+        &mut self,
+    ) -> std::collections::btree_map::ValuesMut<'_, chrono::NaiveDate, Day> {
+        self.days.values_mut()
     }
-    pub fn iter_mut(&mut self) -> std::collections::btree_map::IterMut<'_, NaiveDate, Day> {
-        self.days.iter_mut()
+
+    pub fn iter(&mut self) -> std::collections::btree_map::Values<'_, chrono::NaiveDate, Day> {
+        self.days.values()
     }
 }
 
 impl IntoIterator for Journal {
-    type Item = (NaiveDate, Day);
+    type Item = Day;
 
-    type IntoIter = std::collections::btree_map::IntoIter<NaiveDate, Day>;
-
+    type IntoIter = std::collections::btree_map::IntoValues<chrono::NaiveDate, Day>;
     fn into_iter(self) -> Self::IntoIter {
-        self.days.into_iter()
+        self.days.into_values()
     }
 }
