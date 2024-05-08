@@ -93,3 +93,23 @@ impl IntoIterator for Journal {
         self.days.into_values()
     }
 }
+
+impl<'a> IntoIterator for &'a Journal {
+    type Item = &'a Day;
+
+    type IntoIter = std::collections::btree_map::Values<'a, chrono::NaiveDate, Day>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.days.values()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Journal {
+    type Item = &'a mut Day;
+
+    type IntoIter = std::collections::btree_map::ValuesMut<'a, chrono::NaiveDate, Day>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.days.values_mut()
+    }
+}
