@@ -12,13 +12,13 @@ use super::{
     {Directive, Rng, SyntaxTree},
 };
 
-pub struct ParsedFile {
+pub struct File {
     pub path: PathBuf,
     pub text: String,
     pub syntax_tree: SyntaxTree,
 }
 
-impl ParsedFile {
+impl File {
     pub fn extract(&self, rng: Rng) -> &str {
         rng.slice(&self.text)
     }
@@ -26,7 +26,7 @@ impl ParsedFile {
 
 #[derive(Debug)]
 pub enum FileError {
-    ParserError(PathBuf, SyntaxError),
+    SyntaxError(PathBuf, SyntaxError),
     IO(PathBuf, io::Error),
     Cycle(PathBuf),
     InvalidPath(PathBuf),
@@ -35,7 +35,7 @@ pub enum FileError {
 impl Display for FileError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileError::ParserError(path, e) => {
+            FileError::SyntaxError(path, e) => {
                 writeln!(
                     f,
                     "error parsing file {file}:",
@@ -71,9 +71,7 @@ impl Display for FileError {
 
 impl Error for FileError {}
 
-type Result<T> = std::result::Result<T, FileError>;
-
-pub fn parse_files(root: &Path) -> Result<Vec<ParsedFile>> {
+pub fn parse_files(root: &Path) -> std::result::Result<Vec<File>, FileError> {
     let mut res = Vec::new();
     let mut done = HashSet::new();
     let mut todo = VecDeque::new();
@@ -82,27 +80,30 @@ pub fn parse_files(root: &Path) -> Result<Vec<ParsedFile>> {
             .map_err(|e| FileError::IO(root.to_path_buf(), e))?,
     );
 
-    while let Some(file) = todo.pop_front() {
-        let text = fs::read_to_string(&file).map_err(|e| FileError::IO(file.clone(), e))?;
+    while let Some(file_path) = todo.pop_front() {
+        let text =
+            fs::read_to_string(&file_path).map_err(|e| FileError::IO(file_path.clone(), e))?;
         let syntax_tree = Parser::new(&text)
             .parse()
-            .map_err(|e| FileError::ParserError(file.clone(), e))?;
-        let dir_name = file.parent().ok_or(FileError::InvalidPath(file.clone()))?;
+            .map_err(|e| FileError::SyntaxError(file_path.clone(), e))?;
+        let dir_name = file_path
+            .parent()
+            .ok_or(FileError::InvalidPath(file_path.clone()))?;
         for d in &syntax_tree.directives {
             if let Directive::Include { path, .. } = d {
                 todo.push_back(
                     dir_name
                         .join(path.content.slice(&text))
                         .canonicalize()
-                        .map_err(|e| FileError::IO(file.clone(), e))?,
+                        .map_err(|e| FileError::IO(file_path.clone(), e))?,
                 );
             }
         }
-        if !done.insert(file.clone()) {
-            return Err(FileError::Cycle(file.clone()));
+        if !done.insert(file_path.clone()) {
+            return Err(FileError::Cycle(file_path.clone()));
         }
-        res.push(ParsedFile {
-            path: file,
+        res.push(File {
+            path: file_path,
             text,
             syntax_tree,
         });
@@ -110,15 +111,15 @@ pub fn parse_files(root: &Path) -> Result<Vec<ParsedFile>> {
     Ok(res)
 }
 
-pub fn parse_file(file: &Path) -> Result<ParsedFile> {
+pub fn parse_file(file: &Path) -> std::result::Result<File, FileError> {
     let file = file
         .canonicalize()
         .map_err(|e| FileError::IO(file.to_path_buf(), e))?;
     let text = fs::read_to_string(&file).map_err(|e| FileError::IO(file.clone(), e))?;
     let syntax_tree = Parser::new(&text)
         .parse()
-        .map_err(|e| FileError::ParserError(file.clone(), e))?;
-    Ok(ParsedFile {
+        .map_err(|e| FileError::SyntaxError(file.clone(), e))?;
+    Ok(File {
         path: file,
         text,
         syntax_tree,

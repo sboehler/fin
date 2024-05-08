@@ -1,11 +1,13 @@
 use super::error::SyntaxError;
-use super::{Result, Rng, Token};
+use super::{Rng, Token};
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 
 pub struct Scanner<'a> {
     pub source: &'a str,
     chars: RefCell<Peekable<CharIndices<'a>>>,
 }
+
+pub type Result<T> = std::result::Result<T, SyntaxError>;
 
 impl<'a> Scanner<'a> {
     pub fn new(s: &'a str) -> Scanner<'a> {

@@ -4,19 +4,13 @@ use rust_decimal::Decimal;
 
 use super::{Commodity, Price};
 
+#[derive(Default)]
 pub struct Prices {
     prices: HashMap<Rc<Commodity>, HashMap<Rc<Commodity>, Decimal>>,
 }
 
 pub type NormalizedPrices = HashMap<Rc<Commodity>, Decimal>;
 
-impl Default for Prices {
-    fn default() -> Self {
-        Self {
-            prices: Default::default(),
-        }
-    }
-}
 impl Prices {
     pub fn insert(&mut self, price: &Price) {
         self.prices
@@ -31,7 +25,7 @@ impl Prices {
 
     pub fn normalize(&self, target: &Rc<Commodity>) -> NormalizedPrices {
         let mut res = NormalizedPrices::default();
-        self.normalize_rec(&target, Decimal::ONE, &mut res);
+        self.normalize_rec(target, Decimal::ONE, &mut res);
         res
     }
 

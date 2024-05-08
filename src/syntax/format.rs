@@ -1,11 +1,11 @@
 use std::io::{self, Result, Write};
 
 use super::{
-    file::ParsedFile,
+    file::File,
     {Addon, Assertion, Directive},
 };
 
-pub fn format_file(w: &mut impl Write, file: &ParsedFile) -> io::Result<()> {
+pub fn format_file(w: &mut impl Write, file: &File) -> io::Result<()> {
     let n = initialize(file);
     let mut pos = 0;
     for d in &file.syntax_tree.directives {
@@ -113,7 +113,7 @@ pub fn format_file(w: &mut impl Write, file: &ParsedFile) -> io::Result<()> {
     Ok(())
 }
 
-fn initialize(f: &ParsedFile) -> usize {
+fn initialize(f: &File) -> usize {
     f.syntax_tree
         .directives
         .iter()
@@ -128,7 +128,7 @@ fn initialize(f: &ParsedFile) -> usize {
         .unwrap_or_default()
 }
 
-fn format_addon(w: &mut impl Write, f: &ParsedFile, a: &Addon) -> Result<()> {
+fn format_addon(w: &mut impl Write, f: &File, a: &Addon) -> Result<()> {
     match a {
         Addon::Accrual {
             interval,

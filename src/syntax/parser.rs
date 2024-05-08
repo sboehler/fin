@@ -1,9 +1,11 @@
 use super::error::SyntaxError;
 use super::{
-    Account, Addon, Assertion, Booking, Commodity, Date, Decimal, Directive, QuotedString, Result,
-    Rng, SyntaxTree, Token,
+    Account, Addon, Assertion, Booking, Commodity, Date, Decimal, Directive, QuotedString, Rng,
+    SyntaxTree, Token,
 };
 use crate::syntax::scanner::Scanner;
+
+pub type Result<T> = std::result::Result<T, SyntaxError>;
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,

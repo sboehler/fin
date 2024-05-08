@@ -33,8 +33,6 @@ impl Rng {
     }
 }
 
-pub type Result<T> = std::result::Result<T, SyntaxError>;
-
 #[derive(Debug, Eq, PartialEq)]
 pub enum Token {
     EOF,

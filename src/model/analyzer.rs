@@ -7,7 +7,7 @@ use crate::{
     model::Period,
     syntax::{
         error::SyntaxError,
-        file::ParsedFile,
+        file::File,
         {self},
     },
 };
@@ -19,13 +19,13 @@ use super::{
 
 pub struct Analyzer<'a> {
     journal: &'a mut Journal,
-    file: &'a ParsedFile,
+    file: &'a File,
 }
 
 type Result<T> = std::result::Result<T, SyntaxError>;
 
 impl<'a> Analyzer<'a> {
-    pub fn analyze_files(files: Vec<ParsedFile>) -> Result<Journal> {
+    pub fn analyze_files(files: Vec<File>) -> Result<Journal> {
         let mut journal = Journal::new();
         for file in &files {
             Analyzer {
