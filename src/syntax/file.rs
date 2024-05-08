@@ -13,7 +13,7 @@ use super::{
 };
 
 pub struct ParsedFile {
-    pub file: PathBuf,
+    pub path: PathBuf,
     pub text: String,
     pub syntax_tree: SyntaxTree,
 }
@@ -102,7 +102,7 @@ pub fn parse_files(root: &Path) -> Result<Vec<ParsedFile>> {
             return Err(FileError::Cycle(file.clone()));
         }
         res.push(ParsedFile {
-            file,
+            path: file,
             text,
             syntax_tree,
         });
@@ -119,7 +119,7 @@ pub fn parse_file(file: &Path) -> Result<ParsedFile> {
         .parse()
         .map_err(|e| FileError::ParserError(file.clone(), e))?;
     Ok(ParsedFile {
-        file,
+        path: file,
         text,
         syntax_tree,
     })
