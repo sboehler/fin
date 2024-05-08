@@ -1,3 +1,5 @@
+use std::{error::Error, fmt::Display, io, path::PathBuf};
+
 use super::cst::Token;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -121,3 +123,41 @@ mod test_parser_error {
         assert_eq!(SyntaxError::position("foo\nbar\n", 8), (2, 0));
     }
 }
+
+#[derive(Debug)]
+pub enum FileError {
+    IO(PathBuf, io::Error),
+    Cycle(PathBuf),
+    InvalidPath(PathBuf),
+}
+
+impl Display for FileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileError::IO(path, e) => {
+                writeln!(
+                    f,
+                    "error reading file {file}:",
+                    file = path.to_string_lossy()
+                )?;
+                e.fmt(f)
+            }
+            FileError::Cycle(path) => {
+                writeln!(
+                    f,
+                    "error: cycle detected. File {file} is referenced at least twice",
+                    file = path.to_string_lossy()
+                )
+            }
+            FileError::InvalidPath(file) => {
+                writeln!(
+                    f,
+                    "error: invalid path {file}",
+                    file = file.to_string_lossy()
+                )
+            }
+        }
+    }
+}
+
+impl Error for FileError {}

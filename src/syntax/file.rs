@@ -1,14 +1,13 @@
 use std::{
     collections::{HashSet, VecDeque},
     error::Error,
-    fmt::Display,
     fs, io,
     path::{Path, PathBuf},
 };
 
 use super::{
     cst::{Directive, Rng, SyntaxTree},
-    error::SyntaxError,
+    error::FileError,
     parser::Parser,
 };
 
@@ -24,54 +23,7 @@ impl File {
     }
 }
 
-#[derive(Debug)]
-pub enum FileError {
-    SyntaxError(PathBuf, SyntaxError),
-    IO(PathBuf, io::Error),
-    Cycle(PathBuf),
-    InvalidPath(PathBuf),
-}
-
-impl Display for FileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FileError::SyntaxError(path, e) => {
-                writeln!(
-                    f,
-                    "error parsing file {file}:",
-                    file = path.to_string_lossy()
-                )?;
-                e.fmt(f)
-            }
-            FileError::IO(path, e) => {
-                writeln!(
-                    f,
-                    "error reading file {file}:",
-                    file = path.to_string_lossy()
-                )?;
-                e.fmt(f)
-            }
-            FileError::Cycle(path) => {
-                writeln!(
-                    f,
-                    "error: cycle detected. File {file} is referenced at least twice",
-                    file = path.to_string_lossy()
-                )
-            }
-            FileError::InvalidPath(file) => {
-                writeln!(
-                    f,
-                    "error: invalid path {file}",
-                    file = file.to_string_lossy()
-                )
-            }
-        }
-    }
-}
-
-impl Error for FileError {}
-
-pub fn parse_files(root: &Path) -> std::result::Result<Vec<File>, FileError> {
+pub fn parse_files(root: &Path) -> std::result::Result<Vec<File>, Box<dyn Error>> {
     let mut res = Vec::new();
     let mut done = HashSet::new();
     let mut todo = VecDeque::new();
@@ -83,9 +35,7 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<File>, FileError> {
     while let Some(file_path) = todo.pop_front() {
         let text =
             fs::read_to_string(&file_path).map_err(|e| FileError::IO(file_path.clone(), e))?;
-        let syntax_tree = Parser::new(&text)
-            .parse()
-            .map_err(|e| FileError::SyntaxError(file_path.clone(), e))?;
+        let syntax_tree = Parser::new(&text).parse()?;
         let dir_name = file_path
             .parent()
             .ok_or(FileError::InvalidPath(file_path.clone()))?;
@@ -100,7 +50,7 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<File>, FileError> {
             }
         }
         if !done.insert(file_path.clone()) {
-            return Err(FileError::Cycle(file_path.clone()));
+            Err(FileError::Cycle(file_path.clone()))?;
         }
         res.push(File {
             path: file_path,
@@ -111,14 +61,12 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<File>, FileError> {
     Ok(res)
 }
 
-pub fn parse_file(file: &Path) -> std::result::Result<File, FileError> {
+pub fn parse_file(file: &Path) -> std::result::Result<File, Box<dyn Error>> {
     let file = file
         .canonicalize()
         .map_err(|e| FileError::IO(file.to_path_buf(), e))?;
     let text = fs::read_to_string(&file).map_err(|e| FileError::IO(file.clone(), e))?;
-    let syntax_tree = Parser::new(&text)
-        .parse()
-        .map_err(|e| FileError::SyntaxError(file.clone(), e))?;
+    let syntax_tree = Parser::new(&text).parse()?;
     Ok(File {
         path: file,
         text,

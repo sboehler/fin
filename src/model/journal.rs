@@ -2,16 +2,9 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
 
-use crate::syntax::file::FileError;
-
 use super::{
     prices::NormalizedPrices, registry::Registry, Assertion, Close, Open, Price, Transaction,
 };
-
-pub enum JournalError {
-    FileError(FileError),
-    IO(),
-}
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Day {
