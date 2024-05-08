@@ -1,4 +1,4 @@
-use super::Token;
+use super::cst::Token;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct SyntaxError {

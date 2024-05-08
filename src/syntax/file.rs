@@ -7,9 +7,9 @@ use std::{
 };
 
 use super::{
+    cst::{Directive, Rng, SyntaxTree},
     error::SyntaxError,
     parser::Parser,
-    {Directive, Rng, SyntaxTree},
 };
 
 pub struct File {

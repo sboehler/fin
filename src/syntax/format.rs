@@ -1,8 +1,8 @@
 use std::io::{self, Result, Write};
 
 use super::{
+    cst::{Addon, Assertion, Directive},
     file::File,
-    {Addon, Assertion, Directive},
 };
 
 pub fn format_file(w: &mut impl Write, file: &File) -> io::Result<()> {

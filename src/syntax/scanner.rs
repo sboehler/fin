@@ -1,5 +1,5 @@
+use super::cst::{Rng, Token};
 use super::error::SyntaxError;
-use super::{Rng, Token};
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 
 pub struct Scanner<'a> {

@@ -1,8 +1,8 @@
-use super::error::SyntaxError;
-use super::{
+use super::cst::{
     Account, Addon, Assertion, Booking, Commodity, Date, Decimal, Directive, QuotedString, Rng,
     SyntaxTree, Token,
 };
+use super::error::SyntaxError;
 use crate::syntax::scanner::Scanner;
 
 pub type Result<T> = std::result::Result<T, SyntaxError>;
@@ -516,7 +516,7 @@ impl<'a> Parser<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::syntax::Rng;
+    use crate::syntax::cst::Rng;
 
     use super::*;
 
@@ -687,10 +687,10 @@ mod tests {
     }
 
     mod addon {
-        use crate::syntax::{
-            parser::Parser,
+        use crate::syntax::cst::{
             Rng, {Account, Addon, Commodity, Date},
         };
+        use crate::syntax::parser::Parser;
         use pretty_assertions::assert_eq;
 
         #[test]

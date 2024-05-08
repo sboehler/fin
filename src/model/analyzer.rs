@@ -5,11 +5,7 @@ use rust_decimal::Decimal;
 
 use crate::{
     model::Period,
-    syntax::{
-        error::SyntaxError,
-        file::File,
-        {self},
-    },
+    syntax::{cst, error::SyntaxError, file::File},
 };
 
 use super::{
@@ -40,30 +36,26 @@ impl<'a> Analyzer<'a> {
     fn analyze(&mut self) -> Result<()> {
         for d in &self.file.syntax_tree.directives {
             match d {
-                syntax::Directive::Price {
+                cst::Directive::Price {
                     date,
                     commodity,
                     price,
                     target,
                     ..
                 } => self.analyze_price(date, commodity, price, target)?,
-                syntax::Directive::Open { date, account, .. } => {
-                    self.analyze_open(date, account)?
-                }
-                syntax::Directive::Transaction {
+                cst::Directive::Open { date, account, .. } => self.analyze_open(date, account)?,
+                cst::Directive::Transaction {
                     date,
                     addon,
                     description,
                     bookings,
                     ..
                 } => self.analyze_transaction(addon, date, description, bookings)?,
-                syntax::Directive::Assertion {
+                cst::Directive::Assertion {
                     date, assertions, ..
                 } => self.analyze_assertion(date, assertions)?,
-                syntax::Directive::Close { date, account, .. } => {
-                    self.analyze_close(date, account)?
-                }
-                syntax::Directive::Include { .. } => (),
+                cst::Directive::Close { date, account, .. } => self.analyze_close(date, account)?,
+                cst::Directive::Include { .. } => (),
             }
         }
         Ok(())
@@ -71,10 +63,10 @@ impl<'a> Analyzer<'a> {
 
     fn analyze_price(
         &mut self,
-        date: &syntax::Date,
-        commodity: &syntax::Commodity,
-        price: &syntax::Decimal,
-        target: &syntax::Commodity,
+        date: &cst::Date,
+        commodity: &cst::Commodity,
+        price: &cst::Decimal,
+        target: &cst::Commodity,
     ) -> Result<()> {
         let date = self.analyze_date(date)?;
         let commodity = self.analyze_commodity(commodity)?;
@@ -89,7 +81,7 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    fn analyze_open(&mut self, date: &syntax::Date, account: &syntax::Account) -> Result<()> {
+    fn analyze_open(&mut self, date: &cst::Date, account: &cst::Account) -> Result<()> {
         let date = self.analyze_date(date)?;
         let account = self.analyze_account(account)?;
         self.journal.day(date).openings.push(Open { date, account });
@@ -98,10 +90,10 @@ impl<'a> Analyzer<'a> {
 
     fn analyze_transaction(
         &mut self,
-        addon: &Option<syntax::Addon>,
-        date: &syntax::Date,
-        description: &syntax::QuotedString,
-        bookings: &[syntax::Booking],
+        addon: &Option<cst::Addon>,
+        date: &cst::Date,
+        description: &cst::QuotedString,
+        bookings: &[cst::Booking],
     ) -> Result<()> {
         let date = self.analyze_date(date)?;
         let bookings = bookings
@@ -126,7 +118,7 @@ impl<'a> Analyzer<'a> {
             targets: None,
         };
         let mut ts = match addon {
-            Some(syntax::Addon::Performance { commodities, .. }) => {
+            Some(cst::Addon::Performance { commodities, .. }) => {
                 t.targets = Some(
                     commodities
                         .iter()
@@ -135,7 +127,7 @@ impl<'a> Analyzer<'a> {
                 );
                 vec![t]
             }
-            Some(syntax::Addon::Accrual {
+            Some(cst::Addon::Accrual {
                 start,
                 end,
                 account,
@@ -155,12 +147,7 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    fn analyze_assertion(
-        &mut self,
-
-        date: &syntax::Date,
-        assertions: &[syntax::Assertion],
-    ) -> Result<()> {
+    fn analyze_assertion(&mut self, date: &cst::Date, assertions: &[cst::Assertion]) -> Result<()> {
         let date = self.analyze_date(date)?;
         let mut res = assertions
             .iter()
@@ -177,7 +164,7 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    fn analyze_close(&mut self, date: &syntax::Date, account: &syntax::Account) -> Result<()> {
+    fn analyze_close(&mut self, date: &cst::Date, account: &cst::Account) -> Result<()> {
         let date = self.analyze_date(date)?;
         let account = self.analyze_account(account)?;
         self.journal
@@ -187,31 +174,31 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    fn analyze_date(&mut self, d: &syntax::Date) -> Result<NaiveDate> {
+    fn analyze_date(&mut self, d: &cst::Date) -> Result<NaiveDate> {
         NaiveDate::parse_from_str(d.0.slice(&self.file.text), "%Y-%m-%d").map_err(|e| {
             SyntaxError::new(
                 &self.file.text,
                 d.0.start,
                 Some(e.to_string()),
-                syntax::Token::Date,
-                syntax::Token::Custom(d.0.slice(&self.file.text).to_string()),
+                cst::Token::Date,
+                cst::Token::Custom(d.0.slice(&self.file.text).to_string()),
             )
         })
     }
 
-    fn analyze_decimal(&self, d: &syntax::Decimal) -> Result<rust_decimal::Decimal> {
+    fn analyze_decimal(&self, d: &cst::Decimal) -> Result<rust_decimal::Decimal> {
         rust_decimal::Decimal::from_str_exact(d.0.slice(&self.file.text)).map_err(|e| {
             SyntaxError::new(
                 &self.file.text,
                 d.0.start,
                 Some(e.to_string()),
-                syntax::Token::Decimal,
-                syntax::Token::Custom(d.0.slice(&self.file.text).to_string()),
+                cst::Token::Decimal,
+                cst::Token::Custom(d.0.slice(&self.file.text).to_string()),
             )
         })
     }
 
-    fn analyze_interval(&mut self, d: &syntax::Rng) -> Result<Interval> {
+    fn analyze_interval(&mut self, d: &cst::Rng) -> Result<Interval> {
         match d.slice(&self.file.text) {
             "daily" => Ok(Interval::Daily),
             "weekly" => Ok(Interval::Weekly),
@@ -223,13 +210,13 @@ impl<'a> Analyzer<'a> {
                 &self.file.text,
                 d.start,
                 None,
-                syntax::Token::Decimal,
-                syntax::Token::Custom(o.into()),
+                cst::Token::Decimal,
+                cst::Token::Custom(o.into()),
             )),
         }
     }
 
-    fn analyze_commodity(&mut self, c: &syntax::Commodity) -> Result<Rc<Commodity>> {
+    fn analyze_commodity(&mut self, c: &cst::Commodity) -> Result<Rc<Commodity>> {
         self.journal
             .registry
             .borrow_mut()
@@ -239,13 +226,13 @@ impl<'a> Analyzer<'a> {
                     &self.file.text,
                     c.0.start,
                     Some(e.to_string()),
-                    syntax::Token::Custom("identifier".into()),
-                    syntax::Token::Custom(c.0.slice(&self.file.text).to_string()),
+                    cst::Token::Custom("identifier".into()),
+                    cst::Token::Custom(c.0.slice(&self.file.text).to_string()),
                 )
             })
     }
 
-    fn analyze_account(&mut self, c: &syntax::Account) -> Result<Rc<Account>> {
+    fn analyze_account(&mut self, c: &cst::Account) -> Result<Rc<Account>> {
         self.journal
             .registry
             .borrow_mut()
@@ -255,8 +242,8 @@ impl<'a> Analyzer<'a> {
                     &self.file.text,
                     c.range.start,
                     Some(e.to_string()),
-                    syntax::Token::Custom("account".into()),
-                    syntax::Token::Custom(c.range.slice(&self.file.text).to_string()),
+                    cst::Token::Custom("account".into()),
+                    cst::Token::Custom(c.range.slice(&self.file.text).to_string()),
                 )
             })
     }
