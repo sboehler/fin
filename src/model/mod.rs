@@ -1,6 +1,7 @@
 pub mod analyzer;
 pub mod error;
 pub mod journal;
+pub mod prices;
 pub mod registry;
 
 use std::{cmp, rc::Rc};

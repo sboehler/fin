@@ -5,8 +5,7 @@ use chrono::NaiveDate;
 use crate::syntax::file::FileError;
 
 use super::{
-    registry::Registry,
-    {Assertion, Close, Open, Price, Transaction},
+    prices::NormalizedPrices, registry::Registry, Assertion, Close, Open, Price, Transaction,
 };
 
 pub enum JournalError {
@@ -14,7 +13,7 @@ pub enum JournalError {
     IO(),
 }
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Day {
     pub date: NaiveDate,
     pub prices: Vec<Price>,
@@ -22,6 +21,8 @@ pub struct Day {
     pub openings: Vec<Open>,
     pub transactions: Vec<Transaction>,
     pub closings: Vec<Close>,
+
+    pub normalized_prices: NormalizedPrices,
 }
 
 impl Day {
@@ -33,6 +34,8 @@ impl Day {
             openings: Vec::new(),
             transactions: Vec::new(),
             closings: Vec::new(),
+
+            normalized_prices: NormalizedPrices::default(),
         }
     }
 }
