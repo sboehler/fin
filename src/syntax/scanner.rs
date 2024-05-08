@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 
 pub struct Scanner<'a> {
-    pub source: &'a Rc<File>,
+    source: &'a Rc<File>,
     chars: RefCell<Peekable<CharIndices<'a>>>,
 }
 
@@ -190,7 +190,7 @@ impl<'a> Scanner<'a> {
         Ok(self.rng(start))
     }
 
-    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
+    pub fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
         SyntaxError::new(self.source.clone(), pos, msg, want, got)
     }
 }

@@ -22,7 +22,7 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
-        SyntaxError::new(self.scanner.source.clone(), pos, msg, want, got)
+        self.scanner.error(pos, msg, want, got)
     }
 
     pub fn parse_account(&self) -> Result<Account> {
