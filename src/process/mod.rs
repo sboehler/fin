@@ -4,7 +4,6 @@ use std::{
     result,
 };
 
-use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use crate::model::{journal::Journal, prices::Prices, Commodity};
