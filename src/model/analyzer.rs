@@ -270,7 +270,7 @@ impl<'a> Analyzer<'a> {
         account: Rc<Account>,
     ) -> Vec<Transaction> {
         let mut res: Vec<Transaction> = Vec::new();
-
+        let p = Period(start, end).dates(interval, None);
         for b in t.postings {
             if b.account.account_type.is_al() {
                 res.push(Transaction {
@@ -284,13 +284,13 @@ impl<'a> Analyzer<'a> {
                         Decimal::ZERO,
                     ),
                     targets: t.targets.clone(),
-                })
+                });
             }
 
             if b.account.account_type.is_ie() {
-                let p = Period(start, end).dates(interval, None);
-                let amount = b.quantity / Decimal::from(p.periods.len());
-                let rem = b.quantity % Decimal::from(p.periods.len());
+                let n = Decimal::from(p.periods.len());
+                let amount = b.quantity / n;
+                let rem = b.quantity - amount * n;
                 for (i, dt) in p.periods.iter().enumerate() {
                     let a = match i {
                         0 => amount + rem,

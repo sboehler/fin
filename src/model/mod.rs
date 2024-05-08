@@ -116,8 +116,8 @@ pub struct Booking {
 
 impl Booking {
     pub fn create(
-        debit: Rc<Account>,
         credit: Rc<Account>,
+        debit: Rc<Account>,
         quantity: Decimal,
         commodity: Rc<Commodity>,
         value: Decimal,
