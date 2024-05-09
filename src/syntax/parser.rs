@@ -21,8 +21,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
-        self.scanner.error(pos, msg, want, got)
+    fn error(&self, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
+        self.scanner.error(msg, want, got)
     }
 
     pub fn parse_account(&self) -> Result<Account> {
@@ -70,7 +70,6 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_interval(&self) -> Result<Rng> {
-        let start = self.scanner.pos();
         match self.scanner.current() {
             Some('d') => self.scanner.read_string("daily"),
             Some('w') => self.scanner.read_string("weekly"),
@@ -78,7 +77,7 @@ impl<'a> Parser<'a> {
             Some('q') => self.scanner.read_string("quarterly"),
             Some('y') => self.scanner.read_string("yearly"),
             Some('o') => self.scanner.read_string("once"),
-            o => Err(self.error(start, None, Token::Interval, Token::from_char(o))),
+            o => Err(self.error(None, Token::Interval, Token::from_char(o))),
         }
     }
 
@@ -120,7 +119,6 @@ impl<'a> Parser<'a> {
                 c if c.is_alphanumeric() || c == '@' => {
                     let d = self.parse_directive().map_err(|e| {
                         self.error(
-                            self.scanner.pos(),
                             Some("parsing directive".into()),
                             Token::Directive,
                             Token::Error(Box::new(e)),
@@ -135,7 +133,6 @@ impl<'a> Parser<'a> {
                 }
                 o => {
                     return Err(self.error(
-                        start,
                         None,
                         Token::Either(vec![Token::Directive, Token::Comment, Token::BlankLine]),
                         Token::Char(o),
@@ -165,12 +162,7 @@ impl<'a> Parser<'a> {
                 self.scanner.read_rest_of_line()?;
                 Ok(range)
             }
-            o => Err(self.error(
-                start,
-                None,
-                Token::Comment,
-                o.map_or(Token::EOF, Token::Char),
-            )),
+            o => Err(self.error(None, Token::Comment, o.map_or(Token::EOF, Token::Char))),
         }
     }
 
@@ -179,18 +171,12 @@ impl<'a> Parser<'a> {
             Some('i') => self.parse_include(),
             Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command().map_err(|e| {
                 self.error(
-                    self.scanner.pos(),
                     Some("parsing command".into()),
                     Token::Directive,
                     Token::Error(Box::new(e)),
                 )
             }),
-            o => Err(self.error(
-                self.scanner.pos(),
-                None,
-                Token::Custom("directive".into()),
-                Token::from_char(o),
-            )),
+            o => Err(self.error(None, Token::Custom("directive".into()), Token::from_char(o))),
         }
     }
 
@@ -220,7 +206,6 @@ impl<'a> Parser<'a> {
         let command = match self.scanner.current() {
             Some('p') => self.parse_price(start, date).map_err(|e| {
                 self.error(
-                    start,
                     Some("parsing 'price' directive".into()),
                     Token::Custom("directive".into()),
                     Token::Error(Box::new(e)),
@@ -228,7 +213,6 @@ impl<'a> Parser<'a> {
             })?,
             Some('o') => self.parse_open(start, date).map_err(|e| {
                 self.error(
-                    start,
                     Some("parsing 'open' directive".into()),
                     Token::Custom("directive".into()),
                     Token::Error(Box::new(e)),
@@ -236,7 +220,6 @@ impl<'a> Parser<'a> {
             })?,
             Some('"') => self.parse_transaction(start, addon, date).map_err(|e| {
                 self.error(
-                    start,
                     Some("parsing 'transaction' directive".into()),
                     Token::Custom("directive".into()),
                     Token::Error(Box::new(e)),
@@ -244,7 +227,6 @@ impl<'a> Parser<'a> {
             })?,
             Some('b') => self.parse_assertion(start, date).map_err(|e| {
                 self.error(
-                    start,
                     Some("parsing 'balance' directive".into()),
                     Token::Custom("directive".into()),
                     Token::Error(Box::new(e)),
@@ -252,7 +234,6 @@ impl<'a> Parser<'a> {
             })?,
             Some('c') => self.parse_close(start, date).map_err(|e| {
                 self.error(
-                    start,
                     Some("parsing 'close' directive".into()),
                     Token::Custom("directive".into()),
                     Token::Error(Box::new(e)),
@@ -260,7 +241,6 @@ impl<'a> Parser<'a> {
             })?,
             o => {
                 return Err(self.error(
-                    self.scanner.pos(),
                     None,
                     Token::Either(vec![
                         Token::Custom("price".into()),
@@ -292,7 +272,6 @@ impl<'a> Parser<'a> {
                 .parse_accrual(start)
                 .map_err(|e| e.update("parsing accrual")),
             o => Err(self.error(
-                self.scanner.pos(),
                 Some("parsing addon".into()),
                 Token::Either(vec![Token::Custom("@performance".into())]),
                 Token::Custom(o.into()),
@@ -397,7 +376,6 @@ impl<'a> Parser<'a> {
         loop {
             bookings.push(self.parse_booking().map_err(|e| {
                 self.error(
-                    self.scanner.pos(),
                     Some("parsing booking".into()),
                     Token::Custom("booking".into()),
                     Token::Error(Box::new(e)),
@@ -452,7 +430,6 @@ impl<'a> Parser<'a> {
             loop {
                 assertions.push(self.parse_sub_assertion().map_err(|e| {
                     self.error(
-                        self.scanner.pos(),
                         Some("parsing assertion".into()),
                         Token::Custom("assertion".into()),
                         Token::Error(Box::new(e)),
@@ -466,7 +443,6 @@ impl<'a> Parser<'a> {
         } else {
             assertions.push(self.parse_sub_assertion().map_err(|e| {
                 self.error(
-                    self.scanner.pos(),
                     Some("parsing assertion".into()),
                     Token::Custom("assertion".into()),
                     Token::Error(Box::new(e)),

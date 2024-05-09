@@ -133,7 +133,7 @@ impl Display for FileError {
             FileError::IO(path, e) => {
                 writeln!(
                     f,
-                    "error reading file {file}:",
+                    "error reading file: {file}:",
                     file = path.to_string_lossy()
                 )?;
                 e.fmt(f)
@@ -141,16 +141,12 @@ impl Display for FileError {
             FileError::Cycle(path) => {
                 writeln!(
                     f,
-                    "error: cycle detected. File {file} is referenced at least twice",
+                    "cycle detected. File {file} is referenced at least twice",
                     file = path.to_string_lossy()
                 )
             }
             FileError::InvalidPath(file) => {
-                writeln!(
-                    f,
-                    "error: invalid path {file}",
-                    file = file.to_string_lossy()
-                )
+                writeln!(f, "invalid path: {file}", file = file.to_string_lossy())
             }
         }
     }

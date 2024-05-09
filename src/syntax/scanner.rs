@@ -47,7 +47,7 @@ impl<'a> Scanner<'a> {
         P: Fn(char) -> bool,
     {
         if !self.current().map_or(false, &pred) {
-            return Err(self.error(self.pos(), None, token, Token::from_char(self.current())));
+            return Err(self.error(None, token, Token::from_char(self.current())));
         }
         Ok(self.read_while(pred))
     }
@@ -81,7 +81,7 @@ impl<'a> Scanner<'a> {
                 self.advance();
                 Ok(self.rng(start))
             }
-            o => Err(self.error(self.pos(), None, Token::Char(c), Token::from_char(o))),
+            o => Err(self.error(None, Token::Char(c), Token::from_char(o))),
         }
     }
 
@@ -97,7 +97,6 @@ impl<'a> Scanner<'a> {
         let start = self.pos();
         if self.read_while(char::is_alphanumeric).is_empty() {
             Err(self.error(
-                start,
                 Some("parsing identifier".into()),
                 Token::AlphaNum,
                 Token::from_char(self.current()),
@@ -111,7 +110,7 @@ impl<'a> Scanner<'a> {
         let start = self.pos();
         match self.advance() {
             Some(_) => Ok(self.rng(start)),
-            None => Err(self.error(start, None, Token::Any, Token::EOF)),
+            None => Err(self.error(None, Token::Any, Token::EOF)),
         }
     }
 
@@ -125,8 +124,8 @@ impl<'a> Scanner<'a> {
                 self.advance();
                 Ok(self.rng(start))
             }
-            Some(c) => Err(self.error(start, None, token, Token::Char(c))),
-            None => Err(self.error(start, None, token, Token::EOF)),
+            Some(c) => Err(self.error(None, token, Token::Char(c))),
+            None => Err(self.error(None, token, Token::EOF)),
         }
     }
 
@@ -138,8 +137,8 @@ impl<'a> Scanner<'a> {
         for _ in 0..n {
             match self.current() {
                 Some(c) if pred(c) => self.advance(),
-                Some(c) => return Err(self.error(self.pos(), None, token, Token::Char(c))),
-                None => return Err(self.error(self.pos(), None, token, Token::EOF)),
+                Some(c) => return Err(self.error(None, token, Token::Char(c))),
+                None => return Err(self.error(None, token, Token::EOF)),
             };
         }
         Ok(self.rng(start))
@@ -161,7 +160,6 @@ impl<'a> Scanner<'a> {
                 Ok(self.rng(start))
             }
             Some(ch) => Err(self.error(
-                start,
                 None,
                 Token::Either(vec![Token::Char('\n'), Token::EOF]),
                 Token::Char(ch),
@@ -170,10 +168,9 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn read_space1(&self) -> Result<Rng> {
-        let start = self.pos();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
-                Err(self.error(start, None, Token::WhiteSpace, Token::Char(ch)))
+                Err(self.error(None, Token::WhiteSpace, Token::Char(ch)))
             }
             _ => Ok(self.read_space()),
         }
@@ -190,8 +187,8 @@ impl<'a> Scanner<'a> {
         Ok(self.rng(start))
     }
 
-    pub fn error(&self, pos: usize, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
-        SyntaxError::new(self.source.clone(), pos, msg, want, got)
+    pub fn error(&self, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
+        SyntaxError::new(self.source.clone(), self.pos(), msg, want, got)
     }
 }
 
