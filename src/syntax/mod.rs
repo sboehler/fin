@@ -17,6 +17,7 @@ pub mod file;
 pub mod format;
 pub mod parser;
 pub mod scanner;
+pub mod scanner2;
 
 pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxTree>, Box<dyn Error>> {
     let mut res = Vec::new();

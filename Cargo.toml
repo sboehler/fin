@@ -11,3 +11,4 @@ clap = { version = "4.0.29", features = ["derive"] }
 chrono = "0.4"
 rust_decimal = "1.8.1"
 pretty_assertions = "1.4.0"
+thiserror = "1.0.60"
