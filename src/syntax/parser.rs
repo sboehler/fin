@@ -1,17 +1,85 @@
 use std::rc::Rc;
 
+use thiserror::Error;
+
 use super::cst::{
     Account, Addon, Assertion, Booking, Commodity, Date, Decimal, Directive, QuotedString, Rng,
     SyntaxTree, Token,
 };
-use super::error::SyntaxError;
 use super::file::File;
+use super::scanner::{Character, ScannerError};
 use crate::syntax::scanner::Scanner;
-
-pub type Result<T> = std::result::Result<T, SyntaxError>;
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
+}
+
+#[derive(Error, Debug, Eq, PartialEq)]
+#[error("parser error")]
+pub enum ParserError {
+    ScannerError {
+        file: Rc<File>,
+        pos: usize,
+        want: Token,
+        got: ScannerError,
+    },
+    ParserError {
+        file: Rc<File>,
+        pos: usize,
+        want: Token,
+        got: Box<ParserError>,
+    },
+    Character {
+        file: Rc<File>,
+        pos: usize,
+        want: Token,
+        got: Character,
+    },
+}
+
+pub type Result<T> = std::result::Result<T, ParserError>;
+
+struct Scope<'a, 'b> {
+    parser: &'a Parser<'b>,
+    start: usize,
+    token: Token,
+}
+
+impl<'a, 'b> Scope<'a, 'b> {
+    fn error(&self, got: ScannerError) -> ParserError {
+        ParserError::ScannerError {
+            file: self.parser.scanner.source.clone(),
+            pos: self.parser.scanner.pos(),
+            want: self.token.clone(),
+            got,
+        }
+    }
+
+    fn error2(&self, got: Character) -> ParserError {
+        ParserError::Character {
+            file: self.parser.scanner.source.clone(),
+            pos: self.parser.scanner.pos(),
+            want: self.token.clone(),
+            got,
+        }
+    }
+
+    fn wrap_error(&self, got: ParserError) -> ParserError {
+        ParserError::ParserError {
+            file: self.parser.scanner.source.clone(),
+            pos: self.parser.scanner.pos(),
+            want: self.token.clone(),
+            got: got.into(),
+        }
+    }
+
+    fn rng(&self) -> Rng {
+        Rng::new(
+            self.parser.scanner.source.clone(),
+            self.start,
+            self.parser.scanner.pos(),
+        )
+    }
 }
 
 impl<'a> Parser<'a> {
@@ -21,306 +89,278 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn error(&self, msg: Option<String>, want: Token, got: Token) -> SyntaxError {
-        self.scanner.error(msg, want, got)
+    fn scope(&self, token: Token) -> Scope<'_, 'a> {
+        Scope {
+            parser: self,
+            token,
+            start: self.scanner.pos(),
+        }
     }
-
-    pub fn parse_account(&self) -> Result<Account> {
-        let start = self.scanner.pos();
+    fn parse_account(&self) -> Result<Account> {
+        let scope = self.scope(Token::Account);
         let account_type = self
             .scanner
-            .read_identifier()
-            .map_err(|e| e.update("parsing account type"))?;
+            .read_while_1(Character::AlphaNum)
+            .map_err(|e| scope.error(e))?;
         let mut segments = vec![account_type];
         while self.scanner.current() == Some(':') {
-            self.scanner.read_char(':')?;
+            self.scanner
+                .read_char(Character::Char(':'))
+                .map_err(|e| scope.error(e))?;
             segments.push(
                 self.scanner
-                    .read_identifier()
-                    .map_err(|e| e.update("parsing account segment"))?,
+                    .read_while_1(Character::AlphaNum)
+                    .map_err(|e| scope.error(e))?,
             );
         }
         Ok(Account {
-            range: self.scanner.rng(start),
+            range: scope.rng(),
             segments,
         })
     }
 
-    pub fn parse_commodity(&self) -> Result<Commodity> {
-        self.scanner
-            .read_identifier()
+    fn parse_commodity(&self) -> Result<Commodity> {
+        let scope = self.scope(Token::Commodity);
+        Ok(self
+            .scanner
+            .read_while_1(Character::AlphaNum)
             .map(Commodity)
-            .map_err(|e| e.update("parsing commodity"))
+            .map_err(|e| scope.error(e))?)
     }
 
-    pub fn parse_date(&self) -> Result<Date> {
-        let start = self.scanner.pos();
+    fn parse_date(&self) -> Result<Date> {
+        let scope = self.scope(Token::Date);
         self.scanner
-            .read_n_with(4, Token::Digit, |c| c.is_ascii_digit())
-            .map_err(|e| e.update("parsing year"))?;
-        self.scanner.read_char('-')?;
-        self.scanner
-            .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
-            .map_err(|e| e.update("parsing month"))?;
-        self.scanner.read_char('-')?;
-        self.scanner
-            .read_n_with(2, Token::Digit, |c| c.is_ascii_digit())
-            .map_err(|e| e.update("parsing day"))?;
-        Ok(Date(self.scanner.rng(start)))
+            .read_n(4, Character::Digit)
+            .and_then(|_| self.scanner.read_char(Character::Char('-')))
+            .and_then(|_| self.scanner.read_n(2, Character::Digit))
+            .and_then(|_| self.scanner.read_char(Character::Char('-')))
+            .and_then(|_| self.scanner.read_n(2, Character::Digit))
+            .map_err(|e| scope.error(e))?;
+        Ok(Date(scope.rng()))
     }
 
-    pub fn parse_interval(&self) -> Result<Rng> {
+    fn parse_interval(&self) -> Result<Rng> {
+        let scope = self.scope(Token::Date);
         match self.scanner.current() {
-            Some('d') => self.scanner.read_string("daily"),
-            Some('w') => self.scanner.read_string("weekly"),
-            Some('m') => self.scanner.read_string("monthly"),
-            Some('q') => self.scanner.read_string("quarterly"),
-            Some('y') => self.scanner.read_string("yearly"),
-            Some('o') => self.scanner.read_string("once"),
-            o => Err(self.error(None, Token::Interval, Token::from_char(o))),
+            Some('d') => self
+                .scanner
+                .read_string("daily")
+                .map_err(|e| scope.error(e)),
+            Some('w') => self
+                .scanner
+                .read_string("weekly")
+                .map_err(|e| scope.error(e)),
+            Some('m') => self
+                .scanner
+                .read_string("monthly")
+                .map_err(|e| scope.error(e)),
+            Some('q') => self
+                .scanner
+                .read_string("quarterly")
+                .map_err(|e| scope.error(e)),
+            Some('y') => self
+                .scanner
+                .read_string("yearly")
+                .map_err(|e| scope.error(e)),
+            Some('o') => self.scanner.read_string("once").map_err(|e| scope.error(e)),
+            o => Err(scope.error2(Character::from_char(o))),
         }
     }
 
-    pub fn parse_decimal(&self) -> Result<Decimal> {
-        let start = self.scanner.pos();
+    fn parse_decimal(&self) -> Result<Decimal> {
+        let scope = self.scope(Token::Decimal);
         if let Some('-') = self.scanner.current() {
-            self.scanner.read_char('-')?;
+            self.scanner
+                .read_char(Character::Char('-'))
+                .map_err(|e| scope.error(e))?;
         }
         self.scanner
-            .read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
+            .read_while_1(Character::Digit)
+            .map_err(|e| scope.error(e))?;
         if let Some('.') = self.scanner.current() {
-            self.scanner.read_char('.')?;
             self.scanner
-                .read_while_1(Token::Digit, |c| c.is_ascii_digit())?;
+                .read_char(Character::Char('.'))
+                .and_then(|_| self.scanner.read_while_1(Character::Digit))
+                .map_err(|e| scope.error(e))?;
         }
-        Ok(Decimal(self.scanner.rng(start)))
+        Ok(Decimal(scope.rng()))
     }
 
-    pub fn parse_quoted_string(&self) -> Result<QuotedString> {
-        let start = self.scanner.pos();
-        self.scanner.read_char('"')?;
-        let content = self.scanner.read_while(|c| c != '"');
-        self.scanner.read_char('"')?;
+    fn parse_quoted_string(&self) -> Result<QuotedString> {
+        let scope = self.scope(Token::QuotedString);
+        self.scanner
+            .read_char(Character::Char('"'))
+            .map_err(|e| scope.error(e))?;
+        let content = self.scanner.read_while(Character::NotChar('"'));
+        self.scanner
+            .read_char(Character::Char('"'))
+            .map_err(|e| scope.error(e))?;
         Ok(QuotedString {
-            range: self.scanner.rng(start),
+            range: scope.rng(),
             content,
         })
     }
 
     pub fn parse(&self) -> Result<SyntaxTree> {
-        let start = self.scanner.pos();
+        let scope = self.scope(Token::Either(vec![
+            Token::Directive,
+            Token::Comment,
+            Token::BlankLine,
+        ]));
         let mut directives = Vec::new();
         while let Some(c) = self.scanner.current() {
             match c {
                 '*' | '/' | '#' => {
-                    self.parse_comment()
-                        .map_err(|e| e.update("parsing comment"))?;
+                    self.parse_comment()?;
                 }
                 c if c.is_alphanumeric() || c == '@' => {
-                    let d = self.parse_directive().map_err(|e| {
-                        self.error(
-                            Some("parsing directive".into()),
-                            Token::Directive,
-                            Token::Error(Box::new(e)),
-                        )
-                    })?;
+                    let d = self.parse_directive().map_err(|e| scope.wrap_error(e))?;
                     directives.push(d)
                 }
                 c if c.is_whitespace() => {
                     self.scanner
                         .read_rest_of_line()
-                        .map_err(|e| e.update("parsing blank line"))?;
+                        .map_err(|e| scope.error(e))?;
                 }
-                o => {
-                    return Err(self.error(
-                        None,
-                        Token::Either(vec![Token::Directive, Token::Comment, Token::BlankLine]),
-                        Token::Char(o),
-                    ))
-                }
+                o => return Err(scope.error2(Character::from_char(Some(o)))),
             }
         }
         Ok(SyntaxTree {
-            range: self.scanner.rng(start),
+            range: scope.rng(),
             directives,
         })
     }
 
-    pub fn parse_comment(&self) -> Result<Rng> {
-        let start = self.scanner.pos();
+    fn parse_comment(&self) -> Result<Rng> {
+        let scope = self.scope(Token::Comment);
         match self.scanner.current() {
             Some('#') | Some('*') => {
-                self.scanner.read_until(|c| c == '\n');
-                let range = self.scanner.rng(start);
-                self.scanner.read_rest_of_line()?;
+                self.scanner.read_until(Character::NewLine);
+                let range = scope.rng();
+                self.scanner
+                    .read_char(Character::NewLine)
+                    .map_err(|e| scope.error(e))?;
                 Ok(range)
             }
             Some('/') => {
-                self.scanner.read_string("//")?;
-                self.scanner.read_until(|c| c == '\n');
-                let range = self.scanner.rng(start);
-                self.scanner.read_rest_of_line()?;
+                self.scanner.read_string("//").map_err(|e| scope.error(e))?;
+                self.scanner.read_until(Character::NewLine);
+                let range = scope.rng();
+                self.scanner
+                    .read_char(Character::NewLine)
+                    .map_err(|e| scope.error(e))?;
                 Ok(range)
             }
-            o => Err(self.error(None, Token::Comment, o.map_or(Token::EOF, Token::Char))),
+            o => Err(scope.error2(Character::from_char(o))),
         }
     }
 
-    pub fn parse_directive(&self) -> Result<Directive> {
+    fn parse_directive(&self) -> Result<Directive> {
+        let scope = self.scope(Token::Directive);
         match self.scanner.current() {
-            Some('i') => self.parse_include(),
-            Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command().map_err(|e| {
-                self.error(
-                    Some("parsing command".into()),
-                    Token::Directive,
-                    Token::Error(Box::new(e)),
-                )
-            }),
-            o => Err(self.error(None, Token::Custom("directive".into()), Token::from_char(o))),
+            Some('i') => self.parse_include(&scope),
+            Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command(&scope),
+            o => Err(scope.error2(Character::from_char(o))),
         }
     }
 
-    pub fn parse_include(&self) -> Result<Directive> {
-        let start = self.scanner.pos();
-        self.scanner.read_string("include")?;
-        self.scanner.read_space1()?;
+    fn parse_include(&self, scope: &Scope) -> Result<Directive> {
+        self.scanner
+            .read_string("include")
+            .and_then(|_| self.scanner.read_space_1())
+            .map_err(|e| scope.error(e))?;
         let path = self
             .parse_quoted_string()
-            .map_err(|e| e.update("parsing path"))?;
+            .map_err(|e| scope.wrap_error(e))?;
         Ok(Directive::Include {
-            range: self.scanner.rng(start),
+            range: scope.rng(),
             path,
         })
     }
 
-    pub fn parse_command(&self) -> Result<Directive> {
-        let start = self.scanner.pos();
+    fn parse_command(&self, scope: &Scope) -> Result<Directive> {
         let mut addon = None;
         if let Some('@') = self.scanner.current() {
             addon = Some(self.parse_addon()?);
-            self.scanner.read_rest_of_line()?;
+            self.scanner
+                .read_rest_of_line()
+                .map_err(|e| scope.error(e))?;
         }
-        let date = self.parse_date().map_err(|e| e.update("parsing date"))?;
-        self.scanner.read_space1()?;
+        let date = self.parse_date()?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
 
         let command = match self.scanner.current() {
-            Some('p') => self.parse_price(start, date).map_err(|e| {
-                self.error(
-                    Some("parsing 'price' directive".into()),
-                    Token::Custom("directive".into()),
-                    Token::Error(Box::new(e)),
-                )
-            })?,
-            Some('o') => self.parse_open(start, date).map_err(|e| {
-                self.error(
-                    Some("parsing 'open' directive".into()),
-                    Token::Custom("directive".into()),
-                    Token::Error(Box::new(e)),
-                )
-            })?,
-            Some('"') => self.parse_transaction(start, addon, date).map_err(|e| {
-                self.error(
-                    Some("parsing 'transaction' directive".into()),
-                    Token::Custom("directive".into()),
-                    Token::Error(Box::new(e)),
-                )
-            })?,
-            Some('b') => self.parse_assertion(start, date).map_err(|e| {
-                self.error(
-                    Some("parsing 'balance' directive".into()),
-                    Token::Custom("directive".into()),
-                    Token::Error(Box::new(e)),
-                )
-            })?,
-            Some('c') => self.parse_close(start, date).map_err(|e| {
-                self.error(
-                    Some("parsing 'close' directive".into()),
-                    Token::Custom("directive".into()),
-                    Token::Error(Box::new(e)),
-                )
-            })?,
-            o => {
-                return Err(self.error(
-                    None,
-                    Token::Either(vec![
-                        Token::Custom("price".into()),
-                        Token::Custom("open".into()),
-                        Token::Custom("balance".into()),
-                        Token::Custom("opening quote (\")".into()),
-                        Token::Custom("close".into()),
-                    ]),
-                    Token::from_char(o),
-                ))
-            }
+            Some('p') => self.parse_price(scope, date)?,
+            Some('o') => self.parse_open(scope, date)?,
+            Some('"') => self.parse_transaction(scope, addon, date)?,
+            Some('b') => self.parse_assertion(scope, date)?,
+            Some('c') => self.parse_close(scope, date)?,
+            o => Err(scope.error2(Character::from_char(o)))?,
         };
-        self.scanner.read_rest_of_line()?;
+        self.scanner
+            .read_rest_of_line()
+            .map_err(|e| scope.error(e))?;
         Ok(command)
     }
 
-    pub fn parse_addon(&self) -> Result<Addon> {
-        let start = self.scanner.pos();
-        self.scanner.read_char('@')?;
-        let name = self.scanner.read_while_1(
-            Token::Either(vec![Token::Custom("@performance".into())]),
-            |c| c.is_alphabetic(),
-        )?;
-        match name.text() {
-            "performance" => self
-                .parse_performance(start)
-                .map_err(|e| e.update("parsing performance")),
-            "accrue" => self
-                .parse_accrual(start)
-                .map_err(|e| e.update("parsing accrual")),
-            o => Err(self.error(
-                Some("parsing addon".into()),
-                Token::Either(vec![Token::Custom("@performance".into())]),
-                Token::Custom(o.into()),
-            )),
+    fn parse_addon(&self) -> Result<Addon> {
+        let scope = self.scope(Token::Addon);
+        self.scanner
+            .read_char(Character::Char('@'))
+            .map_err(|e| scope.error(e))?;
+        match self.scanner.current() {
+            Some('p') => self.parse_performance(&scope),
+            Some('a') => self.parse_accrual(&scope),
+            o => Err(scope.error2(Character::from_char(o)))?,
         }
     }
 
-    pub fn parse_performance(&self, start: usize) -> Result<Addon> {
+    fn parse_performance(&self, original_scope: &Scope) -> Result<Addon> {
+        let scope = self.scope(Token::Performance);
+        self.scanner
+            .read_string("performance")
+            .map_err(|e| scope.error(e))?;
         self.scanner.read_space();
-        self.scanner.read_char('(')?;
+        self.scanner
+            .read_char(Character::Char('('))
+            .map_err(|e| scope.error(e))?;
         self.scanner.read_space();
         let mut commodities = Vec::new();
         while self.scanner.current().map_or(false, char::is_alphanumeric) {
-            commodities.push(
-                self.parse_commodity()
-                    .map_err(|e| e.update("parsing commodity"))?,
-            );
+            commodities.push(self.parse_commodity().map_err(|e| scope.wrap_error(e))?);
             self.scanner.read_space();
             if let Some(',') = self.scanner.current() {
-                self.scanner.read_char(',')?;
+                self.scanner
+                    .read_char(Character::Char(','))
+                    .map_err(|e| scope.error(e))?;
                 self.scanner.read_space();
             }
         }
-        self.scanner.read_char(')')?;
+        self.scanner
+            .read_char(Character::Char(')'))
+            .map_err(|e| scope.error(e))?;
         Ok(Addon::Performance {
-            range: self.scanner.rng(start),
+            range: original_scope.rng(),
             commodities,
         })
     }
 
-    pub fn parse_accrual(&self, start: usize) -> Result<Addon> {
-        self.scanner.read_space1()?;
-        let interval = self
-            .parse_interval()
-            .map_err(|e| e.update("parsing interval"))?;
-        self.scanner.read_space1()?;
-        let start_date = self
-            .parse_date()
-            .map_err(|e| e.update("parsing start date"))?;
-        self.scanner.read_space1()?;
-        let end_date = self
-            .parse_date()
-            .map_err(|e| e.update("parsing end date"))?;
-        self.scanner.read_space1()?;
-        let account = self
-            .parse_account()
-            .map_err(|e| e.update("parsing accrual account"))?;
+    fn parse_accrual(&self, original_scope: &Scope) -> Result<Addon> {
+        let scope = self.scope(Token::Accrual);
+        self.scanner
+            .read_string("accrue")
+            .map_err(|e| scope.error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let interval = self.parse_interval()?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let start_date = self.parse_date().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let end_date = self.parse_date().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let account = self.parse_account().map_err(|e| scope.wrap_error(e))?;
         Ok(Addon::Accrual {
-            range: self.scanner.rng(start),
+            range: original_scope.rng(),
             interval,
             start: start_date,
             end: end_date,
@@ -328,22 +368,19 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_price(&self, start: usize, date: Date) -> Result<Directive> {
-        self.scanner.read_string("price")?;
-        self.scanner.read_space1()?;
-        let commodity = self
-            .parse_commodity()
-            .map_err(|e| e.update("parsing commodity"))?;
-        self.scanner.read_space1()?;
-        let price = self
-            .parse_decimal()
-            .map_err(|e| e.update("parsing price"))?;
-        self.scanner.read_space1()?;
-        let target = self
-            .parse_commodity()
-            .map_err(|e| e.update("parsing target commodity"))?;
+    fn parse_price(&self, original_scope: &Scope, date: Date) -> Result<Directive> {
+        let scope = self.scope(Token::Price);
+        self.scanner
+            .read_string("price")
+            .and_then(|_| self.scanner.read_space_1())
+            .map_err(|e| scope.error(e))?;
+        let commodity = self.parse_commodity().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let price = self.parse_decimal().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let target = self.parse_commodity().map_err(|e| scope.wrap_error(e))?;
         Ok(Directive::Price {
-            range: self.scanner.rng(start),
+            range: original_scope.rng(),
             date,
             commodity,
             price,
@@ -351,43 +388,43 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_open(&self, start: usize, date: Date) -> Result<Directive> {
-        self.scanner.read_string("open")?;
-        self.scanner.read_space1()?;
-        let a = self
-            .parse_account()
-            .map_err(|e| e.update("parsing account"))?;
+    fn parse_open(&self, original_scope: &Scope, date: Date) -> Result<Directive> {
+        let scope = self.scope(Token::Open);
+        self.scanner
+            .read_string("open")
+            .and_then(|_| self.scanner.read_space_1())
+            .map_err(|e| scope.error(e))?;
+        let a = self.parse_account().map_err(|e| scope.wrap_error(e))?;
         Ok(Directive::Open {
-            range: self.scanner.rng(start),
+            range: original_scope.rng(),
             date,
             account: a,
         })
     }
 
-    pub fn parse_transaction(
+    fn parse_transaction(
         &self,
-        start: usize,
+        original_scope: &Scope,
         addon: Option<Addon>,
         date: Date,
     ) -> Result<Directive> {
+        let scope = self.scope(Token::Transaction);
         let description = self.parse_quoted_string()?;
-        self.scanner.read_rest_of_line()?;
+        self.scanner
+            .read_rest_of_line()
+            .map_err(|e| scope.error(e))?;
         let mut bookings = Vec::new();
         loop {
-            bookings.push(self.parse_booking().map_err(|e| {
-                self.error(
-                    Some("parsing booking".into()),
-                    Token::Custom("booking".into()),
-                    Token::Error(Box::new(e)),
-                )
-            })?);
-            self.scanner.read_rest_of_line()?;
+            bookings.push(self.parse_booking().map_err(|e| scope.wrap_error(e))?);
+            self.scanner
+                .read_rest_of_line()
+                .map_err(|e| scope.error(e))?;
             if !self.scanner.current().map_or(false, char::is_alphanumeric) {
                 break;
             }
         }
         Ok(Directive::Transaction {
-            range: self.scanner.rng(start),
+            range: original_scope.rng(),
             addon,
             date,
             description,
@@ -396,24 +433,16 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_booking(&self) -> Result<Booking> {
-        let start = self.scanner.pos();
-        let credit = self
-            .parse_account()
-            .map_err(|e| e.update("parsing credit account"))?;
-        self.scanner.read_space1()?;
-        let debit = self
-            .parse_account()
-            .map_err(|e| e.update("parsing debit account"))?;
-        self.scanner.read_space1()?;
-        let quantity = self
-            .parse_decimal()
-            .map_err(|e| e.update("parsing quantity"))?;
-        self.scanner.read_space1()?;
-        let commodity = self
-            .parse_commodity()
-            .map_err(|e| e.update("parsing commodity"))?;
+        let scope = self.scope(Token::Booking);
+        let credit = self.parse_account().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let debit = self.parse_account().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let quantity = self.parse_decimal().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let commodity = self.parse_commodity().map_err(|e| scope.wrap_error(e))?;
         Ok(Booking {
-            range: self.scanner.rng(start),
+            range: scope.rng(),
             credit,
             debit,
             quantity,
@@ -421,70 +450,66 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_assertion(&self, start: usize, date: Date) -> Result<Directive> {
-        self.scanner.read_string("balance")?;
-        self.scanner.read_space1()?;
+    fn parse_assertion(&self, original_scope: &Scope, date: Date) -> Result<Directive> {
+        let scope = self.scope(Token::Assertion);
+        self.scanner
+            .read_string("balance")
+            .and_then(|_| self.scanner.read_space_1())
+            .map_err(|e| scope.error(e))?;
         let mut assertions = Vec::new();
         if let Some('\n') = self.scanner.current() {
-            self.scanner.read_rest_of_line()?;
+            self.scanner
+                .read_rest_of_line()
+                .map_err(|e| scope.error(e))?;
             loop {
-                assertions.push(self.parse_sub_assertion().map_err(|e| {
-                    self.error(
-                        Some("parsing assertion".into()),
-                        Token::Custom("assertion".into()),
-                        Token::Error(Box::new(e)),
-                    )
-                })?);
-                self.scanner.read_rest_of_line()?;
-                if !self.scanner.current().map_or(false, char::is_alphanumeric) {
+                assertions.push(
+                    self.parse_sub_assertion()
+                        .map_err(|e| scope.wrap_error(e))?,
+                );
+                self.scanner
+                    .read_rest_of_line()
+                    .map_err(|e| scope.error(e))?;
+                if !Character::AlphaNum.is(self.scanner.current()) {
                     break;
                 }
             }
         } else {
-            assertions.push(self.parse_sub_assertion().map_err(|e| {
-                self.error(
-                    Some("parsing assertion".into()),
-                    Token::Custom("assertion".into()),
-                    Token::Error(Box::new(e)),
-                )
-            })?);
+            assertions.push(
+                self.parse_sub_assertion()
+                    .map_err(|e| scope.wrap_error(e))?,
+            );
         }
         Ok(Directive::Assertion {
-            range: self.scanner.rng(start),
+            range: original_scope.rng(),
             date,
             assertions,
         })
     }
 
     pub fn parse_sub_assertion(&self) -> Result<Assertion> {
-        let start = self.scanner.pos();
-        let account = self
-            .parse_account()
-            .map_err(|e| e.update("parsing account"))?;
-        self.scanner.read_space1()?;
-        let amount = self
-            .parse_decimal()
-            .map_err(|e| e.update("parsing amount"))?;
-        self.scanner.read_space1()?;
-        let commodity = self
-            .parse_commodity()
-            .map_err(|e| e.update("parsing commodity"))?;
+        let scope = self.scope(Token::SubAssertion);
+        let account = self.parse_account().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let amount = self.parse_decimal().map_err(|e| scope.wrap_error(e))?;
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let commodity = self.parse_commodity().map_err(|e| scope.wrap_error(e))?;
         Ok(Assertion {
-            range: self.scanner.rng(start),
+            range: scope.rng(),
             account,
             balance: amount,
             commodity,
         })
     }
 
-    pub fn parse_close(&self, start: usize, date: Date) -> Result<Directive> {
-        self.scanner.read_string("close")?;
-        self.scanner.read_space1()?;
-        let account = self
-            .parse_account()
-            .map_err(|e| e.update("parsing account"))?;
+    fn parse_close(&self, original_scope: &Scope, date: Date) -> Result<Directive> {
+        let scope = self.scope(Token::Close);
+        self.scanner
+            .read_string("close")
+            .and_then(|_| self.scanner.read_space_1())
+            .map_err(|e| scope.error(e))?;
+        let account = self.parse_account().map_err(|e| scope.wrap_error(e))?;
         Ok(Directive::Close {
-            range: self.scanner.rng(start),
+            range: original_scope.rng(),
             date,
             account,
         })
@@ -500,37 +525,57 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_commodity() {
+    fn test_parse_commodity1() {
         let f1 = File::mem("USD");
         assert_eq!(
             Ok(Commodity(Rng::new(f1.clone(), 0, 3))),
             Parser::new(&f1).parse_commodity(),
         );
+    }
+
+    #[test]
+    fn test_parse_commodity2() {
         let f2 = File::mem("1FOO");
         assert_eq!(
             Ok(Commodity(Rng::new(f2.clone(), 0, 4))),
             Parser::new(&File::mem("1FOO")).parse_commodity()
         );
+    }
+
+    #[test]
+    fn test_parse_commodity3() {
         let f3 = File::mem(" USD");
         assert_eq!(
-            Err(SyntaxError::new(
-                f3.clone(),
-                0,
-                Some("parsing commodity".into()),
-                Token::AlphaNum,
-                Token::WhiteSpace
-            )),
+            Err(ParserError::ScannerError {
+                file: f3.clone(),
+                pos: 0,
+                want: Token::Commodity,
+                got: ScannerError {
+                    file: f3.clone(),
+                    pos: 0,
+                    want: Character::AlphaNum,
+                    got: Character::HorizontalSpace,
+                },
+            }),
             Parser::new(&f3).parse_commodity()
         );
+    }
+
+    #[test]
+    fn test_parse_commodity4() {
         let f4 = File::mem("/USD");
         assert_eq!(
-            Err(SyntaxError::new(
-                f4.clone(),
-                0,
-                Some("parsing commodity".into()),
-                Token::AlphaNum,
-                Token::Char('/')
-            )),
+            Err(ParserError::ScannerError {
+                file: f4.clone(),
+                pos: 0,
+                want: Token::Commodity,
+                got: ScannerError {
+                    file: f4.clone(),
+                    pos: 0,
+                    want: Character::AlphaNum,
+                    got: Character::Char('/'),
+                },
+            }),
             Parser::new(&f4).parse_commodity()
         );
     }
@@ -555,67 +600,83 @@ mod tests {
         );
         let f3 = File::mem(" USD");
         assert_eq!(
-            Err(SyntaxError::new(
-                f3.clone(),
-                0,
-                Some("parsing account type".into()),
-                Token::AlphaNum,
-                Token::WhiteSpace
-            )),
+            Err(ParserError::ScannerError {
+                file: f3.clone(),
+                pos: 0,
+                want: Token::Account,
+                got: ScannerError {
+                    file: f3.clone(),
+                    pos: 0,
+                    want: Character::AlphaNum,
+                    got: Character::HorizontalSpace,
+                },
+            }),
             Parser::new(&f3).parse_account(),
-        );
-        let f4 = File::mem("/USD");
-        assert_eq!(
-            Err(SyntaxError::new(
-                f4.clone(),
-                0,
-                Some("parsing account type".into()),
-                Token::AlphaNum,
-                Token::Char('/')
-            )),
-            Parser::new(&f4).parse_account(),
         );
     }
 
     #[test]
-    fn test_parse_date() {
-        let f1 = File::mem("2024-05-07");
+    fn test_parse_date1() {
+        let f = File::mem("2024-05-07");
         assert_eq!(
-            Ok(Date(Rng::new(f1.clone(), 0, 10))),
-            Parser::new(&f1).parse_date(),
+            Ok(Date(Rng::new(f.clone(), 0, 10))),
+            Parser::new(&f).parse_date(),
         );
-        let f2 = File::mem("024-02-02");
+    }
+
+    #[test]
+    fn test_parse_date2() {
+        let f = File::mem("024-02-02");
         assert_eq!(
-            Err(SyntaxError::new(
-                f2.clone(),
-                3,
-                Some("parsing year".into()),
-                Token::Digit,
-                Token::Char('-')
-            )),
-            Parser::new(&f2).parse_date(),
+            Err(ParserError::ScannerError {
+                file: f.clone(),
+                pos: 3,
+                want: Token::Date,
+                got: ScannerError {
+                    file: f.clone(),
+                    pos: 3,
+                    want: Character::Digit,
+                    got: Character::Char('-'),
+                },
+            }),
+            Parser::new(&f).parse_date(),
         );
-        let f3 = File::mem("2024-02-0");
+    }
+
+    #[test]
+    fn test_parse_date3() {
+        let f = File::mem("2024-02-0");
         assert_eq!(
-            Err(SyntaxError::new(
-                f3.clone(),
-                9,
-                Some("parsing day".into()),
-                Token::Digit,
-                Token::EOF
-            )),
-            Parser::new(&f3).parse_date(),
+            Err(ParserError::ScannerError {
+                file: f.clone(),
+                pos: 9,
+                want: Token::Date,
+                got: ScannerError {
+                    file: f.clone(),
+                    pos: 9,
+                    want: Character::Digit,
+                    got: Character::EOF,
+                },
+            }),
+            Parser::new(&f).parse_date(),
         );
-        let f4 = File::mem("2024-0--0");
+    }
+    #[test]
+    fn test_parse_date4() {
+        let f = File::mem("2024-0--0");
         assert_eq!(
-            Err(SyntaxError::new(
-                f4.clone(),
-                6,
-                Some("parsing month".into()),
-                Token::Digit,
-                Token::Char('-')
-            )),
-            Parser::new(&f4).parse_date()
+            Err(ParserError::ScannerError {
+                file: f.clone(),
+                pos: 6,
+                want: Token::Date,
+                got: ScannerError {
+                    file: f.clone(),
+                    pos: 6,
+                    want: Character::Digit,
+                    got: Character::Char('-'),
+                },
+            }),
+            Parser::new(&f).parse_date()
         )
     }
 
@@ -641,16 +702,22 @@ mod tests {
                 Parser::new(&f).parse_decimal(),
             );
         }
-
+    }
+    #[test]
+    fn test_parse_decimal2() {
         let f = File::mem("foo");
         assert_eq!(
-            Err(SyntaxError::new(
-                f.clone(),
-                0,
-                None,
-                Token::Digit,
-                Token::Char('f')
-            )),
+            Err(ParserError::ScannerError {
+                file: f.clone(),
+                pos: 0,
+                want: Token::Decimal,
+                got: ScannerError {
+                    file: f.clone(),
+                    pos: 0,
+                    want: Character::Digit,
+                    got: Character::Char('f'),
+                },
+            }),
             Parser::new(&f).parse_decimal(),
         );
     }
@@ -704,145 +771,6 @@ mod tests {
                 Parser::new(&f).parse_addon()
             )
         }
-    }
-
-    #[test]
-    fn test_parse_open() {
-        let f = File::mem("open   Assets:Foo");
-        assert_eq!(
-            Ok(Directive::Open {
-                range: Rng::new(f.clone(), 0, 17),
-                date: Date(Rng::new(f.clone(), 0, 0)),
-                account: Account {
-                    range: Rng::new(f.clone(), 7, 17),
-                    segments: vec![Rng::new(f.clone(), 7, 13), Rng::new(f.clone(), 14, 17)]
-                }
-            }),
-            Parser::new(&f).parse_open(0, Date(Rng::new(f.clone(), 0, 0)))
-        )
-    }
-
-    #[test]
-    fn test_parse_booking() {
-        let f = File::mem("Assets:Foo Assets:Bar 4.23 BAZ");
-
-        assert_eq!(
-            Ok(Booking {
-                range: Rng::new(f.clone(), 0, 30),
-                credit: Account {
-                    range: Rng::new(f.clone(), 0, 10),
-                    segments: vec![Rng::new(f.clone(), 0, 6), Rng::new(f.clone(), 7, 10)]
-                },
-                debit: Account {
-                    range: Rng::new(f.clone(), 11, 21),
-                    segments: vec![Rng::new(f.clone(), 11, 17), Rng::new(f.clone(), 18, 21)]
-                },
-                quantity: Decimal(Rng::new(f.clone(), 22, 26)),
-                commodity: Commodity(Rng::new(f.clone(), 27, 30)),
-            }),
-            Parser::new(&f).parse_booking()
-        )
-    }
-
-    #[test]
-    fn test_parse_transaction() {
-        let f =
-            File::mem("\"Message\"  \nAssets:Foo Assets:Bar 4.23 USD\nAssets:Foo Assets:Baz 8 USD");
-        assert_eq!(
-            Ok(Directive::Transaction {
-                range: Rng::new(f.clone(), 0, 70),
-                addon: None,
-                date: Date(Rng::new(f.clone(), 0, 0)),
-                description: QuotedString {
-                    range: Rng::new(f.clone(), 0, 9),
-                    content: Rng::new(f.clone(), 1, 8),
-                },
-                bookings: vec![
-                    Booking {
-                        range: Rng::new(f.clone(), 12, 42),
-                        credit: Account {
-                            range: Rng::new(f.clone(), 12, 22),
-                            segments: vec![
-                                Rng::new(f.clone(), 12, 18),
-                                Rng::new(f.clone(), 19, 22)
-                            ]
-                        },
-                        debit: Account {
-                            range: Rng::new(f.clone(), 23, 33),
-                            segments: vec![
-                                Rng::new(f.clone(), 23, 29),
-                                Rng::new(f.clone(), 30, 33)
-                            ]
-                        },
-                        quantity: Decimal(Rng::new(f.clone(), 34, 38)),
-                        commodity: Commodity(Rng::new(f.clone(), 39, 42)),
-                    },
-                    Booking {
-                        range: Rng::new(f.clone(), 43, 70),
-                        credit: Account {
-                            range: Rng::new(f.clone(), 43, 53),
-                            segments: vec![
-                                Rng::new(f.clone(), 43, 49),
-                                Rng::new(f.clone(), 50, 53)
-                            ]
-                        },
-                        debit: Account {
-                            range: Rng::new(f.clone(), 54, 64),
-                            segments: vec![
-                                Rng::new(f.clone(), 54, 60),
-                                Rng::new(f.clone(), 61, 64)
-                            ]
-                        },
-                        quantity: Decimal(Rng::new(f.clone(), 65, 66)),
-                        commodity: Commodity(Rng::new(f.clone(), 67, 70)),
-                    }
-                ]
-            }),
-            Parser::new(&f).parse_transaction(0, None, Date(Rng::new(f.clone(), 0, 0)))
-        );
-    }
-    #[test]
-    fn test_parse_transaction2() {
-        let f = File::mem("\"");
-        assert_eq!(
-            Err(SyntaxError::new(
-                f.clone(),
-                1,
-                None,
-                Token::Char('"'),
-                Token::EOF
-            ),),
-            Parser::new(&f).parse_transaction(0, None, Date(Rng::new(f.clone(), 0, 0)))
-        );
-    }
-    #[test]
-    fn test_parse_transaction3() {
-        let f = File::mem("\"\"   Assets Assets 12 USD");
-        assert_eq!(
-            Err(SyntaxError::new(
-                f.clone(),
-                5,
-                None,
-                Token::Either(vec![Token::Char('\n'), Token::EOF]),
-                Token::Char('A'),
-            ),),
-            Parser::new(&f).parse_transaction(0, None, Date(Rng::new(f.clone(), 0, 25)))
-        )
-    }
-    #[test]
-    fn test_parse_close() {
-        let f = File::mem("close  Assets:Foo");
-        assert_eq!(
-            Ok(Directive::Close {
-                range: Rng::new(f.clone(), 0, 17),
-                date: Date(Rng::new(f.clone(), 0, 0)),
-                account: Account {
-                    range: Rng::new(f.clone(), 7, 17),
-                    segments: vec![Rng::new(f.clone(), 7, 13), Rng::new(f.clone(), 14, 17)]
-                }
-            }),
-            Parser::new(&f).parse_close(0, Date(Rng::new(f.clone(), 0, 0)))
-        )
     }
 
     mod directive {
