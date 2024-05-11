@@ -580,8 +580,7 @@ mod tests {
                 pos: 0,
                 want: Token::Commodity,
                 got: ScannerError {
-                    file: f3.clone(),
-                    pos: 0,
+                    rng: Rng::new(f3.clone(), 0, 0),
                     want: Character::AlphaNum,
                     got: Character::HorizontalSpace,
                 },
@@ -599,8 +598,7 @@ mod tests {
                 pos: 0,
                 want: Token::Commodity,
                 got: ScannerError {
-                    file: f4.clone(),
-                    pos: 0,
+                    rng: Rng::new(f4.clone(), 0, 0),
                     want: Character::AlphaNum,
                     got: Character::Char('/'),
                 },
@@ -634,8 +632,7 @@ mod tests {
                 pos: 0,
                 want: Token::Account,
                 got: ScannerError {
-                    file: f3.clone(),
-                    pos: 0,
+                    rng: Rng::new(f3.clone(), 0, 0),
                     want: Character::AlphaNum,
                     got: Character::HorizontalSpace,
                 },
@@ -662,8 +659,7 @@ mod tests {
                 pos: 3,
                 want: Token::Date,
                 got: ScannerError {
-                    file: f.clone(),
-                    pos: 3,
+                    rng: Rng::new(f.clone(), 0, 3),
                     want: Character::Digit,
                     got: Character::Char('-'),
                 },
@@ -681,8 +677,7 @@ mod tests {
                 pos: 9,
                 want: Token::Date,
                 got: ScannerError {
-                    file: f.clone(),
-                    pos: 9,
+                    rng: Rng::new(f.clone(), 8, 9),
                     want: Character::Digit,
                     got: Character::EOF,
                 },
@@ -699,8 +694,7 @@ mod tests {
                 pos: 6,
                 want: Token::Date,
                 got: ScannerError {
-                    file: f.clone(),
-                    pos: 6,
+                    rng: Rng::new(f.clone(), 5, 6),
                     want: Character::Digit,
                     got: Character::Char('-'),
                 },
@@ -741,8 +735,7 @@ mod tests {
                 pos: 0,
                 want: Token::Decimal,
                 got: ScannerError {
-                    file: f.clone(),
-                    pos: 0,
+                    rng: Rng::new(f.clone(), 0, 0),
                     want: Character::Digit,
                     got: Character::Char('f'),
                 },

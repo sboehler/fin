@@ -12,8 +12,7 @@ pub struct Scanner<'a> {
 #[derive(Error, Debug, Eq, PartialEq)]
 #[error("syntax error")]
 pub struct ScannerError {
-    pub file: Rc<File>,
-    pub pos: usize,
+    pub rng: Rng,
     pub want: Character,
     pub got: Character,
 }
@@ -75,8 +74,7 @@ struct Scope<'a, 'b> {
 impl<'a, 'b> Scope<'a, 'b> {
     fn error(&self, want: Character, got: Character) -> ScannerError {
         ScannerError {
-            file: self.s.source.clone(),
-            pos: self.s.pos(),
+            rng: self.s.rng(self.start),
             want,
             got,
         }
@@ -256,8 +254,7 @@ mod test_scanner {
         );
         assert_eq!(
             Err(ScannerError {
-                file: f.clone(),
-                pos: 7,
+                rng: Rng::new(f.clone(), 7, 7),
                 want: Character::Char('q'),
                 got: Character::EOF
             }),
@@ -273,8 +270,7 @@ mod test_scanner {
         assert_eq!("a", s.read_char(Character::Char('a')).unwrap().text());
         assert_eq!(
             Err(ScannerError {
-                file: f.clone(),
-                pos: 1,
+                rng: Rng::new(f.clone(), 1, 1),
                 want: Character::Char('q'),
                 got: Character::Char('s')
             }),
@@ -293,8 +289,7 @@ mod test_scanner {
         assert_eq!(Ok("as"), s.read_string("as").as_ref().map(Rng::text));
         assert_eq!(
             Err(ScannerError {
-                file: s.source.clone(),
-                pos: 2,
+                rng: Rng::new(f.clone(), 2, 2),
                 want: Character::Char('q'),
                 got: Character::Char('d')
             }),
@@ -313,8 +308,7 @@ mod test_scanner {
         assert_eq!(Ok("  \n"), s.read_rest_of_line().as_ref().map(Rng::text));
         assert_eq!(
             Err(ScannerError {
-                file: File::mem("\n\n  \nfoo"),
-                pos: 5,
+                rng: Rng::new(f.clone(), 5, 5),
                 want: Character::OneOf(vec![Character::Char('\n'), Character::EOF]),
                 got: Character::Char('f')
             }),
@@ -333,8 +327,7 @@ mod test_scanner {
         assert_eq!(Ok("o"), s.read_1().as_ref().map(Rng::text));
         assert_eq!(
             Err(ScannerError {
-                file: s.source.clone(),
-                pos: 3,
+                rng: Rng::new(f.clone(), 3, 3),
                 want: Character::Any,
                 got: Character::EOF
             }),
@@ -351,8 +344,7 @@ mod test_scanner {
         assert_eq!("s", s.read_char(Character::NotChar('a')).unwrap().text());
         assert_eq!(
             Err(ScannerError {
-                file: s.source.clone(),
-                pos: 2,
+                rng: Rng::new(f.clone(), 2, 2),
                 want: Character::Digit,
                 got: Character::Char('d')
             }),
@@ -368,8 +360,7 @@ mod test_scanner {
         );
         assert_eq!(
             Err(ScannerError {
-                file: s.source.clone(),
-                pos: 4,
+                rng: Rng::new(f.clone(), 4, 4),
                 want: Character::Any,
                 got: Character::EOF
             }),
@@ -389,8 +380,7 @@ mod test_scanner {
         assert_eq!(Ok(""), s.read_n(0, Character::Any).as_ref().map(Rng::text));
         assert_eq!(
             Err(ScannerError {
-                file: s.source.clone(),
-                pos: 4,
+                rng: Rng::new(f.clone(), 2, 4),
                 want: Character::Any,
                 got: Character::EOF
             }),
@@ -405,8 +395,7 @@ mod test_scanner {
         let s = Scanner::new(&f);
         assert_eq!(
             Err(ScannerError {
-                file: s.source.clone(),
-                pos: 0,
+                rng: Rng::new(f.clone(), 0, 0),
                 want: Character::OneOf(vec![Character::Char('\n'), Character::EOF]),
                 got: Character::Char('a')
             }),
@@ -429,8 +418,7 @@ mod test_scanner {
         assert_eq!(Ok("\t\t"), s.read_space_1().as_ref().map(Rng::text));
         assert_eq!(
             Err(ScannerError {
-                file: s.source.clone(),
-                pos: 5,
+                rng: Rng::new(f.clone(), 5, 5),
                 want: Character::HorizontalSpace,
                 got: Character::Char('b')
             }),
