@@ -223,15 +223,6 @@ impl<'a> Scanner<'a> {
         self.read_eol()?;
         Ok(scope.rng())
     }
-
-    pub fn error(&self, want: Character, got: Character) -> ScannerError {
-        ScannerError {
-            file: self.source.clone(),
-            pos: self.pos(),
-            want,
-            got,
-        }
-    }
 }
 
 #[cfg(test)]
