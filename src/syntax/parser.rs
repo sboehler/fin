@@ -18,20 +18,17 @@ pub struct Parser<'a> {
 #[error("parser error")]
 pub enum ParserError {
     ScannerError {
-        file: Rc<File>,
-        pos: usize,
+        rng: Rng,
         want: Token,
         got: ScannerError,
     },
     ParserError {
-        file: Rc<File>,
-        pos: usize,
+        rng: Rng,
         want: Token,
         got: Box<ParserError>,
     },
     Character {
-        file: Rc<File>,
-        pos: usize,
+        rng: Rng,
         want: Token,
         got: Character,
     },
@@ -48,8 +45,7 @@ struct Scope<'a, 'b> {
 impl<'a, 'b> Scope<'a, 'b> {
     fn scanner_error(&self, got: ScannerError) -> ParserError {
         ParserError::ScannerError {
-            file: self.parser.scanner.source.clone(),
-            pos: self.parser.scanner.pos(),
+            rng: self.parser.scanner.rng(self.start),
             want: self.token.clone(),
             got,
         }
@@ -57,8 +53,7 @@ impl<'a, 'b> Scope<'a, 'b> {
 
     fn char_error(&self, got: Character) -> ParserError {
         ParserError::Character {
-            file: self.parser.scanner.source.clone(),
-            pos: self.parser.scanner.pos(),
+            rng: self.parser.scanner.rng(self.start),
             want: self.token.clone(),
             got,
         }
@@ -66,8 +61,7 @@ impl<'a, 'b> Scope<'a, 'b> {
 
     fn parser_error(&self, got: ParserError) -> ParserError {
         ParserError::ParserError {
-            file: self.parser.scanner.source.clone(),
-            pos: self.parser.scanner.pos(),
+            rng: self.parser.scanner.rng(self.start),
             want: self.token.clone(),
             got: got.into(),
         }
@@ -576,11 +570,10 @@ mod tests {
         let f3 = File::mem(" USD");
         assert_eq!(
             Err(ParserError::ScannerError {
-                file: f3.clone(),
-                pos: 0,
+                rng: Rng::new(f3.clone(), 0, 1),
                 want: Token::Commodity,
                 got: ScannerError {
-                    rng: Rng::new(f3.clone(), 0, 0),
+                    rng: Rng::new(f3.clone(), 0, 1),
                     want: Character::AlphaNum,
                     got: Character::HorizontalSpace,
                 },
@@ -594,11 +587,10 @@ mod tests {
         let f4 = File::mem("/USD");
         assert_eq!(
             Err(ParserError::ScannerError {
-                file: f4.clone(),
-                pos: 0,
+                rng: Rng::new(f4.clone(), 0, 1),
                 want: Token::Commodity,
                 got: ScannerError {
-                    rng: Rng::new(f4.clone(), 0, 0),
+                    rng: Rng::new(f4.clone(), 0, 1),
                     want: Character::AlphaNum,
                     got: Character::Char('/'),
                 },
@@ -617,6 +609,10 @@ mod tests {
             }),
             Parser::new(&f1).parse_account(),
         );
+    }
+
+    #[test]
+    fn test_parse_account2() {
         let f2 = File::mem("Liabilities:Debt  ");
         assert_eq!(
             Ok(Account {
@@ -625,14 +621,17 @@ mod tests {
             }),
             Parser::new(&f2).parse_account(),
         );
+    }
+
+    #[test]
+    fn test_parse_account3() {
         let f3 = File::mem(" USD");
         assert_eq!(
             Err(ParserError::ScannerError {
-                file: f3.clone(),
-                pos: 0,
+                rng: Rng::new(f3.clone(), 0, 1),
                 want: Token::Account,
                 got: ScannerError {
-                    rng: Rng::new(f3.clone(), 0, 0),
+                    rng: Rng::new(f3.clone(), 0, 1),
                     want: Character::AlphaNum,
                     got: Character::HorizontalSpace,
                 },
@@ -655,11 +654,10 @@ mod tests {
         let f = File::mem("024-02-02");
         assert_eq!(
             Err(ParserError::ScannerError {
-                file: f.clone(),
-                pos: 3,
+                rng: Rng::new(f.clone(), 0, 4),
                 want: Token::Date,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 0, 3),
+                    rng: Rng::new(f.clone(), 0, 4),
                     want: Character::Digit,
                     got: Character::Char('-'),
                 },
@@ -673,8 +671,7 @@ mod tests {
         let f = File::mem("2024-02-0");
         assert_eq!(
             Err(ParserError::ScannerError {
-                file: f.clone(),
-                pos: 9,
+                rng: Rng::new(f.clone(), 0, 9),
                 want: Token::Date,
                 got: ScannerError {
                     rng: Rng::new(f.clone(), 8, 9),
@@ -690,11 +687,10 @@ mod tests {
         let f = File::mem("2024-0--0");
         assert_eq!(
             Err(ParserError::ScannerError {
-                file: f.clone(),
-                pos: 6,
+                rng: Rng::new(f.clone(), 0, 7),
                 want: Token::Date,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 5, 6),
+                    rng: Rng::new(f.clone(), 5, 7),
                     want: Character::Digit,
                     got: Character::Char('-'),
                 },
@@ -731,11 +727,10 @@ mod tests {
         let f = File::mem("foo");
         assert_eq!(
             Err(ParserError::ScannerError {
-                file: f.clone(),
-                pos: 0,
+                rng: Rng::new(f.clone(), 0, 1),
                 want: Token::Decimal,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 0, 0),
+                    rng: Rng::new(f.clone(), 0, 1),
                     want: Character::Digit,
                     got: Character::Char('f'),
                 },
