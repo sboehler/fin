@@ -5,7 +5,7 @@ use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 use thiserror::Error;
 
 pub struct Scanner<'a> {
-    source: &'a Rc<File>,
+    pub source: &'a Rc<File>,
     chars: RefCell<Peekable<CharIndices<'a>>>,
 }
 
@@ -14,7 +14,6 @@ pub struct Scanner<'a> {
 pub struct ScannerError {
     pub file: Rc<File>,
     pub pos: usize,
-    pub msg: Option<String>,
     pub want: Character,
     pub got: Character,
 }
@@ -27,6 +26,7 @@ pub enum Character {
     Char(char),
     NotChar(char),
     Digit,
+    Alphabetic,
     AlphaNum,
     Any,
     HorizontalSpace,
@@ -56,6 +56,7 @@ impl Character {
                 Character::Char(a) => c == *a,
                 Character::NotChar(a) => c != *a,
                 Character::Digit => c.is_ascii_digit(),
+                Character::Alphabetic => c.is_alphabetic(),
                 Character::AlphaNum => c.is_alphanumeric(),
                 Character::Any => true,
                 Character::HorizontalSpace => c.is_ascii_whitespace() && c != '\n',
@@ -69,7 +70,6 @@ impl Character {
 struct Scope<'a, 'b> {
     s: &'a Scanner<'b>,
     start: usize,
-    msg: Option<&'a str>,
 }
 
 impl<'a, 'b> Scope<'a, 'b> {
@@ -77,7 +77,6 @@ impl<'a, 'b> Scope<'a, 'b> {
         ScannerError {
             file: self.s.source.clone(),
             pos: self.s.pos(),
-            msg: self.msg.map(|s| s.to_string()),
             want,
             got,
         }
@@ -106,7 +105,6 @@ impl<'a> Scanner<'a> {
     fn scope(&self) -> Scope<'_, 'a> {
         Scope {
             s: self,
-            msg: None,
             start: self.pos(),
         }
     }
@@ -198,8 +196,7 @@ impl<'a> Scanner<'a> {
                 self.advance();
                 Ok(scope.rng())
             }
-            Some(ch) => Err(self.error(
-                None,
+            Some(ch) => Err(scope.error(
                 Character::OneOf(vec![Character::Char('\n'), Character::EOF]),
                 Character::Char(ch),
             )),
@@ -227,11 +224,10 @@ impl<'a> Scanner<'a> {
         Ok(scope.rng())
     }
 
-    pub fn error(&self, msg: Option<String>, want: Character, got: Character) -> ScannerError {
+    pub fn error(&self, want: Character, got: Character) -> ScannerError {
         ScannerError {
             file: self.source.clone(),
             pos: self.pos(),
-            msg,
             want,
             got,
         }
@@ -271,7 +267,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: f.clone(),
                 pos: 7,
-                msg: None,
                 want: Character::Char('q'),
                 got: Character::EOF
             }),
@@ -289,7 +284,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: f.clone(),
                 pos: 1,
-                msg: None,
                 want: Character::Char('q'),
                 got: Character::Char('s')
             }),
@@ -310,7 +304,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: s.source.clone(),
                 pos: 2,
-                msg: None,
                 want: Character::Char('q'),
                 got: Character::Char('d')
             }),
@@ -331,7 +324,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: File::mem("\n\n  \nfoo"),
                 pos: 5,
-                msg: None,
                 want: Character::OneOf(vec![Character::Char('\n'), Character::EOF]),
                 got: Character::Char('f')
             }),
@@ -352,7 +344,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: s.source.clone(),
                 pos: 3,
-                msg: None,
                 want: Character::Any,
                 got: Character::EOF
             }),
@@ -371,7 +362,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: s.source.clone(),
                 pos: 2,
-                msg: None,
                 want: Character::Digit,
                 got: Character::Char('d')
             }),
@@ -389,7 +379,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: s.source.clone(),
                 pos: 4,
-                msg: None,
                 want: Character::Any,
                 got: Character::EOF
             }),
@@ -411,7 +400,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: s.source.clone(),
                 pos: 4,
-                msg: None,
                 want: Character::Any,
                 got: Character::EOF
             }),
@@ -428,7 +416,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: s.source.clone(),
                 pos: 0,
-                msg: None,
                 want: Character::OneOf(vec![Character::Char('\n'), Character::EOF]),
                 got: Character::Char('a')
             }),
@@ -453,7 +440,6 @@ mod test_scanner {
             Err(ScannerError {
                 file: s.source.clone(),
                 pos: 5,
-                msg: None,
                 want: Character::HorizontalSpace,
                 got: Character::Char('b')
             }),

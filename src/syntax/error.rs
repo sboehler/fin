@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display, io, path::PathBuf, rc::Rc};
 
 use super::{cst::Token, file::File};
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SyntaxError {
     pub file: Rc<File>,
     pub pos: usize,

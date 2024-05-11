@@ -27,12 +27,27 @@ impl Rng {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Token {
     EOF,
+    Addon,
+    Accrual,
+    Account,
+    Close,
+    Assertion,
+    SubAssertion,
+    Performance,
     BlankLine,
+    Booking,
     Char(char),
+    Transaction,
+    Price,
+    Open,
+    QuotedString,
     Digit,
+    AccountType,
+    Commodity,
+    File,
     Comment,
     Directive,
     AlphaNum,
@@ -59,26 +74,26 @@ impl Token {
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::EOF => write!(f, "EOF"),
-            Self::Error(_) => write!(f, "error"),
-            Self::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
-            Self::Digit => write!(f, "a digit (0-9)"),
-            Self::Decimal => write!(f, "a decimal number"),
-            Self::Directive => write!(f, "a directive"),
-            Self::BlankLine => write!(f, "a blank line"),
-            Self::Comment => write!(f, "a comment"),
-            Self::Interval => write!(
+            Token::EOF => write!(f, "EOF"),
+            Token::Error(_) => write!(f, "error"),
+            Token::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
+            Token::Digit => write!(f, "a digit (0-9)"),
+            Token::Decimal => write!(f, "a decimal number"),
+            Token::Directive => write!(f, "a directive"),
+            Token::BlankLine => write!(f, "a blank line"),
+            Token::Comment => write!(f, "a comment"),
+            Token::Interval => write!(
                 f,
                 "a time interval (daily, monthly, quarterly, yearly, once)"
             ),
-            Self::Date => write!(f, "a date"),
-            Self::AlphaNum => {
+            Token::Date => write!(f, "a date"),
+            Token::AlphaNum => {
                 write!(f, "a character (a-z, A-Z) or a digit (0-9)")
             }
-            Self::Any => write!(f, "any character"),
-            Self::WhiteSpace => write!(f, "whitespace"),
-            Self::Custom(s) => write!(f, "{}", s),
-            Self::Either(chars) => {
+            Token::Any => write!(f, "any character"),
+            Token::WhiteSpace => write!(f, "whitespace"),
+            Token::Custom(s) => write!(f, "{}", s),
+            Token::Either(chars) => {
                 for (i, ch) in chars.iter().enumerate() {
                     write!(f, "{}", ch)?;
                     if i < chars.len().saturating_sub(1) {
@@ -88,6 +103,21 @@ impl std::fmt::Display for Token {
                 writeln!(f)?;
                 Ok(())
             }
+            Token::Addon => write!(f, "addon"),
+            Token::Accrual => write!(f, "accrual"),
+            Token::Close => write!(f, "close directive"),
+            Token::Assertion => write!(f, "balance directive"),
+            Token::SubAssertion => write!(f, "subassertion"),
+            Token::Performance => write!(f, "performance addon"),
+            Token::Booking => write!(f, "booking"),
+            Token::Transaction => write!(f, "transaction"),
+            Token::Price => write!(f, "price directive"),
+            Token::Open => write!(f, "open directive"),
+            Token::QuotedString => write!(f, "quoted string"),
+            Token::AccountType => write!(f, "account type"),
+            Token::Commodity => write!(f, "commodity"),
+            Token::File => write!(f, "source file"),
+            Token::Account => write!(f, "account"),
         }
     }
 }
