@@ -114,21 +114,6 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_1_with<P>(&self, token: Token, pred: P) -> Result<Rng>
-    where
-        P: Fn(char) -> bool,
-    {
-        let start = self.pos();
-        match self.current() {
-            Some(c) if pred(c) => {
-                self.advance();
-                Ok(self.rng(start))
-            }
-            Some(c) => Err(self.error(None, token, Token::Char(c))),
-            None => Err(self.error(None, token, Token::EOF)),
-        }
-    }
-
     pub fn read_n_with<P>(&self, n: usize, token: Token, pred: P) -> Result<Rng>
     where
         P: Fn(char) -> bool,
@@ -140,14 +125,6 @@ impl<'a> Scanner<'a> {
                 Some(c) => return Err(self.error(None, token, Token::Char(c))),
                 None => return Err(self.error(None, token, Token::EOF)),
             };
-        }
-        Ok(self.rng(start))
-    }
-
-    pub fn read_n(&self, n: usize) -> Result<Rng> {
-        let start = self.pos();
-        for _ in 0..n {
-            self.read_1()?;
         }
         Ok(self.rng(start))
     }
@@ -327,76 +304,6 @@ mod test_scanner {
             s.read_1()
         );
         assert_eq!("", s.read_eol().unwrap().text());
-    }
-
-    #[test]
-    fn test_read_1_with() {
-        let f = File::mem("asdf");
-        let s = Scanner::new(&f);
-        assert_eq!(
-            "a",
-            s.read_1_with(Token::Char('a'), |c| c == 'a')
-                .unwrap()
-                .text()
-        );
-        assert_eq!(
-            "s",
-            s.read_1_with(Token::Custom("no a".into()), |c| c != 'a')
-                .unwrap()
-                .text()
-        );
-        assert_eq!(
-            Err(SyntaxError::new(
-                s.source.clone(),
-                2,
-                None,
-                Token::Digit,
-                Token::Char('d')
-            )),
-            s.read_1_with(Token::Digit, |c| c.is_ascii_digit())
-        );
-        assert_eq!(
-            Ok("d"),
-            s.read_1_with(Token::Char('d'), |c| c == 'd')
-                .as_ref()
-                .map(Rng::text)
-        );
-        assert_eq!(
-            Ok("f"),
-            s.read_1_with(Token::Char('f'), |c| c == 'f')
-                .as_ref()
-                .map(Rng::text)
-        );
-        assert_eq!(
-            Err(SyntaxError::new(
-                s.source.clone(),
-                4,
-                None,
-                Token::Any,
-                Token::EOF
-            )),
-            s.read_1_with(Token::Any, |_| true)
-        );
-        assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
-    }
-
-    #[test]
-    fn test_read_n() {
-        let f = File::mem("asdf");
-        let s = Scanner::new(&f);
-        assert_eq!(Ok("as"), s.read_n(2).as_ref().map(Rng::text));
-        assert_eq!(Ok(""), s.read_n(0).as_ref().map(Rng::text));
-        assert_eq!(
-            Err(SyntaxError::new(
-                s.source.clone(),
-                4,
-                None,
-                Token::Any,
-                Token::EOF
-            )),
-            s.read_n(3)
-        );
-        assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
     }
 
     #[test]
