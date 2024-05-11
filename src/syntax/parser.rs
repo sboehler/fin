@@ -46,7 +46,7 @@ struct Scope<'a, 'b> {
 }
 
 impl<'a, 'b> Scope<'a, 'b> {
-    fn error(&self, got: ScannerError) -> ParserError {
+    fn scanner_error(&self, got: ScannerError) -> ParserError {
         ParserError::ScannerError {
             file: self.parser.scanner.source.clone(),
             pos: self.parser.scanner.pos(),
@@ -55,7 +55,7 @@ impl<'a, 'b> Scope<'a, 'b> {
         }
     }
 
-    fn error2(&self, got: Character) -> ParserError {
+    fn char_error(&self, got: Character) -> ParserError {
         ParserError::Character {
             file: self.parser.scanner.source.clone(),
             pos: self.parser.scanner.pos(),
@@ -64,7 +64,7 @@ impl<'a, 'b> Scope<'a, 'b> {
         }
     }
 
-    fn wrap_error(&self, got: ParserError) -> ParserError {
+    fn parser_error(&self, got: ParserError) -> ParserError {
         ParserError::ParserError {
             file: self.parser.scanner.source.clone(),
             pos: self.parser.scanner.pos(),
@@ -101,16 +101,16 @@ impl<'a> Parser<'a> {
         let account_type = self
             .scanner
             .read_while_1(Character::AlphaNum)
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         let mut segments = vec![account_type];
         while self.scanner.current() == Some(':') {
             self.scanner
                 .read_char(Character::Char(':'))
-                .map_err(|e| scope.error(e))?;
+                .map_err(|e| scope.scanner_error(e))?;
             segments.push(
                 self.scanner
                     .read_while_1(Character::AlphaNum)
-                    .map_err(|e| scope.error(e))?,
+                    .map_err(|e| scope.scanner_error(e))?,
             );
         }
         Ok(Account {
@@ -125,7 +125,7 @@ impl<'a> Parser<'a> {
             .scanner
             .read_while_1(Character::AlphaNum)
             .map(Commodity)
-            .map_err(|e| scope.error(e))?)
+            .map_err(|e| scope.scanner_error(e))?)
     }
 
     fn parse_date(&self) -> Result<Date> {
@@ -136,7 +136,7 @@ impl<'a> Parser<'a> {
             .and_then(|_| self.scanner.read_n(2, Character::Digit))
             .and_then(|_| self.scanner.read_char(Character::Char('-')))
             .and_then(|_| self.scanner.read_n(2, Character::Digit))
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         Ok(Date(scope.rng()))
     }
 
@@ -146,25 +146,28 @@ impl<'a> Parser<'a> {
             Some('d') => self
                 .scanner
                 .read_string("daily")
-                .map_err(|e| scope.error(e)),
+                .map_err(|e| scope.scanner_error(e)),
             Some('w') => self
                 .scanner
                 .read_string("weekly")
-                .map_err(|e| scope.error(e)),
+                .map_err(|e| scope.scanner_error(e)),
             Some('m') => self
                 .scanner
                 .read_string("monthly")
-                .map_err(|e| scope.error(e)),
+                .map_err(|e| scope.scanner_error(e)),
             Some('q') => self
                 .scanner
                 .read_string("quarterly")
-                .map_err(|e| scope.error(e)),
+                .map_err(|e| scope.scanner_error(e)),
             Some('y') => self
                 .scanner
                 .read_string("yearly")
-                .map_err(|e| scope.error(e)),
-            Some('o') => self.scanner.read_string("once").map_err(|e| scope.error(e)),
-            o => Err(scope.error2(Character::from_char(o))),
+                .map_err(|e| scope.scanner_error(e)),
+            Some('o') => self
+                .scanner
+                .read_string("once")
+                .map_err(|e| scope.scanner_error(e)),
+            o => Err(scope.char_error(Character::from_char(o))),
         }
     }
 
@@ -173,16 +176,16 @@ impl<'a> Parser<'a> {
         if let Some('-') = self.scanner.current() {
             self.scanner
                 .read_char(Character::Char('-'))
-                .map_err(|e| scope.error(e))?;
+                .map_err(|e| scope.scanner_error(e))?;
         }
         self.scanner
             .read_while_1(Character::Digit)
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         if let Some('.') = self.scanner.current() {
             self.scanner
                 .read_char(Character::Char('.'))
                 .and_then(|_| self.scanner.read_while_1(Character::Digit))
-                .map_err(|e| scope.error(e))?;
+                .map_err(|e| scope.scanner_error(e))?;
         }
         Ok(Decimal(scope.rng()))
     }
@@ -191,11 +194,11 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::QuotedString);
         self.scanner
             .read_char(Character::Char('"'))
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         let content = self.scanner.read_while(Character::NotChar('"'));
         self.scanner
             .read_char(Character::Char('"'))
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         Ok(QuotedString {
             range: scope.rng(),
             content,
@@ -215,15 +218,15 @@ impl<'a> Parser<'a> {
                     self.parse_comment()?;
                 }
                 c if c.is_alphanumeric() || c == '@' => {
-                    let d = self.parse_directive().map_err(|e| scope.wrap_error(e))?;
+                    let d = self.parse_directive().map_err(|e| scope.parser_error(e))?;
                     directives.push(d)
                 }
                 c if c.is_whitespace() => {
                     self.scanner
                         .read_rest_of_line()
-                        .map_err(|e| scope.error(e))?;
+                        .map_err(|e| scope.scanner_error(e))?;
                 }
-                o => return Err(scope.error2(Character::from_char(Some(o)))),
+                o => return Err(scope.char_error(Character::from_char(Some(o)))),
             }
         }
         Ok(SyntaxTree {
@@ -240,19 +243,21 @@ impl<'a> Parser<'a> {
                 let range = scope.rng();
                 self.scanner
                     .read_char(Character::NewLine)
-                    .map_err(|e| scope.error(e))?;
+                    .map_err(|e| scope.scanner_error(e))?;
                 Ok(range)
             }
             Some('/') => {
-                self.scanner.read_string("//").map_err(|e| scope.error(e))?;
+                self.scanner
+                    .read_string("//")
+                    .map_err(|e| scope.scanner_error(e))?;
                 self.scanner.read_until(Character::NewLine);
                 let range = scope.rng();
                 self.scanner
                     .read_char(Character::NewLine)
-                    .map_err(|e| scope.error(e))?;
+                    .map_err(|e| scope.scanner_error(e))?;
                 Ok(range)
             }
-            o => Err(scope.error2(Character::from_char(o))),
+            o => Err(scope.char_error(Character::from_char(o))),
         }
     }
 
@@ -261,7 +266,7 @@ impl<'a> Parser<'a> {
         match self.scanner.current() {
             Some('i') => self.parse_include(&scope),
             Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command(&scope),
-            o => Err(scope.error2(Character::from_char(o))),
+            o => Err(scope.char_error(Character::from_char(o))),
         }
     }
 
@@ -269,10 +274,10 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_string("include")
             .and_then(|_| self.scanner.read_space_1())
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         let path = self
             .parse_quoted_string()
-            .map_err(|e| scope.wrap_error(e))?;
+            .map_err(|e| scope.parser_error(e))?;
         Ok(Directive::Include {
             range: scope.rng(),
             path,
@@ -285,10 +290,12 @@ impl<'a> Parser<'a> {
             addon = Some(self.parse_addon()?);
             self.scanner
                 .read_rest_of_line()
-                .map_err(|e| scope.error(e))?;
+                .map_err(|e| scope.scanner_error(e))?;
         }
         let date = self.parse_date()?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
 
         let command = match self.scanner.current() {
             Some('p') => self.parse_price(scope, date)?,
@@ -296,11 +303,11 @@ impl<'a> Parser<'a> {
             Some('"') => self.parse_transaction(scope, addon, date)?,
             Some('b') => self.parse_assertion(scope, date)?,
             Some('c') => self.parse_close(scope, date)?,
-            o => Err(scope.error2(Character::from_char(o)))?,
+            o => Err(scope.char_error(Character::from_char(o)))?,
         };
         self.scanner
             .read_rest_of_line()
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         Ok(command)
     }
 
@@ -308,11 +315,11 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Addon);
         self.scanner
             .read_char(Character::Char('@'))
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         match self.scanner.current() {
             Some('p') => self.parse_performance(&scope),
             Some('a') => self.parse_accrual(&scope),
-            o => Err(scope.error2(Character::from_char(o)))?,
+            o => Err(scope.char_error(Character::from_char(o)))?,
         }
     }
 
@@ -320,26 +327,26 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Performance);
         self.scanner
             .read_string("performance")
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         self.scanner.read_space();
         self.scanner
             .read_char(Character::Char('('))
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         self.scanner.read_space();
         let mut commodities = Vec::new();
         while self.scanner.current().map_or(false, char::is_alphanumeric) {
-            commodities.push(self.parse_commodity().map_err(|e| scope.wrap_error(e))?);
+            commodities.push(self.parse_commodity().map_err(|e| scope.parser_error(e))?);
             self.scanner.read_space();
             if let Some(',') = self.scanner.current() {
                 self.scanner
                     .read_char(Character::Char(','))
-                    .map_err(|e| scope.error(e))?;
+                    .map_err(|e| scope.scanner_error(e))?;
                 self.scanner.read_space();
             }
         }
         self.scanner
             .read_char(Character::Char(')'))
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         Ok(Addon::Performance {
             range: original_scope.rng(),
             commodities,
@@ -350,15 +357,23 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Accrual);
         self.scanner
             .read_string("accrue")
-            .map_err(|e| scope.error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
         let interval = self.parse_interval()?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let start_date = self.parse_date().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let end_date = self.parse_date().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let account = self.parse_account().map_err(|e| scope.wrap_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let start_date = self.parse_date().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let end_date = self.parse_date().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let account = self.parse_account().map_err(|e| scope.parser_error(e))?;
         Ok(Addon::Accrual {
             range: original_scope.rng(),
             interval,
@@ -373,12 +388,16 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_string("price")
             .and_then(|_| self.scanner.read_space_1())
-            .map_err(|e| scope.error(e))?;
-        let commodity = self.parse_commodity().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let price = self.parse_decimal().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let target = self.parse_commodity().map_err(|e| scope.wrap_error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
+        let commodity = self.parse_commodity().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let price = self.parse_decimal().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let target = self.parse_commodity().map_err(|e| scope.parser_error(e))?;
         Ok(Directive::Price {
             range: original_scope.rng(),
             date,
@@ -393,8 +412,8 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_string("open")
             .and_then(|_| self.scanner.read_space_1())
-            .map_err(|e| scope.error(e))?;
-        let a = self.parse_account().map_err(|e| scope.wrap_error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
+        let a = self.parse_account().map_err(|e| scope.parser_error(e))?;
         Ok(Directive::Open {
             range: original_scope.rng(),
             date,
@@ -412,13 +431,13 @@ impl<'a> Parser<'a> {
         let description = self.parse_quoted_string()?;
         self.scanner
             .read_rest_of_line()
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         let mut bookings = Vec::new();
         loop {
-            bookings.push(self.parse_booking().map_err(|e| scope.wrap_error(e))?);
+            bookings.push(self.parse_booking().map_err(|e| scope.parser_error(e))?);
             self.scanner
                 .read_rest_of_line()
-                .map_err(|e| scope.error(e))?;
+                .map_err(|e| scope.scanner_error(e))?;
             if !self.scanner.current().map_or(false, char::is_alphanumeric) {
                 break;
             }
@@ -434,13 +453,19 @@ impl<'a> Parser<'a> {
 
     pub fn parse_booking(&self) -> Result<Booking> {
         let scope = self.scope(Token::Booking);
-        let credit = self.parse_account().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let debit = self.parse_account().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let quantity = self.parse_decimal().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let commodity = self.parse_commodity().map_err(|e| scope.wrap_error(e))?;
+        let credit = self.parse_account().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let debit = self.parse_account().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let quantity = self.parse_decimal().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let commodity = self.parse_commodity().map_err(|e| scope.parser_error(e))?;
         Ok(Booking {
             range: scope.rng(),
             credit,
@@ -455,20 +480,20 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_string("balance")
             .and_then(|_| self.scanner.read_space_1())
-            .map_err(|e| scope.error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
         let mut assertions = Vec::new();
         if let Some('\n') = self.scanner.current() {
             self.scanner
                 .read_rest_of_line()
-                .map_err(|e| scope.error(e))?;
+                .map_err(|e| scope.scanner_error(e))?;
             loop {
                 assertions.push(
                     self.parse_sub_assertion()
-                        .map_err(|e| scope.wrap_error(e))?,
+                        .map_err(|e| scope.parser_error(e))?,
                 );
                 self.scanner
                     .read_rest_of_line()
-                    .map_err(|e| scope.error(e))?;
+                    .map_err(|e| scope.scanner_error(e))?;
                 if !Character::AlphaNum.is(self.scanner.current()) {
                     break;
                 }
@@ -476,7 +501,7 @@ impl<'a> Parser<'a> {
         } else {
             assertions.push(
                 self.parse_sub_assertion()
-                    .map_err(|e| scope.wrap_error(e))?,
+                    .map_err(|e| scope.parser_error(e))?,
             );
         }
         Ok(Directive::Assertion {
@@ -488,11 +513,15 @@ impl<'a> Parser<'a> {
 
     pub fn parse_sub_assertion(&self) -> Result<Assertion> {
         let scope = self.scope(Token::SubAssertion);
-        let account = self.parse_account().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let amount = self.parse_decimal().map_err(|e| scope.wrap_error(e))?;
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let commodity = self.parse_commodity().map_err(|e| scope.wrap_error(e))?;
+        let account = self.parse_account().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let amount = self.parse_decimal().map_err(|e| scope.parser_error(e))?;
+        self.scanner
+            .read_space_1()
+            .map_err(|e| scope.scanner_error(e))?;
+        let commodity = self.parse_commodity().map_err(|e| scope.parser_error(e))?;
         Ok(Assertion {
             range: scope.rng(),
             account,
@@ -506,8 +535,8 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_string("close")
             .and_then(|_| self.scanner.read_space_1())
-            .map_err(|e| scope.error(e))?;
-        let account = self.parse_account().map_err(|e| scope.wrap_error(e))?;
+            .map_err(|e| scope.scanner_error(e))?;
+        let account = self.parse_account().map_err(|e| scope.parser_error(e))?;
         Ok(Directive::Close {
             range: original_scope.rng(),
             date,

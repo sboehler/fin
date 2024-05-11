@@ -61,16 +61,6 @@ pub enum Token {
     Error(Box<SyntaxError>),
 }
 
-impl Token {
-    pub fn from_char(ch: Option<char>) -> Self {
-        match ch {
-            None => Self::EOF,
-            Some(c) if c.is_whitespace() => Self::WhiteSpace,
-            Some(c) => Self::Char(c),
-        }
-    }
-}
-
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
