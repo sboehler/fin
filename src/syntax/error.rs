@@ -1,31 +1,17 @@
-use std::{error::Error, fmt::Display, io, path::PathBuf, rc::Rc};
+use std::{error::Error, fmt::Display, io, path::PathBuf};
 
-use super::{cst::Token, file::File};
+use super::cst::{Rng, Token};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SyntaxError {
-    pub file: Rc<File>,
-    pub pos: usize,
+    pub rng: Rng,
     pub msg: Option<String>,
     pub want: Token,
-    pub got: Token,
 }
 
 impl SyntaxError {
-    pub fn new(
-        file: Rc<File>,
-        pos: usize,
-        msg: Option<String>,
-        want: Token,
-        got: Token,
-    ) -> SyntaxError {
-        SyntaxError {
-            file,
-            pos,
-            msg,
-            got,
-            want,
-        }
+    pub fn new(rng: Rng, msg: Option<String>, want: Token) -> SyntaxError {
+        SyntaxError { rng, msg, want }
     }
 
     fn position(t: &str, pos: usize) -> (usize, usize) {
@@ -43,9 +29,10 @@ impl SyntaxError {
 
 impl std::fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let (line, col) = Self::position(&self.file.text, self.pos);
+        let (line, col) = Self::position(&self.rng.file.text, self.rng.start);
         let start = line.saturating_sub(4);
         let context = self
+            .rng
             .file
             .text
             .lines()
@@ -68,14 +55,11 @@ impl std::fmt::Display for SyntaxError {
         }
         writeln!(
             f,
-            "{}^ want {}, got {}",
+            "{}^ want {}, got '{}'",
             " ".repeat(col + 6),
             self.want,
-            self.got
+            self.rng.text()
         )?;
-        if let Token::Error(ref e) = self.got {
-            e.fmt(f)?;
-        }
         Ok(())
     }
 }
@@ -84,6 +68,8 @@ impl std::error::Error for SyntaxError {}
 
 #[cfg(test)]
 mod test_parser_error {
+    use crate::syntax::file::File;
+
     use super::*;
     use pretty_assertions::assert_eq;
 
@@ -95,16 +81,14 @@ mod test_parser_error {
                 "Line 0, column 1: while parsing file",
                 "",
                 "    0|asdf",
-                "       ^ want whitespace, got a character (a-z, A-Z) or a digit (0-9)",
+                "       ^ want whitespace, got 's'",
                 ""
             ]
             .join("\n"),
             SyntaxError {
-                got: Token::AlphaNum,
                 want: Token::WhiteSpace,
                 msg: Some("parsing file".into()),
-                pos: 1,
-                file: File::mem("asdf"),
+                rng: Rng::new(File::mem("asdf"), 1, 2),
             }
             .to_string()
         );

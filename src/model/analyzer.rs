@@ -177,27 +177,14 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    fn analyze_date(&mut self, d: &cst::Date) -> Result<NaiveDate> {
-        NaiveDate::parse_from_str(d.0.text(), "%Y-%m-%d").map_err(|e| {
-            SyntaxError::new(
-                self.file.range.file.clone(),
-                d.0.start,
-                Some(e.to_string()),
-                cst::Token::Date,
-                cst::Token::Custom(d.0.text().to_string()),
-            )
-        })
+    fn analyze_date(&mut self, date: &cst::Date) -> Result<NaiveDate> {
+        NaiveDate::parse_from_str(date.0.text(), "%Y-%m-%d")
+            .map_err(|e| SyntaxError::new(date.0.clone(), Some(e.to_string()), cst::Token::Date))
     }
 
-    fn analyze_decimal(&self, d: &cst::Decimal) -> Result<rust_decimal::Decimal> {
-        rust_decimal::Decimal::from_str_exact(d.0.text()).map_err(|e| {
-            SyntaxError::new(
-                self.file.range.file.clone(),
-                d.0.start,
-                Some(e.to_string()),
-                cst::Token::Decimal,
-                cst::Token::Custom(d.0.text().to_string()),
-            )
+    fn analyze_decimal(&self, decimal: &cst::Decimal) -> Result<rust_decimal::Decimal> {
+        rust_decimal::Decimal::from_str_exact(decimal.0.text()).map_err(|e| {
+            SyntaxError::new(decimal.0.clone(), Some(e.to_string()), cst::Token::Decimal)
         })
     }
 
@@ -209,44 +196,34 @@ impl<'a> Analyzer<'a> {
             "quarterly" => Ok(Interval::Quarterly),
             "yearly" => Ok(Interval::Yearly),
             "once" => Ok(Interval::Once),
-            o => Err(SyntaxError::new(
-                self.file.range.file.clone(),
-                d.start,
-                None,
-                cst::Token::Decimal,
-                cst::Token::Custom(o.into()),
-            )),
+            _ => Err(SyntaxError::new(d.clone(), None, cst::Token::Decimal)),
         }
     }
 
-    fn analyze_commodity(&mut self, c: &cst::Commodity) -> Result<Rc<Commodity>> {
+    fn analyze_commodity(&mut self, commodity: &cst::Commodity) -> Result<Rc<Commodity>> {
         self.journal
             .registry
             .borrow_mut()
-            .commodity(c.0.text())
+            .commodity(commodity.0.text())
             .map_err(|e| {
                 SyntaxError::new(
-                    self.file.range.file.clone(),
-                    c.0.start,
+                    commodity.0.clone(),
                     Some(e.to_string()),
                     cst::Token::Custom("identifier".into()),
-                    cst::Token::Custom(c.0.text().to_string()),
                 )
             })
     }
 
-    fn analyze_account(&mut self, c: &cst::Account) -> Result<Rc<Account>> {
+    fn analyze_account(&mut self, account: &cst::Account) -> Result<Rc<Account>> {
         self.journal
             .registry
             .borrow_mut()
-            .account(c.range.text())
+            .account(account.range.text())
             .map_err(|e| {
                 SyntaxError::new(
-                    self.file.range.file.clone(),
-                    c.range.start,
+                    account.range.clone(),
                     Some(e.to_string()),
                     cst::Token::Custom("account".into()),
-                    cst::Token::Custom(c.range.text().to_string()),
                 )
             })
     }
