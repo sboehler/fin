@@ -51,11 +51,11 @@ impl<'a, 'b> Scope<'a, 'b> {
         }
     }
 
-    fn char_error(&self, got: Character) -> ParserError {
+    fn char_error(&self, got: &Character) -> ParserError {
         ParserError::Character {
             rng: self.parser.scanner.rng(self.start),
             want: self.token.clone(),
-            got,
+            got: got.clone(),
         }
     }
 
@@ -94,16 +94,16 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Account);
         let account_type = self
             .scanner
-            .read_while_1(Character::AlphaNum)
+            .read_while_1(&Character::AlphaNum)
             .map_err(|e| scope.scanner_error(e))?;
         let mut segments = vec![account_type];
         while self.scanner.current() == Some(':') {
             self.scanner
-                .read_char(Character::Char(':'))
+                .read_char(&Character::Char(':'))
                 .map_err(|e| scope.scanner_error(e))?;
             segments.push(
                 self.scanner
-                    .read_while_1(Character::AlphaNum)
+                    .read_while_1(&Character::AlphaNum)
                     .map_err(|e| scope.scanner_error(e))?,
             );
         }
@@ -117,7 +117,7 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Commodity);
         Ok(self
             .scanner
-            .read_while_1(Character::AlphaNum)
+            .read_while_1(&Character::AlphaNum)
             .map(Commodity)
             .map_err(|e| scope.scanner_error(e))?)
     }
@@ -126,9 +126,9 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Date);
         self.scanner
             .read_n(4, Character::Digit)
-            .and_then(|_| self.scanner.read_char(Character::Char('-')))
+            .and_then(|_| self.scanner.read_char(&Character::Char('-')))
             .and_then(|_| self.scanner.read_n(2, Character::Digit))
-            .and_then(|_| self.scanner.read_char(Character::Char('-')))
+            .and_then(|_| self.scanner.read_char(&Character::Char('-')))
             .and_then(|_| self.scanner.read_n(2, Character::Digit))
             .map_err(|e| scope.scanner_error(e))?;
         Ok(Date(scope.rng()))
@@ -161,7 +161,7 @@ impl<'a> Parser<'a> {
                 .scanner
                 .read_string("once")
                 .map_err(|e| scope.scanner_error(e)),
-            o => Err(scope.char_error(Character::from_char(o))),
+            o => Err(scope.char_error(&Character::from_char(o))),
         }
     }
 
@@ -169,16 +169,16 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Decimal);
         if let Some('-') = self.scanner.current() {
             self.scanner
-                .read_char(Character::Char('-'))
+                .read_char(&Character::Char('-'))
                 .map_err(|e| scope.scanner_error(e))?;
         }
         self.scanner
-            .read_while_1(Character::Digit)
+            .read_while_1(&Character::Digit)
             .map_err(|e| scope.scanner_error(e))?;
         if let Some('.') = self.scanner.current() {
             self.scanner
-                .read_char(Character::Char('.'))
-                .and_then(|_| self.scanner.read_while_1(Character::Digit))
+                .read_char(&Character::Char('.'))
+                .and_then(|_| self.scanner.read_while_1(&Character::Digit))
                 .map_err(|e| scope.scanner_error(e))?;
         }
         Ok(Decimal(scope.rng()))
@@ -187,11 +187,11 @@ impl<'a> Parser<'a> {
     fn parse_quoted_string(&self) -> Result<QuotedString> {
         let scope = self.scope(Token::QuotedString);
         self.scanner
-            .read_char(Character::Char('"'))
+            .read_char(&Character::Char('"'))
             .map_err(|e| scope.scanner_error(e))?;
-        let content = self.scanner.read_while(Character::NotChar('"'));
+        let content = self.scanner.read_while(&Character::NotChar('"'));
         self.scanner
-            .read_char(Character::Char('"'))
+            .read_char(&Character::Char('"'))
             .map_err(|e| scope.scanner_error(e))?;
         Ok(QuotedString {
             range: scope.rng(),
@@ -220,7 +220,7 @@ impl<'a> Parser<'a> {
                         .read_rest_of_line()
                         .map_err(|e| scope.scanner_error(e))?;
                 }
-                o => return Err(scope.char_error(Character::from_char(Some(o)))),
+                o => return Err(scope.char_error(&Character::from_char(Some(o)))),
             }
         }
         Ok(SyntaxTree {
@@ -233,10 +233,10 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Comment);
         match self.scanner.current() {
             Some('#') | Some('*') => {
-                self.scanner.read_until(Character::NewLine);
+                self.scanner.read_until(&Character::NewLine);
                 let range = scope.rng();
                 self.scanner
-                    .read_char(Character::NewLine)
+                    .read_char(&Character::NewLine)
                     .map_err(|e| scope.scanner_error(e))?;
                 Ok(range)
             }
@@ -244,14 +244,14 @@ impl<'a> Parser<'a> {
                 self.scanner
                     .read_string("//")
                     .map_err(|e| scope.scanner_error(e))?;
-                self.scanner.read_until(Character::NewLine);
+                self.scanner.read_until(&Character::NewLine);
                 let range = scope.rng();
                 self.scanner
-                    .read_char(Character::NewLine)
+                    .read_char(&Character::NewLine)
                     .map_err(|e| scope.scanner_error(e))?;
                 Ok(range)
             }
-            o => Err(scope.char_error(Character::from_char(o))),
+            o => Err(scope.char_error(&Character::from_char(o))),
         }
     }
 
@@ -260,7 +260,7 @@ impl<'a> Parser<'a> {
         match self.scanner.current() {
             Some('i') => self.parse_include(&scope),
             Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command(&scope),
-            o => Err(scope.char_error(Character::from_char(o))),
+            o => Err(scope.char_error(&Character::from_char(o))),
         }
     }
 
@@ -297,7 +297,7 @@ impl<'a> Parser<'a> {
             Some('"') => self.parse_transaction(scope, addon, date)?,
             Some('b') => self.parse_assertion(scope, date)?,
             Some('c') => self.parse_close(scope, date)?,
-            o => Err(scope.char_error(Character::from_char(o)))?,
+            o => Err(scope.char_error(&Character::from_char(o)))?,
         };
         self.scanner
             .read_rest_of_line()
@@ -308,12 +308,12 @@ impl<'a> Parser<'a> {
     fn parse_addon(&self) -> Result<Addon> {
         let scope = self.scope(Token::Addon);
         self.scanner
-            .read_char(Character::Char('@'))
+            .read_char(&Character::Char('@'))
             .map_err(|e| scope.scanner_error(e))?;
         match self.scanner.current() {
             Some('p') => self.parse_performance(&scope),
             Some('a') => self.parse_accrual(&scope),
-            o => Err(scope.char_error(Character::from_char(o)))?,
+            o => Err(scope.char_error(&Character::from_char(o)))?,
         }
     }
 
@@ -324,7 +324,7 @@ impl<'a> Parser<'a> {
             .map_err(|e| scope.scanner_error(e))?;
         self.scanner.read_space();
         self.scanner
-            .read_char(Character::Char('('))
+            .read_char(&Character::Char('('))
             .map_err(|e| scope.scanner_error(e))?;
         self.scanner.read_space();
         let mut commodities = Vec::new();
@@ -333,13 +333,13 @@ impl<'a> Parser<'a> {
             self.scanner.read_space();
             if let Some(',') = self.scanner.current() {
                 self.scanner
-                    .read_char(Character::Char(','))
+                    .read_char(&Character::Char(','))
                     .map_err(|e| scope.scanner_error(e))?;
                 self.scanner.read_space();
             }
         }
         self.scanner
-            .read_char(Character::Char(')'))
+            .read_char(&Character::Char(')'))
             .map_err(|e| scope.scanner_error(e))?;
         Ok(Addon::Performance {
             range: original_scope.rng(),
@@ -575,7 +575,6 @@ mod tests {
                 got: ScannerError {
                     rng: Rng::new(f3.clone(), 0, 1),
                     want: Character::AlphaNum,
-                    got: Character::HorizontalSpace,
                 },
             }),
             Parser::new(&f3).parse_commodity()
@@ -592,7 +591,6 @@ mod tests {
                 got: ScannerError {
                     rng: Rng::new(f4.clone(), 0, 1),
                     want: Character::AlphaNum,
-                    got: Character::Char('/'),
                 },
             }),
             Parser::new(&f4).parse_commodity()
@@ -633,7 +631,6 @@ mod tests {
                 got: ScannerError {
                     rng: Rng::new(f3.clone(), 0, 1),
                     want: Character::AlphaNum,
-                    got: Character::HorizontalSpace,
                 },
             }),
             Parser::new(&f3).parse_account(),
@@ -657,9 +654,8 @@ mod tests {
                 rng: Rng::new(f.clone(), 0, 4),
                 want: Token::Date,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 0, 4),
+                    rng: Rng::new(f.clone(), 3, 4),
                     want: Character::Digit,
-                    got: Character::Char('-'),
                 },
             }),
             Parser::new(&f).parse_date(),
@@ -674,9 +670,8 @@ mod tests {
                 rng: Rng::new(f.clone(), 0, 9),
                 want: Token::Date,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 8, 9),
+                    rng: Rng::new(f.clone(), 9, 9),
                     want: Character::Digit,
-                    got: Character::EOF,
                 },
             }),
             Parser::new(&f).parse_date(),
@@ -690,9 +685,8 @@ mod tests {
                 rng: Rng::new(f.clone(), 0, 7),
                 want: Token::Date,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 5, 7),
+                    rng: Rng::new(f.clone(), 6, 7),
                     want: Character::Digit,
-                    got: Character::Char('-'),
                 },
             }),
             Parser::new(&f).parse_date()
@@ -732,7 +726,6 @@ mod tests {
                 got: ScannerError {
                     rng: Rng::new(f.clone(), 0, 1),
                     want: Character::Digit,
-                    got: Character::Char('f'),
                 },
             }),
             Parser::new(&f).parse_decimal(),

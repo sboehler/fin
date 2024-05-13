@@ -15,12 +15,11 @@ pub struct Scanner<'a> {
 pub struct ScannerError {
     pub rng: Rng,
     pub want: Character,
-    pub got: Character,
 }
 
 pub type Result<T> = std::result::Result<T, ScannerError>;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Character {
     EOF,
     Char(char),
@@ -73,11 +72,10 @@ struct Scope<'a, 'b> {
 }
 
 impl<'a, 'b> Scope<'a, 'b> {
-    fn error(&self, want: Character, got: Character) -> ScannerError {
+    fn error(&self, want: &Character) -> ScannerError {
         ScannerError {
             rng: self.s.rng(self.start),
-            want,
-            got,
+            want: want.clone(),
         }
     }
     fn rng(&self) -> Rng {
@@ -123,16 +121,16 @@ impl<'a> Scanner<'a> {
             .map_or_else(|| self.source.text.len(), |t| t.0)
     }
 
-    pub fn read_while_1(&self, ch: Character) -> Result<Rng> {
+    pub fn read_while_1(&self, ch: &Character) -> Result<Rng> {
         let scope = self.scope();
         if !ch.is(self.current()) {
-            let c = self.advance();
-            return Err(scope.error(ch, Character::from_char(c)));
+            self.advance();
+            return Err(scope.error(&ch));
         }
         Ok(self.read_while(ch))
     }
 
-    pub fn read_while(&self, ch: Character) -> Rng {
+    pub fn read_while(&self, ch: &Character) -> Rng {
         let scope = self.scope();
         while ch.is(self.current()) {
             self.advance();
@@ -140,7 +138,7 @@ impl<'a> Scanner<'a> {
         scope.rng()
     }
 
-    pub fn read_until(&self, ch: Character) -> Rng {
+    pub fn read_until(&self, ch: &Character) -> Rng {
         let scope = self.scope();
         while !ch.is(self.current()) {
             self.advance();
@@ -149,23 +147,23 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn read_all(&self) -> Rng {
-        self.read_while(Character::Any)
+        self.read_while(&Character::Any)
     }
 
-    pub fn read_char(&self, ch: Character) -> Result<Rng> {
+    pub fn read_char(&self, ch: &Character) -> Result<Rng> {
         let scope = self.scope();
         let c = self.advance();
         if ch.is(c) {
             Ok(scope.rng())
         } else {
-            Err(scope.error(ch, Character::from_char(c)))
+            Err(scope.error(ch))
         }
     }
 
     pub fn read_string(&self, str: &str) -> Result<Rng> {
         let scope = self.scope();
         for c in str.chars() {
-            self.read_char(Character::Char(c))?;
+            self.read_char(&Character::Char(c))?;
         }
         Ok(scope.rng())
     }
@@ -174,17 +172,14 @@ impl<'a> Scanner<'a> {
         let scope = self.scope();
         match self.advance() {
             Some(_) => Ok(scope.rng()),
-            None => Err(scope.error(Character::Any, Character::EOF)),
+            None => Err(scope.error(&Character::Any)),
         }
     }
 
     pub fn read_n(&self, n: usize, token: Character) -> Result<Rng> {
         let scope = self.scope();
         for _ in 0..n {
-            let c = self.advance();
-            if !token.is(c) {
-                return Err(scope.error(token, Character::from_char(c)));
-            }
+            self.read_char(&token)?;
         }
         Ok(scope.rng())
     }
@@ -194,10 +189,10 @@ impl<'a> Scanner<'a> {
         let c = self.advance();
         match c {
             None | Some('\n') => Ok(scope.rng()),
-            Some(ch) => Err(scope.error(
-                Character::OneOf(vec![Character::Char('\n'), Character::EOF]),
-                Character::Char(ch),
-            )),
+            _ => Err(scope.error(&Character::OneOf(vec![
+                Character::Char('\n'),
+                Character::EOF,
+            ]))),
         }
     }
 
@@ -206,19 +201,19 @@ impl<'a> Scanner<'a> {
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
                 self.advance();
-                Err(scope.error(Character::HorizontalSpace, Character::Char(ch)))
+                Err(scope.error(&Character::HorizontalSpace))
             }
             _ => Ok(self.read_space()),
         }
     }
 
     pub fn read_space(&self) -> Rng {
-        self.read_while(Character::HorizontalSpace)
+        self.read_while(&Character::HorizontalSpace)
     }
 
     pub fn read_rest_of_line(&self) -> Result<Rng> {
         let scope = self.scope();
-        self.read_while(Character::HorizontalSpace);
+        self.read_while(&Character::HorizontalSpace);
         self.read_eol()?;
         Ok(scope.rng())
     }
@@ -233,9 +228,9 @@ mod test_scanner {
     fn test_read_while() {
         let mem = File::mem("aaasdff");
         let s = Scanner::new(&mem);
-        assert_eq!("aaasd", s.read_while(Character::NotChar('f')).text());
-        assert_eq!("ff", s.read_while(Character::Char('f')).text());
-        assert_eq!("", s.read_while(Character::Char('q')).text());
+        assert_eq!("aaasd", s.read_while(&Character::NotChar('f')).text());
+        assert_eq!("ff", s.read_while(&Character::Char('f')).text());
+        assert_eq!("", s.read_while(&Character::Char('q')).text());
         assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
     }
 
@@ -245,21 +240,22 @@ mod test_scanner {
         let s = Scanner::new(&f);
         assert_eq!(
             Ok("aaasd"),
-            s.read_while_1(Character::NotChar('f'))
+            s.read_while_1(&Character::NotChar('f'))
                 .as_ref()
                 .map(Rng::text)
         );
         assert_eq!(
             Ok("ff"),
-            s.read_while_1(Character::Char('f')).as_ref().map(Rng::text)
+            s.read_while_1(&Character::Char('f'))
+                .as_ref()
+                .map(Rng::text)
         );
         assert_eq!(
             Err(ScannerError {
                 rng: Rng::new(f.clone(), 7, 7),
                 want: Character::Char('q'),
-                got: Character::EOF
             }),
-            s.read_while_1(Character::Char('q'))
+            s.read_while_1(&Character::Char('q'))
         );
         assert_eq!("", s.read_eol().unwrap().text());
     }
@@ -268,18 +264,17 @@ mod test_scanner {
     fn test_read_char() {
         let f = File::mem("asdf");
         let s = Scanner::new(&f);
-        assert_eq!("a", s.read_char(Character::Char('a')).unwrap().text());
+        assert_eq!("a", s.read_char(&Character::Char('a')).unwrap().text());
         assert_eq!(
             Err(ScannerError {
                 rng: Rng::new(f.clone(), 1, 2),
                 want: Character::Char('q'),
-                got: Character::Char('s')
             }),
-            s.clone().read_char(Character::Char('q'))
+            s.clone().read_char(&Character::Char('q'))
         );
-        assert_eq!("s", s.read_char(Character::Char('s')).unwrap().text());
-        assert_eq!("d", s.read_char(Character::Char('d')).unwrap().text());
-        assert_eq!("f", s.read_char(Character::Char('f')).unwrap().text());
+        assert_eq!("s", s.read_char(&Character::Char('s')).unwrap().text());
+        assert_eq!("d", s.read_char(&Character::Char('d')).unwrap().text());
+        assert_eq!("f", s.read_char(&Character::Char('f')).unwrap().text());
         assert_eq!("", s.read_eol().unwrap().text());
     }
 
@@ -292,9 +287,8 @@ mod test_scanner {
             Err(ScannerError {
                 rng: Rng::new(f.clone(), 2, 3),
                 want: Character::Char('q'),
-                got: Character::Char('d')
             }),
-            s.clone().read_char(Character::Char('q'))
+            s.clone().read_char(&Character::Char('q'))
         );
         assert_eq!(Ok("df"), s.read_string("df").as_ref().map(Rng::text));
         assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
@@ -311,7 +305,6 @@ mod test_scanner {
             Err(ScannerError {
                 rng: Rng::new(f.clone(), 5, 6),
                 want: Character::OneOf(vec![Character::Char('\n'), Character::EOF]),
-                got: Character::Char('f')
             }),
             s.clone().read_rest_of_line()
         );
@@ -330,7 +323,6 @@ mod test_scanner {
             Err(ScannerError {
                 rng: Rng::new(f.clone(), 3, 3),
                 want: Character::Any,
-                got: Character::EOF
             }),
             s.read_1()
         );
@@ -348,9 +340,8 @@ mod test_scanner {
         assert_eq!(Ok(""), s.read_n(0, Character::Any).as_ref().map(Rng::text));
         assert_eq!(
             Err(ScannerError {
-                rng: Rng::new(f.clone(), 2, 4),
+                rng: Rng::new(f.clone(), 4, 4),
                 want: Character::Any,
-                got: Character::EOF
             }),
             s.read_n(3, Character::Any)
         );
@@ -365,7 +356,6 @@ mod test_scanner {
             Err(ScannerError {
                 rng: Rng::new(f.clone(), 0, 1),
                 want: Character::OneOf(vec![Character::Char('\n'), Character::EOF]),
-                got: Character::Char('a')
             }),
             s.clone().read_eol()
         );
@@ -388,7 +378,6 @@ mod test_scanner {
             Err(ScannerError {
                 rng: Rng::new(f.clone(), 5, 6),
                 want: Character::HorizontalSpace,
-                got: Character::Char('b')
             }),
             s.clone().read_space_1()
         );
