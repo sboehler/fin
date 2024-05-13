@@ -91,6 +91,13 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    pub fn snapshot(&self) -> Box<dyn FnOnce() -> () + '_> {
+        let s = self.chars.borrow().clone();
+        Box::new(|| {
+            let _ = self.chars.replace(s);
+        })
+    }
+
     pub fn rng(&self, start: usize) -> Rng {
         Rng {
             file: self.source.clone(),
@@ -292,6 +299,21 @@ mod test_scanner {
         );
         assert_eq!(Ok("df"), s.read_string("df").as_ref().map(Rng::text));
         assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
+    }
+
+    #[test]
+    fn test_read_transaction() {
+        let f = File::mem("asdf");
+        let s = Scanner::new(&f);
+        let rollback = s.snapshot();
+
+        assert_eq!(Ok("asdf"), s.read_string("asdf").as_ref().map(Rng::text));
+        assert_eq!(s.current(), None);
+
+        rollback();
+
+        assert_eq!(s.current(), Some('a'));
+        assert_eq!(Ok("asdf"), s.read_string("asdf").as_ref().map(Rng::text));
     }
 
     #[test]
