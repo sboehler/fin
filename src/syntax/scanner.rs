@@ -1,8 +1,8 @@
-use super::cst::Rng;
+use super::cst::{Character, Rng, Sequence, Token};
+use super::error::SyntaxError;
 use super::file::File;
 use std::rc::Rc;
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
-use thiserror::Error;
 
 #[derive(Clone)]
 pub struct Scanner<'a> {
@@ -10,69 +10,7 @@ pub struct Scanner<'a> {
     chars: RefCell<Peekable<CharIndices<'a>>>,
 }
 
-#[derive(Error, Debug, Eq, PartialEq)]
-#[error("syntax error")]
-pub struct ScannerError {
-    pub rng: Rng,
-    pub want: Sequence,
-}
-
-pub type Result<T> = std::result::Result<T, ScannerError>;
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Character {
-    EOF,
-    Char(char),
-    NotChar(char),
-    Digit,
-    Alphabetic,
-    AlphaNum,
-    Any,
-    HorizontalSpace,
-    NewLine,
-    OneOf(Vec<Character>),
-}
-
-impl Character {
-    pub fn from_char(ch: Option<char>) -> Self {
-        match ch {
-            None => Self::EOF,
-            Some('\n') => Self::NewLine,
-            Some(c) if c.is_whitespace() => Self::HorizontalSpace,
-            Some(c) => Self::Char(c),
-        }
-    }
-
-    pub fn is(&self, o: Option<char>) -> bool {
-        match o {
-            None => match self {
-                Character::EOF => true,
-                Character::NewLine => true,
-                _ => false,
-            },
-            Some(c) => match self {
-                Character::EOF => false,
-                Character::Char(a) => c == *a,
-                Character::NotChar(a) => c != *a,
-                Character::Digit => c.is_ascii_digit(),
-                Character::Alphabetic => c.is_alphabetic(),
-                Character::AlphaNum => c.is_alphanumeric(),
-                Character::Any => true,
-                Character::HorizontalSpace => c.is_ascii_whitespace() && c != '\n',
-                Character::NewLine => c == '\n',
-                Character::OneOf(cs) => cs.iter().any(|c| c.is(o)),
-            },
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Sequence {
-    One(Character),
-    OneOf(Vec<Sequence>),
-    NumberOf(usize, Character),
-    String(Vec<Character>),
-}
+pub type Result<T> = std::result::Result<T, SyntaxError>;
 
 struct Scope<'a, 'b> {
     s: &'a Scanner<'b>,
@@ -80,17 +18,19 @@ struct Scope<'a, 'b> {
 }
 
 impl<'a, 'b> Scope<'a, 'b> {
-    fn character_error(&self, want: &Character) -> ScannerError {
-        ScannerError {
+    fn character_error(&self, want: &Character) -> SyntaxError {
+        SyntaxError {
             rng: self.s.rng(self.start),
-            want: Sequence::One(want.clone()),
+            want: Token::Sequence(Sequence::One(want.clone())),
+            source: None,
         }
     }
 
-    fn error(&self, want: &Sequence) -> ScannerError {
-        ScannerError {
+    fn error(&self, want: &Sequence) -> SyntaxError {
+        SyntaxError {
             rng: self.s.rng(self.start),
-            want: want.clone(),
+            want: Token::Sequence(want.clone()),
+            source: None,
         }
     }
 
@@ -107,7 +47,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn snapshot(&self) -> Box<dyn FnOnce() -> () + '_> {
+    pub fn snapshot(&self) -> Box<dyn FnOnce() + '_> {
         let s = self.chars.borrow().clone();
         Box::new(|| {
             let _ = self.chars.replace(s);
@@ -148,7 +88,7 @@ impl<'a> Scanner<'a> {
         let scope = self.scope();
         if !ch.is(self.current()) {
             self.advance();
-            return Err(scope.character_error(&ch));
+            return Err(scope.character_error(ch));
         }
         Ok(self.read_while(ch))
     }
@@ -195,7 +135,7 @@ impl<'a> Scanner<'a> {
         let scope = self.scope();
         match seq {
             Sequence::One(ch) => {
-                self.read_char(&ch)?;
+                self.read_char(ch)?;
                 Ok(scope.rng())
             }
             Sequence::OneOf(seqs) => {
@@ -208,18 +148,18 @@ impl<'a> Scanner<'a> {
                 }
                 // todo: report a sequence error
                 self.advance();
-                Err(scope.error(&seq))
+                Err(scope.error(seq))
             }
             Sequence::NumberOf(n, char) => {
                 for _ in 0..*n {
                     // todo: rollback errors
-                    self.read_char(&char).map_err(|_| scope.error(seq))?;
+                    self.read_char(char).map_err(|_| scope.error(seq))?;
                 }
                 Ok(scope.rng())
             }
             Sequence::String(chars) => {
                 for c in chars {
-                    self.read_char(&c).map_err(|_| scope.error(seq))?;
+                    self.read_char(c).map_err(|_| scope.error(seq))?;
                 }
                 Ok(scope.rng())
             }
@@ -301,9 +241,10 @@ mod test_scanner {
                 .map(Rng::text)
         );
         assert_eq!(
-            Err(ScannerError {
+            Err(SyntaxError {
                 rng: Rng::new(f.clone(), 7, 7),
-                want: Sequence::One(Character::Char('q')),
+                want: Token::Sequence(Sequence::One(Character::Char('q'))),
+                source: None,
             }),
             s.read_while_1(&Character::Char('q'))
         );
@@ -316,9 +257,10 @@ mod test_scanner {
         let s = Scanner::new(&f);
         assert_eq!("a", s.read_char(&Character::Char('a')).unwrap().text());
         assert_eq!(
-            Err(ScannerError {
+            Err(SyntaxError {
                 rng: Rng::new(f.clone(), 1, 2),
-                want: Sequence::One(Character::Char('q')),
+                want: Token::Sequence(Sequence::One(Character::Char('q'))),
+                source: None,
             }),
             s.clone().read_char(&Character::Char('q'))
         );
@@ -334,9 +276,10 @@ mod test_scanner {
         let s = Scanner::new(&f);
         assert_eq!(Ok("as"), s.read_string("as").as_ref().map(Rng::text));
         assert_eq!(
-            Err(ScannerError {
+            Err(SyntaxError {
                 rng: Rng::new(f.clone(), 2, 3),
-                want: Sequence::One(Character::Char('q')),
+                want: Token::Sequence(Sequence::One(Character::Char('q'))),
+                source: None,
             }),
             s.clone().read_char(&Character::Char('q'))
         );
@@ -367,12 +310,13 @@ mod test_scanner {
         assert_eq!(Ok("\n"), s.read_rest_of_line().as_ref().map(Rng::text));
         assert_eq!(Ok("  \n"), s.read_rest_of_line().as_ref().map(Rng::text));
         assert_eq!(
-            Err(ScannerError {
+            Err(SyntaxError {
                 rng: Rng::new(f.clone(), 5, 6),
-                want: Sequence::One(Character::OneOf(vec![
+                want: Token::Sequence(Sequence::One(Character::OneOf(vec![
                     Character::Char('\n'),
                     Character::EOF
-                ])),
+                ]))),
+                source: None,
             }),
             s.clone().read_rest_of_line()
         );
@@ -388,9 +332,10 @@ mod test_scanner {
         assert_eq!(Ok("o"), s.read_1().as_ref().map(Rng::text));
         assert_eq!(Ok("o"), s.read_1().as_ref().map(Rng::text));
         assert_eq!(
-            Err(ScannerError {
+            Err(SyntaxError {
                 rng: Rng::new(f.clone(), 3, 3),
-                want: Sequence::One(Character::Any),
+                want: Token::Sequence(Sequence::One(Character::Any)),
+                source: None,
             }),
             s.read_1()
         );
@@ -414,9 +359,10 @@ mod test_scanner {
                 .map(Rng::text)
         );
         assert_eq!(
-            Err(ScannerError {
+            Err(SyntaxError {
                 rng: Rng::new(f.clone(), 2, 4),
-                want: Sequence::NumberOf(3, Character::Any),
+                want: Token::Sequence(Sequence::NumberOf(3, Character::Any)),
+                source: None,
             }),
             s.read_sequence(&Sequence::NumberOf(3, Character::Any))
         );
@@ -428,12 +374,13 @@ mod test_scanner {
         let f = File::mem("a\n\n");
         let s = Scanner::new(&f);
         assert_eq!(
-            Err(ScannerError {
+            Err(SyntaxError {
                 rng: Rng::new(f.clone(), 0, 1),
-                want: Sequence::One(Character::OneOf(vec![
+                want: Token::Sequence(Sequence::One(Character::OneOf(vec![
                     Character::Char('\n'),
                     Character::EOF
-                ])),
+                ]))),
+                source: None,
             }),
             s.clone().read_eol()
         );
@@ -453,9 +400,10 @@ mod test_scanner {
         assert_eq!(Ok("a"), s.read_1().as_ref().map(Rng::text));
         assert_eq!(Ok("\t\t"), s.read_space_1().as_ref().map(Rng::text));
         assert_eq!(
-            Err(ScannerError {
+            Err(SyntaxError {
                 rng: Rng::new(f.clone(), 5, 6),
-                want: Sequence::One(Character::HorizontalSpace),
+                want: Token::Sequence(Sequence::One(Character::HorizontalSpace)),
+                source: None,
             }),
             s.clone().read_space_1()
         );

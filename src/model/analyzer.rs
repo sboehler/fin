@@ -178,13 +178,18 @@ impl<'a> Analyzer<'a> {
     }
 
     fn analyze_date(&mut self, date: &cst::Date) -> Result<NaiveDate> {
-        NaiveDate::parse_from_str(date.0.text(), "%Y-%m-%d")
-            .map_err(|e| SyntaxError::new(date.0.clone(), Some(e.to_string()), cst::Token::Date))
+        NaiveDate::parse_from_str(date.0.text(), "%Y-%m-%d").map_err(|_| SyntaxError {
+            rng: date.0.clone(),
+            want: cst::Token::Date,
+            source: None,
+        })
     }
 
     fn analyze_decimal(&self, decimal: &cst::Decimal) -> Result<rust_decimal::Decimal> {
-        rust_decimal::Decimal::from_str_exact(decimal.0.text()).map_err(|e| {
-            SyntaxError::new(decimal.0.clone(), Some(e.to_string()), cst::Token::Decimal)
+        rust_decimal::Decimal::from_str_exact(decimal.0.text()).map_err(|_| SyntaxError {
+            rng: decimal.0.clone(),
+            want: cst::Token::Decimal,
+            source: None,
         })
     }
 
@@ -196,7 +201,11 @@ impl<'a> Analyzer<'a> {
             "quarterly" => Ok(Interval::Quarterly),
             "yearly" => Ok(Interval::Yearly),
             "once" => Ok(Interval::Once),
-            _ => Err(SyntaxError::new(d.clone(), None, cst::Token::Decimal)),
+            _ => Err(SyntaxError {
+                rng: d.clone(),
+                want: cst::Token::Decimal,
+                source: None,
+            }),
         }
     }
 
@@ -205,12 +214,10 @@ impl<'a> Analyzer<'a> {
             .registry
             .borrow_mut()
             .commodity(commodity.0.text())
-            .map_err(|e| {
-                SyntaxError::new(
-                    commodity.0.clone(),
-                    Some(e.to_string()),
-                    cst::Token::Custom("identifier".into()),
-                )
+            .map_err(|_e| SyntaxError {
+                rng: commodity.0.clone(),
+                want: cst::Token::Commodity,
+                source: None,
             })
     }
 
@@ -219,12 +226,10 @@ impl<'a> Analyzer<'a> {
             .registry
             .borrow_mut()
             .account(account.range.text())
-            .map_err(|e| {
-                SyntaxError::new(
-                    account.range.clone(),
-                    Some(e.to_string()),
-                    cst::Token::Custom("account".into()),
-                )
+            .map_err(|_e| SyntaxError {
+                rng: account.range.clone(),
+                want: cst::Token::Account,
+                source: None,
             })
     }
 

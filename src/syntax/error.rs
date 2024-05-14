@@ -1,29 +1,22 @@
 use std::{error::Error, fmt::Display, io, path::PathBuf};
 
+use thiserror::Error;
+
 use super::cst::{Rng, Token};
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Error, Debug, Eq, PartialEq)]
 pub struct SyntaxError {
     pub rng: Rng,
-    pub msg: Option<String>,
     pub want: Token,
+    pub source: Option<Box<SyntaxError>>,
 }
 
 impl SyntaxError {
-    pub fn new(rng: Rng, msg: Option<String>, want: Token) -> SyntaxError {
-        SyntaxError { rng, msg, want }
-    }
-
     fn position(t: &str, pos: usize) -> (usize, usize) {
         let lines: Vec<_> = t[..pos].split(|c| c == '\n').collect();
         let line = lines.len().saturating_sub(1);
         let col = lines.last().map(|s| s.len()).unwrap_or(0);
         (line, col)
-    }
-
-    pub fn update(mut self, msg: &str) -> Self {
-        self.msg = Some(msg.into());
-        self
     }
 }
 
@@ -42,12 +35,14 @@ impl std::fmt::Display for SyntaxError {
             .map(|(i, l)| (i, l.to_string()))
             .collect::<Vec<(usize, String)>>();
         writeln!(f)?;
-        write!(f, "Line {line}, column {col}:", line = line, col = col,)?;
-        if let Some(ref s) = self.msg {
-            writeln!(f, " while {}", s)?;
-        } else {
-            writeln!(f)?;
-        }
+        write!(
+            f,
+            "Line {line}, column {col}: while parsing {want}",
+            line = line,
+            col = col,
+            want = self.want
+        )?;
+        writeln!(f)?;
         writeln!(f)?;
 
         for (n, line) in context {
@@ -64,8 +59,6 @@ impl std::fmt::Display for SyntaxError {
     }
 }
 
-impl std::error::Error for SyntaxError {}
-
 #[cfg(test)]
 mod test_parser_error {
     use crate::syntax::file::File;
@@ -78,17 +71,17 @@ mod test_parser_error {
         assert_eq!(
             [
                 "",
-                "Line 0, column 1: while parsing file",
+                "Line 0, column 1: while parsing source file",
                 "",
                 "    0|asdf",
-                "       ^ want whitespace, got 's'",
+                "       ^ want source file, got 's'",
                 ""
             ]
             .join("\n"),
             SyntaxError {
-                want: Token::WhiteSpace,
-                msg: Some("parsing file".into()),
+                want: Token::File,
                 rng: Rng::new(File::mem("asdf"), 1, 2),
+                source: None,
             }
             .to_string()
         );

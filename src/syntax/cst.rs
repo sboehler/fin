@@ -1,6 +1,6 @@
-use std::rc::Rc;
+use std::{fmt::Display, rc::Rc};
 
-use super::{error::SyntaxError, file::File};
+use super::file::File;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Rng {
@@ -27,6 +27,110 @@ impl Rng {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Character {
+    EOF,
+    Char(char),
+    NotChar(char),
+    Digit,
+    Alphabetic,
+    AlphaNum,
+    Any,
+    HorizontalSpace,
+    NewLine,
+    OneOf(Vec<Character>),
+}
+
+impl Character {
+    pub fn from_char(ch: Option<char>) -> Self {
+        match ch {
+            None => Self::EOF,
+            Some('\n') => Self::NewLine,
+            Some(c) if c.is_whitespace() => Self::HorizontalSpace,
+            Some(c) => Self::Char(c),
+        }
+    }
+
+    pub fn is(&self, o: Option<char>) -> bool {
+        match o {
+            None => matches!(self, Character::EOF | Character::NewLine),
+            Some(c) => match self {
+                Character::EOF => false,
+                Character::Char(a) => c == *a,
+                Character::NotChar(a) => c != *a,
+                Character::Digit => c.is_ascii_digit(),
+                Character::Alphabetic => c.is_alphabetic(),
+                Character::AlphaNum => c.is_alphanumeric(),
+                Character::Any => true,
+                Character::HorizontalSpace => c.is_ascii_whitespace() && c != '\n',
+                Character::NewLine => c == '\n',
+                Character::OneOf(cs) => cs.iter().any(|c| c.is(o)),
+            },
+        }
+    }
+}
+
+impl Display for Character {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Character::EOF => write!(f, "EOF"),
+            Character::Char(ch) => write!(f, "'{}'", ch),
+            Character::NotChar(ch) => write!(f, "not '{}'", ch),
+            Character::Digit => write!(f, "digit"),
+            Character::Alphabetic => write!(f, "alphabetic character"),
+            Character::AlphaNum => write!(f, "alphanumeric character"),
+            Character::Any => write!(f, "any character"),
+            Character::HorizontalSpace => write!(f, "horizontal space"),
+            Character::NewLine => write!(f, "newline"),
+            Character::OneOf(chs) => {
+                write!(
+                    f,
+                    "one of: {}",
+                    chs.iter()
+                        .map(|c| c.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Sequence {
+    One(Character),
+    OneOf(Vec<Sequence>),
+    NumberOf(usize, Character),
+    String(Vec<Character>),
+}
+
+impl Display for Sequence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Sequence::One(ch) => write!(f, "{}", ch),
+            Sequence::OneOf(seq) => {
+                write!(
+                    f,
+                    "{}",
+                    seq.iter()
+                        .map(Sequence::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            Sequence::NumberOf(n, ch) => write!(f, "{} {}", n, ch),
+            Sequence::String(ch) => write!(
+                f,
+                "{}",
+                ch.iter()
+                    .map(Character::to_string)
+                    .collect::<Vec<_>>()
+                    .join("")
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Token {
     EOF,
@@ -39,7 +143,8 @@ pub enum Token {
     Performance,
     BlankLine,
     Booking,
-    Char(char),
+    Character(Character),
+    Sequence(Sequence),
     Transaction,
     Price,
     Open,
@@ -58,15 +163,13 @@ pub enum Token {
     Date,
     WhiteSpace,
     Custom(String),
-    Error(Box<SyntaxError>),
 }
 
-impl std::fmt::Display for Token {
+impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Token::EOF => write!(f, "EOF"),
-            Token::Error(_) => write!(f, "error"),
-            Token::Char(ch) => write!(f, "'{}'", ch.escape_debug()),
+            Token::Character(ch) => write!(f, "{}", ch),
             Token::Digit => write!(f, "a digit (0-9)"),
             Token::Decimal => write!(f, "a decimal number"),
             Token::Directive => write!(f, "a directive"),
@@ -108,6 +211,7 @@ impl std::fmt::Display for Token {
             Token::Commodity => write!(f, "commodity"),
             Token::File => write!(f, "source file"),
             Token::Account => write!(f, "account"),
+            Token::Sequence(seq) => write!(f, "{}", seq),
         }
     }
 }
