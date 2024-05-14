@@ -7,7 +7,7 @@ use super::cst::{
     SyntaxTree, Token,
 };
 use super::file::File;
-use super::scanner::{Character, ScannerError};
+use super::scanner::{Character, ScannerError, Sequence};
 use crate::syntax::scanner::Scanner;
 
 pub struct Parser<'a> {
@@ -125,11 +125,17 @@ impl<'a> Parser<'a> {
     fn parse_date(&self) -> Result<Date> {
         let scope = self.scope(Token::Date);
         self.scanner
-            .read_n(4, Character::Digit)
+            .read_sequence(&Sequence::NumberOf(4, Character::Digit))
             .and_then(|_| self.scanner.read_char(&Character::Char('-')))
-            .and_then(|_| self.scanner.read_n(2, Character::Digit))
+            .and_then(|_| {
+                self.scanner
+                    .read_sequence(&Sequence::NumberOf(2, Character::Digit))
+            })
             .and_then(|_| self.scanner.read_char(&Character::Char('-')))
-            .and_then(|_| self.scanner.read_n(2, Character::Digit))
+            .and_then(|_| {
+                self.scanner
+                    .read_sequence(&Sequence::NumberOf(2, Character::Digit))
+            })
             .map_err(|e| scope.scanner_error(e))?;
         Ok(Date(scope.rng()))
     }
@@ -543,7 +549,7 @@ impl<'a> Parser<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::syntax::cst::Rng;
+    use crate::syntax::{cst::Rng, scanner::Sequence};
 
     use super::*;
 
@@ -574,7 +580,7 @@ mod tests {
                 want: Token::Commodity,
                 got: ScannerError {
                     rng: Rng::new(f3.clone(), 0, 1),
-                    want: Character::AlphaNum,
+                    want: Sequence::One(Character::AlphaNum),
                 },
             }),
             Parser::new(&f3).parse_commodity()
@@ -590,7 +596,7 @@ mod tests {
                 want: Token::Commodity,
                 got: ScannerError {
                     rng: Rng::new(f4.clone(), 0, 1),
-                    want: Character::AlphaNum,
+                    want: Sequence::One(Character::AlphaNum),
                 },
             }),
             Parser::new(&f4).parse_commodity()
@@ -630,7 +636,7 @@ mod tests {
                 want: Token::Account,
                 got: ScannerError {
                     rng: Rng::new(f3.clone(), 0, 1),
-                    want: Character::AlphaNum,
+                    want: Sequence::One(Character::AlphaNum),
                 },
             }),
             Parser::new(&f3).parse_account(),
@@ -654,8 +660,8 @@ mod tests {
                 rng: Rng::new(f.clone(), 0, 4),
                 want: Token::Date,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 3, 4),
-                    want: Character::Digit,
+                    rng: Rng::new(f.clone(), 0, 4),
+                    want: Sequence::NumberOf(4, Character::Digit),
                 },
             }),
             Parser::new(&f).parse_date(),
@@ -670,8 +676,8 @@ mod tests {
                 rng: Rng::new(f.clone(), 0, 9),
                 want: Token::Date,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 9, 9),
-                    want: Character::Digit,
+                    rng: Rng::new(f.clone(), 8, 9),
+                    want: Sequence::NumberOf(2, Character::Digit),
                 },
             }),
             Parser::new(&f).parse_date(),
@@ -685,8 +691,8 @@ mod tests {
                 rng: Rng::new(f.clone(), 0, 7),
                 want: Token::Date,
                 got: ScannerError {
-                    rng: Rng::new(f.clone(), 6, 7),
-                    want: Character::Digit,
+                    rng: Rng::new(f.clone(), 5, 7),
+                    want: Sequence::NumberOf(2, Character::Digit),
                 },
             }),
             Parser::new(&f).parse_date()
@@ -725,7 +731,7 @@ mod tests {
                 want: Token::Decimal,
                 got: ScannerError {
                     rng: Rng::new(f.clone(), 0, 1),
-                    want: Character::Digit,
+                    want: Sequence::One(Character::Digit),
                 },
             }),
             Parser::new(&f).parse_decimal(),
