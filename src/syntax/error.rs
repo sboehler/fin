@@ -69,10 +69,11 @@ mod test_parser_error {
         assert_eq!(
             [
                 "",
-                "Line 0, column 1: while parsing source file",
+                "Line 1, column 2: while parsing a source file",
                 "",
-                "    0|asdf",
-                "       ^ want source file, got 's'",
+                "    1 |asdf",
+                "        ^ want a source file",
+                "",
                 ""
             ]
             .join("\n"),
@@ -83,15 +84,15 @@ mod test_parser_error {
             }
             .to_string()
         );
-        assert_eq!(SyntaxError::position("foo\nbar\n", 0), (0, 0));
-        assert_eq!(SyntaxError::position("foo\nbar\n", 1), (0, 1));
-        assert_eq!(SyntaxError::position("foo\nbar\n", 2), (0, 2));
-        assert_eq!(SyntaxError::position("foo\nbar\n", 3), (0, 3));
-        assert_eq!(SyntaxError::position("foo\nbar\n", 4), (1, 0));
-        assert_eq!(SyntaxError::position("foo\nbar\n", 5), (1, 1));
-        assert_eq!(SyntaxError::position("foo\nbar\n", 6), (1, 2));
-        assert_eq!(SyntaxError::position("foo\nbar\n", 7), (1, 3));
-        assert_eq!(SyntaxError::position("foo\nbar\n", 8), (2, 0));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 0), (1, 1));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 1), (1, 2));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 2), (1, 3));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 3), (1, 4));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 4), (2, 1));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 5), (2, 2));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 6), (2, 3));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 7), (2, 4));
+        assert_eq!(SyntaxError::position("foo\nbar\n", 8), (3, 1));
     }
 }
 

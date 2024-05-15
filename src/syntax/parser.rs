@@ -152,8 +152,8 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_decimal(&self) -> Result<Decimal> {
-        let scope = self.scope(Token::Decimal);
+    fn parse_decimal(&self, token: Token) -> Result<Decimal> {
+        let scope = self.scope(token);
         if let Some('-') = self.scanner.current() {
             self.scanner
                 .read_char(&Character::Char('-'))
@@ -299,14 +299,13 @@ impl<'a> Parser<'a> {
             .read_char(&Character::Char('@'))
             .map_err(|e| scope.error(e))?;
         match self.scanner.current() {
-            Some('p') => self.parse_performance(&scope),
-            Some('a') => self.parse_accrual(&scope),
+            Some('p') => self.parse_performance(&scope.with(Token::Performance)),
+            Some('a') => self.parse_accrual(&scope.with(Token::Accrual)),
             _o => Err(scope.token_error())?,
         }
     }
 
-    fn parse_performance(&self, original_scope: &Scope) -> Result<Addon> {
-        let scope = self.scope(Token::Performance);
+    fn parse_performance(&self, scope: &Scope) -> Result<Addon> {
         self.scanner
             .read_string("performance")
             .map_err(|e| scope.error(e))?;
@@ -330,13 +329,12 @@ impl<'a> Parser<'a> {
             .read_char(&Character::Char(')'))
             .map_err(|e| scope.error(e))?;
         Ok(Addon::Performance {
-            range: original_scope.rng(),
+            range: scope.rng(),
             commodities,
         })
     }
 
-    fn parse_accrual(&self, original_scope: &Scope) -> Result<Addon> {
-        let scope = self.scope(Token::Accrual);
+    fn parse_accrual(&self, scope: &Scope) -> Result<Addon> {
         self.scanner
             .read_string("accrue")
             .map_err(|e| scope.error(e))?;
@@ -349,7 +347,7 @@ impl<'a> Parser<'a> {
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let account = self.parse_account().map_err(|e| scope.error(e))?;
         Ok(Addon::Accrual {
-            range: original_scope.rng(),
+            range: scope.rng(),
             interval,
             start: start_date,
             end: end_date,
@@ -357,19 +355,20 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_price(&self, original_scope: &Scope, date: Date) -> Result<Directive> {
-        let scope = self.scope(Token::Price);
+    fn parse_price(&self, scope: &Scope, date: Date) -> Result<Directive> {
         self.scanner
             .read_string("price")
             .and_then(|_| self.scanner.read_space_1())
             .map_err(|e| scope.error(e))?;
         let commodity = self.parse_commodity().map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let price = self.parse_decimal().map_err(|e| scope.error(e))?;
+        let price = self
+            .parse_decimal(Token::Price)
+            .map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let target = self.parse_commodity().map_err(|e| scope.error(e))?;
         Ok(Directive::Price {
-            range: original_scope.rng(),
+            range: scope.rng(),
             date,
             commodity,
             price,
@@ -377,15 +376,14 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_open(&self, original_scope: &Scope, date: Date) -> Result<Directive> {
-        let scope = self.scope(Token::Open);
+    fn parse_open(&self, scope: &Scope, date: Date) -> Result<Directive> {
         self.scanner
             .read_string("open")
             .and_then(|_| self.scanner.read_space_1())
             .map_err(|e| scope.error(e))?;
         let a = self.parse_account().map_err(|e| scope.error(e))?;
         Ok(Directive::Open {
-            range: original_scope.rng(),
+            range: scope.rng(),
             date,
             account: a,
         })
@@ -426,7 +424,9 @@ impl<'a> Parser<'a> {
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let debit = self.parse_account().map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let quantity = self.parse_decimal().map_err(|e| scope.error(e))?;
+        let quantity = self
+            .parse_decimal(Token::Quantity)
+            .map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let commodity = self.parse_commodity().map_err(|e| scope.error(e))?;
         Ok(Booking {
@@ -471,7 +471,9 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::SubAssertion);
         let account = self.parse_account().map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let amount = self.parse_decimal().map_err(|e| scope.error(e))?;
+        let amount = self
+            .parse_decimal(Token::Quantity)
+            .map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let commodity = self.parse_commodity().map_err(|e| scope.error(e))?;
         Ok(Assertion {
@@ -558,11 +560,11 @@ mod tests {
 
     #[test]
     fn test_parse_account() {
-        let f1 = File::mem("Sometype");
+        let f1 = File::mem("Assets");
         assert_eq!(
             Ok(Account {
-                range: Rng::new(f1.clone(), 0, 8),
-                segments: vec![Rng::new(f1.clone(), 0, 8)],
+                range: Rng::new(f1.clone(), 0, 6),
+                segments: vec![Rng::new(f1.clone(), 0, 6)],
             }),
             Parser::new(&f1).parse_account(),
         );
@@ -586,12 +588,8 @@ mod tests {
         assert_eq!(
             Err(SyntaxError {
                 rng: Rng::new(f3.clone(), 0, 1),
-                want: Token::Account,
-                source: Some(Box::new(SyntaxError {
-                    rng: Rng::new(f3.clone(), 0, 1),
-                    want: Token::Sequence(Sequence::One(Character::AlphaNum)),
-                    source: None,
-                })),
+                want: Token::Sequence(Sequence::One(Character::Alphabetic)),
+                source: None,
             }),
             Parser::new(&f3).parse_account(),
         );
@@ -675,7 +673,7 @@ mod tests {
             let f = File::mem(d);
             assert_eq!(
                 Ok(Decimal(Rng::new(f.clone(), 0, d.len()))),
-                Parser::new(&f).parse_decimal(),
+                Parser::new(&f).parse_decimal(Token::Decimal),
             );
         }
     }
@@ -692,7 +690,7 @@ mod tests {
                     source: None,
                 })),
             }),
-            Parser::new(&f).parse_decimal(),
+            Parser::new(&f).parse_decimal(Token::Decimal),
         );
     }
 

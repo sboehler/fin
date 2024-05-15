@@ -312,7 +312,7 @@ mod test_scanner {
             Err(SyntaxError {
                 rng: Rng::new(f.clone(), 5, 6),
                 want: Token::Sequence(Sequence::One(Character::OneOf(vec![
-                    Character::Char('\n'),
+                    Character::NewLine,
                     Character::EOF
                 ]))),
                 source: None,
@@ -376,7 +376,7 @@ mod test_scanner {
             Err(SyntaxError {
                 rng: Rng::new(f.clone(), 0, 1),
                 want: Token::Sequence(Sequence::One(Character::OneOf(vec![
-                    Character::Char('\n'),
+                    Character::NewLine,
                     Character::EOF
                 ]))),
                 source: None,
