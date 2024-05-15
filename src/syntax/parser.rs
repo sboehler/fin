@@ -29,11 +29,19 @@ impl<'a, 'b> Scope<'a, 'b> {
         }
     }
 
-    fn token_error(&self, token: Token) -> SyntaxError {
+    fn token_error(&self) -> SyntaxError {
         SyntaxError {
             rng: self.parser.scanner.rng(self.start),
-            want: token,
+            want: self.token.clone(),
             source: None,
+        }
+    }
+
+    fn with(&self, token: Token) -> Scope<'a, 'b> {
+        Scope {
+            parser: self.parser,
+            start: self.start,
+            token: token,
         }
     }
 
@@ -110,7 +118,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_interval(&self) -> Result<Rng> {
-        let scope = self.scope(Token::Date);
+        let scope = self.scope(Token::Interval);
         match self.scanner.current() {
             Some('d') => self
                 .scanner
@@ -133,7 +141,7 @@ impl<'a> Parser<'a> {
                 .read_string("yearly")
                 .map_err(|e| scope.error(e)),
             Some('o') => self.scanner.read_string("once").map_err(|e| scope.error(e)),
-            _o => Err(scope.token_error(Token::Interval)),
+            _o => Err(scope.token_error()),
         }
     }
 
@@ -172,31 +180,27 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&self) -> Result<SyntaxTree> {
-        let scope = self.scope(Token::Either(vec![
-            Token::Directive,
-            Token::Comment,
-            Token::BlankLine,
-        ]));
+        let file_scope = self.scope(Token::File);
         let mut directives = Vec::new();
         while let Some(c) = self.scanner.current() {
+            let token = Token::Either(vec![Token::Directive, Token::Comment, Token::BlankLine]);
+            let scope = self.scope(token);
             match c {
                 '*' | '/' | '#' => {
                     self.parse_comment()?;
                 }
                 c if c.is_alphanumeric() || c == '@' => {
-                    let d = self.parse_directive().map_err(|e| scope.error(e))?;
+                    let d = self.parse_directive()?;
                     directives.push(d)
                 }
                 c if c.is_whitespace() => {
-                    self.scanner
-                        .read_rest_of_line()
-                        .map_err(|e| scope.error(e))?;
+                    self.scanner.read_rest_of_line()?;
                 }
-                _o => return Err(scope.token_error(Token::Directive)),
+                _o => return Err(scope.token_error()),
             }
         }
         Ok(SyntaxTree {
-            range: scope.rng(),
+            range: file_scope.rng(),
             directives,
         })
     }
@@ -221,7 +225,7 @@ impl<'a> Parser<'a> {
                     .map_err(|e| scope.error(e))?;
                 Ok(range)
             }
-            _o => Err(scope.token_error(Token::Comment)),
+            _o => Err(scope.token_error()),
         }
     }
 
@@ -262,18 +266,12 @@ impl<'a> Parser<'a> {
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
 
         let command = match self.scanner.current() {
-            Some('p') => self.parse_price(scope, date)?,
-            Some('o') => self.parse_open(scope, date)?,
-            Some('"') => self.parse_transaction(scope, addon, date)?,
-            Some('b') => self.parse_assertion(scope, date)?,
-            Some('c') => self.parse_close(scope, date)?,
-            _o => Err(scope.token_error(Token::Either(vec![
-                Token::Price,
-                Token::Open,
-                Token::Transaction,
-                Token::Assertion,
-                Token::Close,
-            ])))?,
+            Some('p') => self.parse_price(&scope.with(Token::Price), date)?,
+            Some('o') => self.parse_open(&scope.with(Token::Open), date)?,
+            Some('"') => self.parse_transaction(&scope.with(Token::Transaction), addon, date)?,
+            Some('b') => self.parse_assertion(&scope.with(Token::Assertion), date)?,
+            Some('c') => self.parse_close(&scope.with(Token::Close), date)?,
+            _o => Err(scope.token_error())?,
         };
         self.scanner
             .read_rest_of_line()
@@ -289,7 +287,7 @@ impl<'a> Parser<'a> {
         match self.scanner.current() {
             Some('p') => self.parse_performance(&scope),
             Some('a') => self.parse_accrual(&scope),
-            _o => Err(scope.token_error(Token::Addon))?,
+            _o => Err(scope.token_error())?,
         }
     }
 
@@ -381,11 +379,10 @@ impl<'a> Parser<'a> {
 
     fn parse_transaction(
         &self,
-        original_scope: &Scope,
+        scope: &Scope,
         addon: Option<Addon>,
         date: Date,
     ) -> Result<Directive> {
-        let scope = self.scope(Token::Transaction);
         let description = self.parse_quoted_string()?;
         self.scanner
             .read_rest_of_line()
@@ -401,7 +398,7 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(Directive::Transaction {
-            range: original_scope.rng(),
+            range: scope.rng(),
             addon,
             date,
             description,
@@ -427,8 +424,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_assertion(&self, original_scope: &Scope, date: Date) -> Result<Directive> {
-        let scope = self.scope(Token::Assertion);
+    fn parse_assertion(&self, scope: &Scope, date: Date) -> Result<Directive> {
         self.scanner
             .read_string("balance")
             .and_then(|_| self.scanner.read_space_1())
@@ -451,7 +447,7 @@ impl<'a> Parser<'a> {
             assertions.push(self.parse_sub_assertion().map_err(|e| scope.error(e))?);
         }
         Ok(Directive::Assertion {
-            range: original_scope.rng(),
+            range: scope.rng(),
             date,
             assertions,
         })
@@ -472,15 +468,14 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_close(&self, original_scope: &Scope, date: Date) -> Result<Directive> {
-        let scope = self.scope(Token::Close);
+    fn parse_close(&self, scope: &Scope, date: Date) -> Result<Directive> {
         self.scanner
             .read_string("close")
             .and_then(|_| self.scanner.read_space_1())
             .map_err(|e| scope.error(e))?;
         let account = self.parse_account().map_err(|e| scope.error(e))?;
         Ok(Directive::Close {
-            range: original_scope.rng(),
+            range: scope.rng(),
             date,
             account,
         })

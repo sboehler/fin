@@ -15,7 +15,7 @@ impl SyntaxError {
     fn position(t: &str, pos: usize) -> (usize, usize) {
         let lines: Vec<_> = t[..pos].split(|c| c == '\n').collect();
         let line = lines.len().saturating_sub(1);
-        let col = lines.last().map(|s| s.len()).unwrap_or(0);
+        let col = lines.last().iter().flat_map(|s| s.chars()).count();
         (line, col)
     }
 }
@@ -48,13 +48,11 @@ impl std::fmt::Display for SyntaxError {
         for (n, line) in context {
             writeln!(f, "{:5}|{}", n, line)?;
         }
-        writeln!(
-            f,
-            "{}^ want {}, got '{}'",
-            " ".repeat(col + 6),
-            self.want,
-            self.rng.text()
-        )?;
+        writeln!(f, "{}^ want {}", " ".repeat(col + 6), self.want,)?;
+        writeln!(f)?;
+        if let Some(e) = &self.source {
+            writeln!(f, "{}", e)?;
+        }
         Ok(())
     }
 }

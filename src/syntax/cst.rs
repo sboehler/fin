@@ -101,7 +101,7 @@ pub enum Sequence {
     One(Character),
     OneOf(Vec<Sequence>),
     NumberOf(usize, Character),
-    String(Vec<Character>),
+    String(String),
 }
 
 impl Display for Sequence {
@@ -119,14 +119,7 @@ impl Display for Sequence {
                 )
             }
             Sequence::NumberOf(n, ch) => write!(f, "{} {}", n, ch),
-            Sequence::String(ch) => write!(
-                f,
-                "{}",
-                ch.iter()
-                    .map(Character::to_string)
-                    .collect::<Vec<_>>()
-                    .join("")
-            ),
+            Sequence::String(ch) => write!(f, "{}", ch),
         }
     }
 }

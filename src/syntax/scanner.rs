@@ -146,20 +146,19 @@ impl<'a> Scanner<'a> {
                     }
                     rollback();
                 }
-                // todo: report a sequence error
                 self.advance();
                 Err(scope.error(seq))
             }
             Sequence::NumberOf(n, char) => {
                 for _ in 0..*n {
-                    // todo: rollback errors
                     self.read_char(char).map_err(|_| scope.error(seq))?;
                 }
                 Ok(scope.rng())
             }
-            Sequence::String(chars) => {
-                for c in chars {
-                    self.read_char(c).map_err(|_| scope.error(seq))?;
+            Sequence::String(s) => {
+                for c in s.chars() {
+                    self.read_char(&Character::Char(c))
+                        .map_err(|_| scope.error(seq))?;
                 }
                 Ok(scope.rng())
             }
