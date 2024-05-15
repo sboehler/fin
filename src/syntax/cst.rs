@@ -74,7 +74,7 @@ impl Display for Character {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Character::EOF => write!(f, "EOF"),
-            Character::Char(ch) => write!(f, "'{}'", ch),
+            Character::Char(ch) => write!(f, "{:?}", ch),
             Character::NotChar(ch) => write!(f, "not '{}'", ch),
             Character::Digit => write!(f, "digit"),
             Character::Alphabetic => write!(f, "alphabetic character"),
@@ -101,7 +101,7 @@ pub enum Sequence {
     One(Character),
     OneOf(Vec<Sequence>),
     NumberOf(usize, Character),
-    String(String),
+    String(&'static str),
 }
 
 impl Display for Sequence {
@@ -134,6 +134,7 @@ pub enum Token {
     Assertion,
     SubAssertion,
     Performance,
+    Include,
     BlankLine,
     Booking,
     Character(Character),
@@ -166,6 +167,7 @@ impl Display for Token {
             Token::Digit => write!(f, "a digit (0-9)"),
             Token::Decimal => write!(f, "a decimal number"),
             Token::Directive => write!(f, "a directive"),
+            Token::Include => write!(f, "an 'include' directive"),
             Token::BlankLine => write!(f, "a blank line"),
             Token::Comment => write!(f, "a comment"),
             Token::Interval => write!(
@@ -180,30 +182,33 @@ impl Display for Token {
             Token::WhiteSpace => write!(f, "whitespace"),
             Token::Custom(s) => write!(f, "{}", s),
             Token::Either(chars) => {
+                let n = chars.len().saturating_sub(2);
                 for (i, ch) in chars.iter().enumerate() {
                     write!(f, "{}", ch)?;
-                    if i < chars.len().saturating_sub(1) {
+                    if i < n {
                         write!(f, ", ")?;
+                    } else if i == n {
+                        write!(f, ", or ")?;
                     }
                 }
                 writeln!(f)?;
                 Ok(())
             }
-            Token::Addon => write!(f, "addon"),
-            Token::Accrual => write!(f, "accrual"),
-            Token::Close => write!(f, "close directive"),
-            Token::Assertion => write!(f, "balance directive"),
+            Token::Addon => write!(f, "an addon (@)"),
+            Token::Accrual => write!(f, "an accrual"),
+            Token::Close => write!(f, "a 'close' directive"),
+            Token::Assertion => write!(f, "a 'balance' directive"),
             Token::SubAssertion => write!(f, "subassertion"),
-            Token::Performance => write!(f, "performance addon"),
-            Token::Booking => write!(f, "booking"),
-            Token::Transaction => write!(f, "transaction"),
-            Token::Price => write!(f, "price directive"),
-            Token::Open => write!(f, "open directive"),
-            Token::QuotedString => write!(f, "quoted string"),
-            Token::AccountType => write!(f, "account type"),
-            Token::Commodity => write!(f, "commodity"),
-            Token::File => write!(f, "source file"),
-            Token::Account => write!(f, "account"),
+            Token::Performance => write!(f, "a @performance addon"),
+            Token::Booking => write!(f, "a booking"),
+            Token::Transaction => write!(f, "a transaction"),
+            Token::Price => write!(f, "a 'price' directive"),
+            Token::Open => write!(f, "an 'open' directive"),
+            Token::QuotedString => write!(f, "a quoted string"),
+            Token::AccountType => write!(f, "an account type"),
+            Token::Commodity => write!(f, "a commodity"),
+            Token::File => write!(f, "a source file"),
+            Token::Account => write!(f, "an account"),
             Token::Sequence(seq) => write!(f, "{}", seq),
         }
     }

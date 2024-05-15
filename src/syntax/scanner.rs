@@ -178,10 +178,10 @@ impl<'a> Scanner<'a> {
         let c = self.advance();
         match c {
             None | Some('\n') => Ok(scope.rng()),
-            _ => Err(scope.character_error(&Character::OneOf(vec![
-                Character::Char('\n'),
-                Character::EOF,
-            ]))),
+            _ => {
+                Err(scope
+                    .character_error(&Character::OneOf(vec![Character::NewLine, Character::EOF])))
+            }
         }
     }
 

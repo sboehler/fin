@@ -41,7 +41,7 @@ impl<'a, 'b> Scope<'a, 'b> {
         Scope {
             parser: self.parser,
             start: self.start,
-            token: token,
+            token,
         }
     }
 
@@ -70,10 +70,7 @@ impl<'a> Parser<'a> {
     }
     fn parse_account(&self) -> Result<Account> {
         let scope = self.scope(Token::Account);
-        let account_type = self
-            .scanner
-            .read_while_1(&Character::AlphaNum)
-            .map_err(|e| scope.error(e))?;
+        let account_type = self.parse_account_type()?;
         let mut segments = vec![account_type];
         while self.scanner.current() == Some(':') {
             self.scanner
@@ -89,6 +86,16 @@ impl<'a> Parser<'a> {
             range: scope.rng(),
             segments,
         })
+    }
+
+    fn parse_account_type(&self) -> Result<Rng> {
+        let scope = self.scope(Token::AccountType);
+        self.scanner
+            .read_while_1(&Character::Alphabetic)
+            .and_then(|rng| match rng.text() {
+                "Assets" | "Liabilities" | "Expenses" | "Equity" | "Income" => Ok(rng),
+                _ => Err(scope.token_error()),
+            })
     }
 
     fn parse_commodity(&self) -> Result<Commodity> {
@@ -183,20 +190,27 @@ impl<'a> Parser<'a> {
         let file_scope = self.scope(Token::File);
         let mut directives = Vec::new();
         while let Some(c) = self.scanner.current() {
-            let token = Token::Either(vec![Token::Directive, Token::Comment, Token::BlankLine]);
-            let scope = self.scope(token);
             match c {
                 '*' | '/' | '#' => {
                     self.parse_comment()?;
                 }
-                c if c.is_alphanumeric() || c == '@' => {
+                c if c.is_ascii_digit() || c == 'i' || c == '@' => {
                     let d = self.parse_directive()?;
                     directives.push(d)
                 }
                 c if c.is_whitespace() => {
                     self.scanner.read_rest_of_line()?;
                 }
-                _o => return Err(scope.token_error()),
+                _ => {
+                    let scope = self.scope(Token::Either(vec![
+                        Token::Date,
+                        Token::Include,
+                        Token::Addon,
+                        Token::BlankLine,
+                    ]));
+                    self.scanner.advance();
+                    return Err(scope.token_error());
+                }
             }
         }
         Ok(SyntaxTree {
@@ -232,7 +246,7 @@ impl<'a> Parser<'a> {
     fn parse_directive(&self) -> Result<Directive> {
         let scope = self.scope(Token::Directive);
         match self.scanner.current() {
-            Some('i') => self.parse_include(&scope),
+            Some('i') => self.parse_include(&scope.with(Token::Include)),
             Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command(&scope),
             _o => Err(SyntaxError {
                 want: Token::Directive,

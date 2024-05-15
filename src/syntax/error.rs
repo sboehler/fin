@@ -14,8 +14,8 @@ pub struct SyntaxError {
 impl SyntaxError {
     fn position(t: &str, pos: usize) -> (usize, usize) {
         let lines: Vec<_> = t[..pos].split(|c| c == '\n').collect();
-        let line = lines.len().saturating_sub(1);
-        let col = lines.last().iter().flat_map(|s| s.chars()).count();
+        let line = lines.len();
+        let col = lines.last().iter().flat_map(|s| s.chars()).count() + 1;
         (line, col)
     }
 }
@@ -31,8 +31,8 @@ impl std::fmt::Display for SyntaxError {
             .lines()
             .enumerate()
             .skip(start)
-            .take(line - start + 1)
-            .map(|(i, l)| (i, l.to_string()))
+            .take(line - start)
+            .map(|(i, l)| (i + 1, l.to_string()))
             .collect::<Vec<(usize, String)>>();
         writeln!(f)?;
         write!(
@@ -46,7 +46,7 @@ impl std::fmt::Display for SyntaxError {
         writeln!(f)?;
 
         for (n, line) in context {
-            writeln!(f, "{:5}|{}", n, line)?;
+            writeln!(f, "{:5} |{}", n, line)?;
         }
         writeln!(f, "{}^ want {}", " ".repeat(col + 6), self.want,)?;
         writeln!(f)?;
