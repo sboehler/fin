@@ -1,6 +1,8 @@
-use std::{error::Error, fmt::Display};
+use std::fmt::Display;
 
-#[derive(Debug, Eq, PartialEq)]
+use thiserror::Error;
+
+#[derive(Error, Debug, Eq, PartialEq)]
 pub enum ModelError {
     InvalidAccountType,
     InvalidCommodityName,
@@ -16,5 +18,3 @@ impl Display for ModelError {
         }
     }
 }
-
-impl Error for ModelError {}
