@@ -16,6 +16,8 @@ use super::{
     Transaction,
 };
 
+type Result<T> = std::result::Result<T, SyntaxError>;
+
 pub fn analyze_files(files: &Vec<SyntaxFile>) -> Result<Journal> {
     let mut journal = Journal::new();
     for file in files {
@@ -31,8 +33,6 @@ struct Analyzer<'a> {
     journal: &'a mut Journal,
     file: &'a SyntaxFile,
 }
-
-type Result<T> = std::result::Result<T, SyntaxError>;
 
 impl<'a> Analyzer<'a> {
     fn analyze(&mut self) -> Result<()> {
