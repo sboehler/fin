@@ -55,6 +55,7 @@ impl<'a> Analyzer<'a> {
         let price = self.analyze_decimal(&p.price)?;
         let target = self.analyze_commodity(&p.target)?;
         self.journal.day(date).prices.push(Price {
+            rng: Some(p.range.clone()),
             date,
             commodity,
             price,
@@ -66,7 +67,11 @@ impl<'a> Analyzer<'a> {
     fn analyze_open(&mut self, o: &cst::Open) -> Result<()> {
         let date = self.analyze_date(&o.date)?;
         let account = self.analyze_account(&o.account)?;
-        self.journal.day(date).openings.push(Open { date, account });
+        self.journal.day(date).openings.push(Open {
+            rng: Some(o.range.clone()),
+            date,
+            account,
+        });
         Ok(())
     }
 
@@ -89,6 +94,7 @@ impl<'a> Analyzer<'a> {
             .flatten()
             .collect::<Vec<_>>();
         let mut trx = Transaction {
+            rng: Some(t.range.clone()),
             date,
             description: t.description.content.text().to_string(),
             postings: bookings,
@@ -131,6 +137,7 @@ impl<'a> Analyzer<'a> {
             .iter()
             .map(|a| {
                 Ok(Assertion {
+                    rng: Some(a.range.clone()),
                     date,
                     account: self.analyze_account(&a.account)?,
                     balance: self.analyze_decimal(&a.balance)?,
@@ -145,10 +152,11 @@ impl<'a> Analyzer<'a> {
     fn analyze_close(&mut self, c: &cst::Close) -> Result<()> {
         let date = self.analyze_date(&c.date)?;
         let account = self.analyze_account(&c.account)?;
-        self.journal
-            .day(date)
-            .closings
-            .push(Close { date, account });
+        self.journal.day(date).closings.push(Close {
+            rng: Some(c.range.clone()),
+            date,
+            account,
+        });
         Ok(())
     }
 
@@ -221,6 +229,7 @@ impl<'a> Analyzer<'a> {
         for b in t.postings {
             if b.account.account_type.is_al() {
                 res.push(Transaction {
+                    rng: t.rng.clone(),
                     date: t.date,
                     description: t.description.clone(),
                     postings: Booking::create(
@@ -244,6 +253,7 @@ impl<'a> Analyzer<'a> {
                         _ => amount,
                     };
                     res.push(Transaction {
+                        rng: t.rng.clone(),
                         date: dt.1,
                         description: format!(
                             "{} (accrual {}/{})",

@@ -91,21 +91,23 @@ impl Commodity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Price {
+    pub rng: Option<Rng>,
     pub date: NaiveDate,
     pub commodity: Rc<Commodity>,
     pub price: Decimal,
     pub target: Rc<Commodity>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Open {
+    pub rng: Option<Rng>,
     pub date: NaiveDate,
     pub account: Rc<Account>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Booking {
     pub account: Rc<Account>,
     pub other: Rc<Account>,
@@ -141,29 +143,34 @@ impl Booking {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Transaction {
+    pub rng: Option<Rng>,
     pub date: NaiveDate,
     pub description: String,
     pub postings: Vec<Booking>,
     pub targets: Option<Vec<Rc<Commodity>>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Assertion {
+    pub rng: Option<Rng>,
     pub date: NaiveDate,
     pub account: Rc<Account>,
     pub balance: Decimal,
     pub commodity: Rc<Commodity>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone)]
 pub struct Close {
+    pub rng: Option<Rng>,
     pub date: NaiveDate,
     pub account: Rc<Account>,
 }
 
 use chrono::{Datelike, Days, Months};
+
+use crate::syntax::cst::Rng;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub enum Interval {

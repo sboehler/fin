@@ -6,7 +6,7 @@ use super::{
     prices::NormalizedPrices, registry::Registry, Assertion, Close, Open, Price, Transaction,
 };
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub struct Day {
     pub date: NaiveDate,
     pub prices: Vec<Price>,
