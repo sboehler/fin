@@ -2,7 +2,7 @@ use std::{collections::HashMap, rc::Rc};
 
 use rust_decimal::Decimal;
 
-use super::{Commodity, Price};
+use super::entities::{Commodity, Price};
 
 #[derive(Default)]
 pub struct Prices {

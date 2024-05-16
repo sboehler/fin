@@ -6,7 +6,12 @@ use std::{
 
 use rust_decimal::Decimal;
 
-use crate::model::{journal::Journal, prices::Prices, Commodity};
+use crate::model::{entities::Commodity, prices};
+use crate::model::{entities::Transaction, prices::Prices};
+use crate::model::{
+    entities::{Account, Booking},
+    journal::Journal,
+};
 
 pub fn check(journal: &mut Journal) -> result::Result<(), String> {
     let mut quantities = HashMap::new();
@@ -74,4 +79,72 @@ pub fn compute_prices(journal: &mut Journal, target: &Option<Rc<Commodity>>) {
             day.normalized_prices = prices.normalize(t);
         }
     }
+}
+
+pub fn valuate(journal: &mut Journal, target: Option<Rc<Commodity>>) -> Result<(), String> {
+    let mut quantities: HashMap<(Rc<Account>, Rc<Commodity>), Decimal> = HashMap::new();
+    let mut prev_prices = &prices::NormalizedPrices::default();
+
+    if let Some(t) = target {
+        for (_, day) in journal.days.iter_mut() {
+            for (pos, qty) in quantities.iter() {
+                if pos.1 == t {
+                    continue;
+                }
+                if qty.is_zero() {
+                    continue;
+                }
+                let prev = prev_prices.get(&pos.1).unwrap();
+                let current = day.normalized_prices.get(&pos.1).unwrap();
+                let delta = current - prev;
+                if delta.is_zero() {
+                    continue;
+                }
+                let gain = delta * qty;
+                let credit = journal
+                    .registry
+                    .borrow_mut()
+                    .account("Income:Valuation")
+                    .unwrap();
+                day.transactions.push(Transaction {
+                    date: day.date,
+                    rng: None,
+                    description: format!(
+                        "Adjust value of {} in account {}",
+                        pos.1.name, pos.0.name
+                    ),
+                    postings: Booking::create(
+                        credit,
+                        pos.0.clone(),
+                        Decimal::ZERO,
+                        pos.1.clone(),
+                        gain,
+                    ),
+                    targets: Some(vec![pos.1.clone()]),
+                })
+            }
+
+            for trx in day.transactions.iter_mut() {
+                for b in trx.postings.iter_mut() {
+                    // update quantities
+                    if !b.quantity.is_zero() && b.account.account_type.is_al() {
+                        quantities
+                            .entry((b.account.clone(), b.commodity.clone()))
+                            .and_modify(|q| *q += b.quantity)
+                            .or_insert(b.quantity);
+                    }
+                    // valuate transaction
+                    if t == b.commodity {
+                        b.value = b.quantity
+                    } else {
+                        let p = day.normalized_prices.get(&b.commodity).unwrap();
+                        b.value = p * b.quantity;
+                    }
+                }
+            }
+
+            prev_prices = &day.normalized_prices
+        }
+    }
+    Ok(())
 }

@@ -3,17 +3,16 @@ use std::rc::Rc;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
+use super::entities::{
+    Account, Assertion, Booking, Close, Commodity, Interval, Open, Price, Transaction,
+};
+use super::journal::Journal;
 use crate::{
-    model::Period,
+    model::entities::Period,
     syntax::{
         cst::{self, SyntaxFile},
         error::SyntaxError,
     },
-};
-
-use super::{
-    journal::Journal, Account, Assertion, Booking, Close, Commodity, Interval, Open, Price,
-    Transaction,
 };
 
 type Result<T> = std::result::Result<T, SyntaxError>;

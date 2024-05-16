@@ -1,8 +1,8 @@
 use std::{collections::HashMap, rc::Rc};
 
 use super::{
+    entities::{Account, Commodity},
     error::ModelError,
-    {Account, Commodity},
 };
 
 pub struct Registry {

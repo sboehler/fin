@@ -2,9 +2,9 @@ use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
 
-use super::{
-    prices::NormalizedPrices, registry::Registry, Assertion, Close, Open, Price, Transaction,
-};
+use super::entities::{Assertion, Close, Open, Price, Transaction};
+use super::prices::NormalizedPrices;
+use super::registry::Registry;
 
 #[derive(Debug)]
 pub struct Day {
