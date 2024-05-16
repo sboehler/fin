@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display, io, path::PathBuf};
+use std::{fmt::Display, io, path::PathBuf};
 
 use thiserror::Error;
 

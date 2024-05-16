@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
 use super::cst::{
-    Account, Addon, Assertion, Booking, Character, Commodity, Date, Decimal, Directive,
-    QuotedString, Rng, Sequence, SyntaxFile, Token,
+    Account, Addon, Assertion, Booking, Character, Close, Commodity, Date, Decimal, Directive,
+    Include, Open, Price, QuotedString, Rng, Sequence, SubAssertion, SyntaxFile, Token,
+    Transaction,
 };
 use super::error::SyntaxError;
 use super::file::File;
@@ -262,10 +263,10 @@ impl<'a> Parser<'a> {
             .and_then(|_| self.scanner.read_space_1())
             .map_err(|e| scope.error(e))?;
         let path = self.parse_quoted_string().map_err(|e| scope.error(e))?;
-        Ok(Directive::Include {
+        Ok(Directive::Include(Include {
             range: scope.rng(),
             path,
-        })
+        }))
     }
 
     fn parse_command(&self, scope: &Scope) -> Result<Directive> {
@@ -367,13 +368,13 @@ impl<'a> Parser<'a> {
             .map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let target = self.parse_commodity().map_err(|e| scope.error(e))?;
-        Ok(Directive::Price {
+        Ok(Directive::Price(Price {
             range: scope.rng(),
             date,
             commodity,
             price,
             target,
-        })
+        }))
     }
 
     fn parse_open(&self, scope: &Scope, date: Date) -> Result<Directive> {
@@ -382,11 +383,11 @@ impl<'a> Parser<'a> {
             .and_then(|_| self.scanner.read_space_1())
             .map_err(|e| scope.error(e))?;
         let a = self.parse_account().map_err(|e| scope.error(e))?;
-        Ok(Directive::Open {
+        Ok(Directive::Open(Open {
             range: scope.rng(),
             date,
             account: a,
-        })
+        }))
     }
 
     fn parse_transaction(
@@ -409,13 +410,13 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        Ok(Directive::Transaction {
+        Ok(Directive::Transaction(Transaction {
             range: scope.rng(),
             addon,
             date,
             description,
             bookings,
-        })
+        }))
     }
 
     pub fn parse_booking(&self) -> Result<Booking> {
@@ -460,14 +461,14 @@ impl<'a> Parser<'a> {
         } else {
             assertions.push(self.parse_sub_assertion().map_err(|e| scope.error(e))?);
         }
-        Ok(Directive::Assertion {
+        Ok(Directive::Assertion(Assertion {
             range: scope.rng(),
             date,
             assertions,
-        })
+        }))
     }
 
-    pub fn parse_sub_assertion(&self) -> Result<Assertion> {
+    pub fn parse_sub_assertion(&self) -> Result<SubAssertion> {
         let scope = self.scope(Token::SubAssertion);
         let account = self.parse_account().map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
@@ -476,7 +477,7 @@ impl<'a> Parser<'a> {
             .map_err(|e| scope.error(e))?;
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let commodity = self.parse_commodity().map_err(|e| scope.error(e))?;
-        Ok(Assertion {
+        Ok(SubAssertion {
             range: scope.rng(),
             account,
             balance: amount,
@@ -490,11 +491,11 @@ impl<'a> Parser<'a> {
             .and_then(|_| self.scanner.read_space_1())
             .map_err(|e| scope.error(e))?;
         let account = self.parse_account().map_err(|e| scope.error(e))?;
-        Ok(Directive::Close {
+        Ok(Directive::Close(Close {
             range: scope.rng(),
             date,
             account,
-        })
+        }))
     }
 }
 
@@ -753,13 +754,13 @@ mod tests {
         fn parse_include() {
             let f = File::mem(r#"include "/foo/bar/baz/finance.knut""#);
             assert_eq!(
-                Ok(Directive::Include {
+                Ok(Directive::Include(Include {
                     range: Rng::new(f.clone(), 0, 35),
                     path: QuotedString {
                         range: Rng::new(f.clone(), 8, 35),
                         content: Rng::new(f.clone(), 9, 34),
                     }
-                }),
+                })),
                 Parser::new(&f).parse_directive()
             )
         }
@@ -768,14 +769,14 @@ mod tests {
         fn parse_open() {
             let f = File::mem("2024-03-01 open Assets:Foo");
             assert_eq!(
-                Ok(Directive::Open {
+                Ok(Directive::Open(Open {
                     range: Rng::new(f.clone(), 0, 26),
                     date: Date(Rng::new(f.clone(), 0, 10)),
                     account: Account {
                         range: Rng::new(f.clone(), 16, 26),
                         segments: vec![Rng::new(f.clone(), 16, 22), Rng::new(f.clone(), 23, 26)]
                     },
-                }),
+                })),
                 Parser::new(&f).parse_directive()
             )
         }
@@ -784,7 +785,7 @@ mod tests {
         fn parse_transaction() {
             let f = File::mem("2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD");
             assert_eq!(
-                Ok(Directive::Transaction {
+                Ok(Directive::Transaction(Transaction {
                     range: Rng::new(f.clone(), 0, 53),
                     addon: None,
                     date: Date(Rng::new(f.clone(), 0, 10)),
@@ -811,7 +812,7 @@ mod tests {
                         quantity: Decimal(Rng::new(f.clone(), 45, 49)),
                         commodity: Commodity(Rng::new(f.clone(), 50, 53)),
                     },]
-                }),
+                })),
                 Parser::new(&f).parse_directive()
             );
         }
@@ -820,14 +821,14 @@ mod tests {
         fn parse_close() {
             let f = File::mem("2024-03-01 close Assets:Foo");
             assert_eq!(
-                Ok(Directive::Close {
+                Ok(Directive::Close(Close {
                     range: Rng::new(f.clone(), 0, 27),
                     date: Date(Rng::new(f.clone(), 0, 10)),
                     account: Account {
                         range: Rng::new(f.clone(), 17, 27),
                         segments: vec![Rng::new(f.clone(), 17, 23), Rng::new(f.clone(), 24, 27)]
                     }
-                }),
+                })),
                 Parser::new(&f).parse_directive()
             )
         }
@@ -836,13 +837,13 @@ mod tests {
         fn parse_price() {
             let f = File::mem("2024-03-01 price FOO 1.543 BAR");
             assert_eq!(
-                Ok(Directive::Price {
+                Ok(Directive::Price(Price {
                     range: Rng::new(f.clone(), 0, 30),
                     date: Date(Rng::new(f.clone(), 0, 10)),
                     commodity: Commodity(Rng::new(f.clone(), 17, 20)),
                     price: Decimal(Rng::new(f.clone(), 21, 26)),
                     target: Commodity(Rng::new(f.clone(), 27, 30)),
-                }),
+                })),
                 Parser::new(&f).parse_directive()
             )
         }
@@ -851,10 +852,10 @@ mod tests {
         fn parse_assertion() {
             let f = File::mem("2024-03-01 balance Assets:Foo 500.1 BAR");
             assert_eq!(
-                Ok(Directive::Assertion {
+                Ok(Directive::Assertion(Assertion {
                     range: Rng::new(f.clone(), 0, 39),
                     date: Date(Rng::new(f.clone(), 0, 10)),
-                    assertions: vec![Assertion {
+                    assertions: vec![SubAssertion {
                         range: Rng::new(f.clone(), 19, 39),
                         account: Account {
                             range: Rng::new(f.clone(), 19, 29),
@@ -866,7 +867,7 @@ mod tests {
                         balance: Decimal(Rng::new(f.clone(), 30, 35)),
                         commodity: Commodity(Rng::new(f.clone(), 36, 39)),
                     }]
-                }),
+                })),
                 Parser::new(&f).parse_directive()
             )
         }

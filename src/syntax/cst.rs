@@ -245,56 +245,72 @@ pub struct SyntaxFile {
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum Directive {
-    Include {
-        range: Rng,
-        path: QuotedString,
-    },
-    Price {
-        range: Rng,
-        date: Date,
-        commodity: Commodity,
-        price: Decimal,
-        target: Commodity,
-    },
-    Open {
-        range: Rng,
-        date: Date,
-        account: Account,
-    },
-    Transaction {
-        range: Rng,
-        addon: Option<Addon>,
-        date: Date,
-        description: QuotedString,
-        bookings: Vec<Booking>,
-    },
-    Assertion {
-        range: Rng,
-        date: Date,
-        assertions: Vec<Assertion>,
-    },
-    Close {
-        range: Rng,
-        date: Date,
-        account: Account,
-    },
+    Include(Include),
+    Price(Price),
+    Open(Open),
+    Transaction(Transaction),
+    Assertion(Assertion),
+    Close(Close),
+}
+#[derive(Eq, PartialEq, Debug)]
+pub struct Include {
+    pub range: Rng,
+    pub path: QuotedString,
+}
+#[derive(Eq, PartialEq, Debug)]
+pub struct Price {
+    pub range: Rng,
+    pub date: Date,
+    pub commodity: Commodity,
+    pub price: Decimal,
+    pub target: Commodity,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Open {
+    pub range: Rng,
+    pub date: Date,
+    pub account: Account,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Transaction {
+    pub range: Rng,
+    pub addon: Option<Addon>,
+    pub date: Date,
+    pub description: QuotedString,
+    pub bookings: Vec<Booking>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Assertion {
+    pub range: Rng,
+    pub date: Date,
+    pub assertions: Vec<SubAssertion>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Close {
+    pub range: Rng,
+    pub date: Date,
+    pub account: Account,
 }
 
 impl Directive {
     pub fn range(&self) -> Rng {
         match self {
-            Directive::Include { range, .. } => range.clone(),
-            Directive::Price { range, .. } => range.clone(),
-            Directive::Open { range, .. } => range.clone(),
-            Directive::Transaction { range, .. } => range.clone(),
-            Directive::Assertion { range, .. } => range.clone(),
-            Directive::Close { range, .. } => range.clone(),
+            Directive::Include(Include { range, .. }) => range.clone(),
+            Directive::Price(Price { range, .. }) => range.clone(),
+            Directive::Open(Open { range, .. }) => range.clone(),
+            Directive::Transaction(Transaction { range, .. }) => range.clone(),
+            Directive::Assertion(Assertion { range, .. }) => range.clone(),
+            Directive::Close(Close { range, .. }) => range.clone(),
         }
     }
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Assertion {
+pub struct SubAssertion {
     pub range: Rng,
     pub account: Account,
     pub balance: Decimal,

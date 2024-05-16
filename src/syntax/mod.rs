@@ -5,7 +5,7 @@ use std::{
 };
 
 use self::{
-    cst::{Directive, SyntaxFile},
+    cst::{Directive, Include, SyntaxFile},
     error::FileError,
     file::File,
     parser::Parser,
@@ -34,7 +34,7 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxFile>, FileErro
             .parent()
             .ok_or(FileError::InvalidPath(file_path.clone()))?;
         for d in &syntax_file.directives {
-            if let Directive::Include { path, .. } = d {
+            if let Directive::Include(Include { path, .. }) = d {
                 todo.push_back(
                     dir_name
                         .join(path.content.text())

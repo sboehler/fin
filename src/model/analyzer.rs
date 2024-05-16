@@ -38,42 +38,22 @@ impl<'a> Analyzer<'a> {
     fn analyze(&mut self) -> Result<()> {
         for d in &self.file.directives {
             match d {
-                cst::Directive::Price {
-                    date,
-                    commodity,
-                    price,
-                    target,
-                    ..
-                } => self.analyze_price(date, commodity, price, target)?,
-                cst::Directive::Open { date, account, .. } => self.analyze_open(date, account)?,
-                cst::Directive::Transaction {
-                    date,
-                    addon,
-                    description,
-                    bookings,
-                    ..
-                } => self.analyze_transaction(addon, date, description, bookings)?,
-                cst::Directive::Assertion {
-                    date, assertions, ..
-                } => self.analyze_assertion(date, assertions)?,
-                cst::Directive::Close { date, account, .. } => self.analyze_close(date, account)?,
-                cst::Directive::Include { .. } => (),
+                cst::Directive::Price(price) => self.analyze_price(price)?,
+                cst::Directive::Open(o) => self.analyze_open(o)?,
+                cst::Directive::Transaction(t) => self.analyze_transaction(t)?,
+                cst::Directive::Assertion(a) => self.analyze_assertion(a)?,
+                cst::Directive::Close(c) => self.analyze_close(c)?,
+                cst::Directive::Include(_) => (),
             }
         }
         Ok(())
     }
 
-    fn analyze_price(
-        &mut self,
-        date: &cst::Date,
-        commodity: &cst::Commodity,
-        price: &cst::Decimal,
-        target: &cst::Commodity,
-    ) -> Result<()> {
-        let date = self.analyze_date(date)?;
-        let commodity = self.analyze_commodity(commodity)?;
-        let price = self.analyze_decimal(price)?;
-        let target = self.analyze_commodity(target)?;
+    fn analyze_price(&mut self, p: &cst::Price) -> Result<()> {
+        let date = self.analyze_date(&p.date)?;
+        let commodity = self.analyze_commodity(&p.commodity)?;
+        let price = self.analyze_decimal(&p.price)?;
+        let target = self.analyze_commodity(&p.target)?;
         self.journal.day(date).prices.push(Price {
             date,
             commodity,
@@ -83,22 +63,17 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    fn analyze_open(&mut self, date: &cst::Date, account: &cst::Account) -> Result<()> {
-        let date = self.analyze_date(date)?;
-        let account = self.analyze_account(account)?;
+    fn analyze_open(&mut self, o: &cst::Open) -> Result<()> {
+        let date = self.analyze_date(&o.date)?;
+        let account = self.analyze_account(&o.account)?;
         self.journal.day(date).openings.push(Open { date, account });
         Ok(())
     }
 
-    fn analyze_transaction(
-        &mut self,
-        addon: &Option<cst::Addon>,
-        date: &cst::Date,
-        description: &cst::QuotedString,
-        bookings: &[cst::Booking],
-    ) -> Result<()> {
-        let date = self.analyze_date(date)?;
-        let bookings = bookings
+    fn analyze_transaction(&mut self, t: &cst::Transaction) -> Result<()> {
+        let date = self.analyze_date(&t.date)?;
+        let bookings = t
+            .bookings
             .iter()
             .map(|a| {
                 Ok(Booking::create(
@@ -113,21 +88,21 @@ impl<'a> Analyzer<'a> {
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
-        let mut t = Transaction {
+        let mut trx = Transaction {
             date,
-            description: description.content.text().to_string(),
+            description: t.description.content.text().to_string(),
             postings: bookings,
             targets: None,
         };
-        let mut ts = match addon {
+        let mut ts = match &t.addon {
             Some(cst::Addon::Performance { commodities, .. }) => {
-                t.targets = Some(
+                trx.targets = Some(
                     commodities
                         .iter()
                         .map(|c| self.analyze_commodity(c))
                         .collect::<Result<Vec<_>>>()?,
                 );
-                vec![t]
+                vec![trx]
             }
             Some(cst::Addon::Accrual {
                 start,
@@ -140,18 +115,19 @@ impl<'a> Analyzer<'a> {
                 let end = self.analyze_date(end)?;
                 let interval = self.analyze_interval(interval)?;
                 let account = self.analyze_account(account)?;
-                self.expand(t, start, end, interval, account)
+                self.expand(trx, start, end, interval, account)
             }
-            None => vec![t],
+            None => vec![trx],
         };
 
         self.journal.day(date).transactions.append(&mut ts);
         Ok(())
     }
 
-    fn analyze_assertion(&mut self, date: &cst::Date, assertions: &[cst::Assertion]) -> Result<()> {
-        let date = self.analyze_date(date)?;
-        let mut res = assertions
+    fn analyze_assertion(&mut self, a: &cst::Assertion) -> Result<()> {
+        let date = self.analyze_date(&a.date)?;
+        let mut res = a
+            .assertions
             .iter()
             .map(|a| {
                 Ok(Assertion {
@@ -166,9 +142,9 @@ impl<'a> Analyzer<'a> {
         Ok(())
     }
 
-    fn analyze_close(&mut self, date: &cst::Date, account: &cst::Account) -> Result<()> {
-        let date = self.analyze_date(date)?;
-        let account = self.analyze_account(account)?;
+    fn analyze_close(&mut self, c: &cst::Close) -> Result<()> {
+        let date = self.analyze_date(&c.date)?;
+        let account = self.analyze_account(&c.account)?;
         self.journal
             .day(date)
             .closings

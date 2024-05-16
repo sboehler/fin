@@ -1,6 +1,8 @@
 use std::io::{self, Result, Write};
 
-use super::cst::{Addon, Assertion, Directive, SyntaxFile};
+use super::cst::{
+    Addon, Assertion, Close, Directive, Include, Open, Price, SubAssertion, SyntaxFile, Transaction,
+};
 
 pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<()> {
     let n = initialize(syntax_tree);
@@ -8,16 +10,16 @@ pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<(
     for d in &syntax_tree.directives {
         w.write_all(syntax_tree.range.file.text[pos..d.range().start].as_bytes())?;
         match d {
-            Directive::Include { path, .. } => {
+            Directive::Include(Include { path, .. }) => {
                 write!(w, "include {}", path.range.text())?;
             }
-            Directive::Price {
+            Directive::Price(Price {
                 date,
                 commodity,
                 price,
                 target,
                 ..
-            } => {
+            }) => {
                 write!(
                     w,
                     "{date} price {commodity} {price} {target}",
@@ -27,7 +29,7 @@ pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<(
                     target = target.0.text(),
                 )?;
             }
-            Directive::Open { date, account, .. } => {
+            Directive::Open(Open { date, account, .. }) => {
                 write!(
                     w,
                     "{date} open {account}",
@@ -35,13 +37,13 @@ pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<(
                     account = account.range.text(),
                 )?;
             }
-            Directive::Transaction {
+            Directive::Transaction(Transaction {
                 date,
                 addon,
                 description,
                 bookings,
                 ..
-            } => {
+            }) => {
                 if let Some(a) = addon {
                     format_addon(w, a)?;
                     writeln!(w)?;
@@ -64,11 +66,11 @@ pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<(
                     )?;
                 }
             }
-            Directive::Assertion {
+            Directive::Assertion(Assertion {
                 date, assertions, ..
-            } => {
+            }) => {
                 match &assertions[..] {
-                    [Assertion {
+                    [SubAssertion {
                         account,
                         balance: amount,
                         commodity,
@@ -95,7 +97,7 @@ pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<(
                     }
                 };
             }
-            Directive::Close { date, account, .. } => {
+            Directive::Close(Close { date, account, .. }) => {
                 write!(
                     w,
                     "{date} close {account}",
@@ -115,7 +117,7 @@ fn initialize(syntax_tree: &SyntaxFile) -> usize {
         .directives
         .iter()
         .filter_map(|d| match d {
-            Directive::Transaction { bookings, .. } => Some(bookings),
+            Directive::Transaction(Transaction { bookings, .. }) => Some(bookings),
             _ => None,
         })
         .flatten()
