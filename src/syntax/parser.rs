@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use super::cst::{
     Account, Addon, Assertion, Booking, Character, Commodity, Date, Decimal, Directive,
-    QuotedString, Rng, Sequence, SyntaxTree, Token,
+    QuotedString, Rng, Sequence, SyntaxFile, Token,
 };
 use super::error::SyntaxError;
 use super::file::File;
@@ -186,7 +186,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse(&self) -> Result<SyntaxTree> {
+    pub fn parse(&self) -> Result<SyntaxFile> {
         let file_scope = self.scope(Token::File);
         let mut directives = Vec::new();
         while let Some(c) = self.scanner.current() {
@@ -213,7 +213,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        Ok(SyntaxTree {
+        Ok(SyntaxFile {
             range: file_scope.rng(),
             directives,
         })

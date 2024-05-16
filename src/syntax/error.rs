@@ -58,7 +58,7 @@ impl std::fmt::Display for SyntaxError {
 }
 
 #[cfg(test)]
-mod test_parser_error {
+mod tests {
     use crate::syntax::file::File;
 
     use super::*;
@@ -96,11 +96,12 @@ mod test_parser_error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum FileError {
     IO(PathBuf, io::Error),
     Cycle(PathBuf),
     InvalidPath(PathBuf),
+    SyntaxError(SyntaxError),
 }
 
 impl Display for FileError {
@@ -124,8 +125,7 @@ impl Display for FileError {
             FileError::InvalidPath(file) => {
                 writeln!(f, "invalid path: {file}", file = file.to_string_lossy())
             }
+            FileError::SyntaxError(e) => writeln!(f, "{}", e),
         }
     }
 }
-
-impl Error for FileError {}

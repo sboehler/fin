@@ -238,7 +238,7 @@ pub struct QuotedString {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct SyntaxTree {
+pub struct SyntaxFile {
     pub range: Rng,
     pub directives: Vec<Directive>,
 }

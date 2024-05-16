@@ -6,7 +6,7 @@ use rust_decimal::Decimal;
 use crate::{
     model::Period,
     syntax::{
-        cst::{self, SyntaxTree},
+        cst::{self, SyntaxFile},
         error::SyntaxError,
     },
 };
@@ -16,26 +16,25 @@ use super::{
     Transaction,
 };
 
-pub struct Analyzer<'a> {
+pub fn analyze_files(files: &Vec<SyntaxFile>) -> Result<Journal> {
+    let mut journal = Journal::new();
+    for file in files {
+        Analyzer {
+            journal: &mut journal,
+            file,
+        }
+        .analyze()?
+    }
+    Ok(journal)
+}
+struct Analyzer<'a> {
     journal: &'a mut Journal,
-    file: &'a SyntaxTree,
+    file: &'a SyntaxFile,
 }
 
 type Result<T> = std::result::Result<T, SyntaxError>;
 
 impl<'a> Analyzer<'a> {
-    pub fn analyze_files(files: &Vec<SyntaxTree>) -> Result<Journal> {
-        let mut journal = Journal::new();
-        for file in files {
-            Analyzer {
-                journal: &mut journal,
-                file,
-            }
-            .analyze()?
-        }
-        Ok(journal)
-    }
-
     fn analyze(&mut self) -> Result<()> {
         for d in &self.file.directives {
             match d {

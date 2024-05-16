@@ -1,8 +1,8 @@
 use std::io::{self, Result, Write};
 
-use super::cst::{Addon, Assertion, Directive, SyntaxTree};
+use super::cst::{Addon, Assertion, Directive, SyntaxFile};
 
-pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxTree) -> io::Result<()> {
+pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<()> {
     let n = initialize(syntax_tree);
     let mut pos = 0;
     for d in &syntax_tree.directives {
@@ -110,7 +110,7 @@ pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxTree) -> io::Result<(
     Ok(())
 }
 
-fn initialize(syntax_tree: &SyntaxTree) -> usize {
+fn initialize(syntax_tree: &SyntaxFile) -> usize {
     syntax_tree
         .directives
         .iter()
