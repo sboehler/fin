@@ -187,10 +187,10 @@ impl Display for Token {
                 let n = chars.len().saturating_sub(2);
                 for (i, ch) in chars.iter().enumerate() {
                     write!(f, "{}", ch)?;
-                    if i < n {
-                        write!(f, ", ")?;
-                    } else if i == n {
-                        write!(f, ", or ")?;
+                    match i.cmp(&n) {
+                        std::cmp::Ordering::Less => write!(f, ", ")?,
+                        std::cmp::Ordering::Equal => write!(f, ", or ")?,
+                        std::cmp::Ordering::Greater => (),
                     }
                 }
                 writeln!(f)?;

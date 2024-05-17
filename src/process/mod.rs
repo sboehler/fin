@@ -79,7 +79,7 @@ pub fn compute_prices(journal: &mut Journal, target: &Option<Rc<Commodity>>) {
         let mut prices = Prices::default();
         for day in journal {
             day.prices.iter().for_each(|p| prices.insert(p));
-            day.normalized_prices.set(prices.normalize(t));
+            day.normalized_prices.set(prices.normalize(t)).unwrap();
         }
     }
 }
