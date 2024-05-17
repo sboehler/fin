@@ -1,3 +1,4 @@
+use std::cell::OnceCell;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
@@ -13,9 +14,10 @@ pub struct Day {
     pub assertions: Vec<Assertion>,
     pub openings: Vec<Open>,
     pub transactions: Vec<Transaction>,
+    pub gains: OnceCell<Vec<Transaction>>,
     pub closings: Vec<Close>,
 
-    pub normalized_prices: NormalizedPrices,
+    pub normalized_prices: OnceCell<NormalizedPrices>,
 }
 
 impl Day {
@@ -26,9 +28,10 @@ impl Day {
             assertions: Vec::new(),
             openings: Vec::new(),
             transactions: Vec::new(),
+            gains: Default::default(),
             closings: Vec::new(),
 
-            normalized_prices: NormalizedPrices::default(),
+            normalized_prices: OnceCell::new(),
         }
     }
 }

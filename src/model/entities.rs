@@ -1,4 +1,4 @@
-use std::{cmp, rc::Rc};
+use std::{cell::Cell, cmp, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -107,7 +107,7 @@ pub struct Booking {
     pub other: Rc<Account>,
     pub commodity: Rc<Commodity>,
     pub quantity: Decimal,
-    pub value: Decimal,
+    pub value: Cell<Decimal>,
 }
 
 impl Booking {
@@ -124,14 +124,14 @@ impl Booking {
                 other: debit.clone(),
                 commodity: commodity.clone(),
                 quantity: -quantity,
-                value: -value,
+                value: Cell::new(-value),
             },
             Booking {
                 account: debit.clone(),
                 other: credit.clone(),
                 commodity: commodity.clone(),
                 quantity,
-                value,
+                value: Cell::new(value),
             },
         ]
     }
