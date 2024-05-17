@@ -16,7 +16,7 @@ use crate::model::{
     journal::Journal,
 };
 
-pub fn check(journal: &mut Journal) -> result::Result<(), String> {
+pub fn check(journal: &Journal) -> result::Result<(), String> {
     let mut quantities = HashMap::new();
     let mut accounts = HashSet::new();
 
@@ -74,7 +74,7 @@ pub fn check(journal: &mut Journal) -> result::Result<(), String> {
     Ok(())
 }
 
-pub fn compute_prices(journal: &mut Journal, target: &Option<Rc<Commodity>>) {
+pub fn compute_prices(journal: &Journal, target: &Option<Rc<Commodity>>) {
     if let Some(t) = target {
         let mut prices = Prices::default();
         for day in journal {
