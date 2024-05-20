@@ -12,8 +12,8 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let syntax_trees = parse_files(&self.journal)?;
-        let mut journal = analyze_files(&syntax_trees)?;
-        check(&mut journal)?;
+        let journal = analyze_files(&syntax_trees)?;
+        check(&journal)?;
         Ok(())
     }
 }

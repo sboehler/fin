@@ -85,7 +85,7 @@ impl Commodity {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Price {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
@@ -94,14 +94,14 @@ pub struct Price {
     pub target: Rc<Commodity>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Open {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
     pub account: Rc<Account>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Booking {
     pub account: Rc<Account>,
     pub other: Rc<Account>,
@@ -137,7 +137,7 @@ impl Booking {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Transaction {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
@@ -146,7 +146,7 @@ pub struct Transaction {
     pub targets: Option<Vec<Rc<Commodity>>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Assertion {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
@@ -155,7 +155,7 @@ pub struct Assertion {
     pub commodity: Rc<Commodity>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Close {
     pub rng: Option<Rng>,
     pub date: NaiveDate,

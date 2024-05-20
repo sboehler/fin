@@ -1,9 +1,11 @@
 use std::cell::OnceCell;
+use std::collections::HashMap;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
+use rust_decimal::Decimal;
 
-use super::entities::{Assertion, Close, Open, Price, Transaction};
+use super::entities::{Account, Assertion, Close, Commodity, Open, Price, Transaction};
 use super::prices::NormalizedPrices;
 use super::registry::Registry;
 
@@ -18,7 +20,11 @@ pub struct Day {
     pub closings: Vec<Close>,
 
     pub normalized_prices: OnceCell<NormalizedPrices>,
+    pub values: OnceCell<Positions>,
+    pub quantities: OnceCell<Positions>,
 }
+
+type Positions = HashMap<(Rc<Account>, Rc<Commodity>), Decimal>;
 
 impl Day {
     pub fn new(date: NaiveDate) -> Self {
@@ -31,7 +37,9 @@ impl Day {
             gains: Default::default(),
             closings: Vec::new(),
 
-            normalized_prices: OnceCell::new(),
+            normalized_prices: Default::default(),
+            values: Default::default(),
+            quantities: Default::default(),
         }
     }
 }

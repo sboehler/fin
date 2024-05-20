@@ -4,55 +4,92 @@ use std::{
     result,
 };
 
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
+use thiserror::Error;
 
+use crate::model::entities::{Booking, Commodity, Transaction};
 use crate::model::{
-    entities::Commodity,
-    prices::{self},
+    entities::{Account, Assertion},
+    journal::{Day, Journal},
 };
-use crate::model::{entities::Transaction, prices::Prices};
 use crate::model::{
-    entities::{Account, Booking},
-    journal::Journal,
+    entities::{Close, Open},
+    prices::Prices,
 };
 
-pub fn check(journal: &Journal) -> result::Result<(), String> {
+#[derive(Error, Eq, PartialEq, Debug)]
+#[error("process error")]
+pub enum ProcessError {
+    AccountAlreadyOpen {
+        open: Open,
+    },
+    TransactionAccountNotOpen {
+        transaction: Transaction,
+        account: Rc<Account>,
+    },
+    AssertionAccountNotOpen {
+        assertion: Assertion,
+    },
+    AssertionIncorrectBalance {
+        assertion: Assertion,
+        actual: Decimal,
+    },
+    CloseNonzeroBalance {
+        close: Close,
+        commodity: Rc<Commodity>,
+        balance: Decimal,
+    },
+    NoPriceFound {
+        date: NaiveDate,
+        commodity: Rc<Commodity>,
+        target: Rc<Commodity>,
+    },
+}
+
+type Result<T> = result::Result<T, ProcessError>;
+
+pub fn check(journal: &Journal) -> Result<()> {
     let mut quantities = HashMap::new();
     let mut accounts = HashSet::new();
 
     for day in journal {
         day.openings.iter().try_for_each(|o| {
             if !accounts.insert(o.account.clone()) {
-                return Err("already opened");
+                return Err(ProcessError::AccountAlreadyOpen { open: o.clone() });
             }
             Ok(())
         })?;
-        day.transactions
-            .iter()
-            .flat_map(|t| t.postings.iter())
-            .try_for_each(|b| {
+        day.transactions.iter().try_for_each(|t| {
+            t.postings.iter().try_for_each(|b| {
                 if !accounts.contains(&b.account) {
-                    return Err("not open");
+                    return Err(ProcessError::TransactionAccountNotOpen {
+                        transaction: t.clone(),
+                        account: b.account.clone(),
+                    });
                 }
                 quantities
                     .entry((b.account.clone(), b.commodity.clone()))
                     .and_modify(|q| *q += b.quantity)
                     .or_insert(b.quantity);
                 Ok(())
-            })?;
+            })
+        })?;
         day.assertions.iter().try_for_each(|a| {
             if !accounts.contains(&a.account) {
-                return Err("not open".into());
+                return Err(ProcessError::AssertionAccountNotOpen {
+                    assertion: a.clone(),
+                });
             }
             let balance = quantities
                 .get(&(a.account.clone(), a.commodity.clone()))
                 .copied()
-                .unwrap_or(Decimal::ZERO);
+                .unwrap_or_default();
             if balance != a.balance {
-                return Err(format!(
-                    "mismatch {:?} {} {}",
-                    a.account, balance, a.balance
-                ));
+                return Err(ProcessError::AssertionIncorrectBalance {
+                    assertion: a.clone(),
+                    actual: balance,
+                });
             }
             Ok(())
         })?;
@@ -60,52 +97,83 @@ pub fn check(journal: &Journal) -> result::Result<(), String> {
             quantities
                 .iter()
                 .filter(|((a, _), _)| *a == c.account)
-                .try_for_each(|(_, q)| {
+                .try_for_each(|((_, commodity), q)| {
                     if !q.is_zero() {
-                        Err(format!("{:?}: not zero", c))
-                    } else {
-                        Ok(())
+                        return Err(ProcessError::CloseNonzeroBalance {
+                            close: c.clone(),
+                            commodity: commodity.clone(),
+                            balance: *q,
+                        });
                     }
+                    Ok(())
                 })?;
             accounts.remove(&c.account);
-            Ok::<_, String>(())
+            quantities.retain(|(a, _), _| a != &c.account);
+            Ok(())
         })?;
+        day.quantities
+            .set(quantities.clone())
+            .expect("quantities have been set already");
     }
     Ok(())
 }
 
-pub fn compute_prices(journal: &Journal, target: &Option<Rc<Commodity>>) {
-    if let Some(t) = target {
-        let mut prices = Prices::default();
-        for day in journal {
+pub fn compute_valuation(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
+    let mut prev_day: &Day = &Day::new(NaiveDate::default());
+    let mut prices = Prices::default();
+
+    if let Some(target) = valuation {
+        for day in journal.days.values() {
             day.prices.iter().for_each(|p| prices.insert(p));
-            day.normalized_prices.set(prices.normalize(t)).unwrap();
-        }
-    }
-}
+            let cur_prices = prices.normalize(&target);
 
-pub fn valuate(journal: &Journal, target: Option<Rc<Commodity>>) -> Result<(), String> {
-    let mut quantities: HashMap<(Rc<Account>, Rc<Commodity>), Decimal> = HashMap::new();
+            day.transactions
+                .iter()
+                .flat_map(|t| t.postings.iter())
+                .try_for_each(|booking| match cur_prices.get(&booking.commodity) {
+                    Some(p) => {
+                        booking.value.set(booking.quantity * p);
+                        Ok(())
+                    }
+                    None => Err(ProcessError::NoPriceFound {
+                        date: day.date,
+                        commodity: booking.commodity.clone(),
+                        target: target.clone(),
+                    }),
+                })?;
 
-    let mut prev_prices: &prices::NormalizedPrices = &Default::default();
-    if let Some(t) = target {
-        for (_, day) in journal.days.iter() {
+            let prev_quantities = prev_day
+                .quantities
+                .get()
+                .expect("quantities are not initialized");
+            let prev_prices = prev_day
+                .normalized_prices
+                .get()
+                .expect("previous normalized prices are not yet computed");
+
             let mut gains = Vec::new();
-            for (pos, qty) in quantities.iter() {
-                if pos.1 == t {
+            for ((account, commodity), qty) in prev_quantities {
+                if commodity == &target || qty.is_zero() {
                     continue;
                 }
-                if qty.is_zero() {
+                let p_prev = prev_prices
+                    .get(commodity)
+                    .ok_or(ProcessError::NoPriceFound {
+                        date: prev_day.date,
+                        commodity: commodity.clone(),
+                        target: target.clone(),
+                    })?;
+                let p_cur = cur_prices
+                    .get(commodity)
+                    .ok_or(ProcessError::NoPriceFound {
+                        date: day.date,
+                        commodity: commodity.clone(),
+                        target: target.clone(),
+                    })?;
+                if (p_cur - p_prev).is_zero() {
                     continue;
                 }
-                let cp = day.normalized_prices.get().unwrap();
-                let prev = prev_prices.get(&pos.1).unwrap();
-                let current = cp.get(&pos.1).unwrap();
-                let delta = current - prev;
-                if delta.is_zero() {
-                    continue;
-                }
-                let gain = delta * qty;
+                let gain = (p_cur - p_prev) * qty;
                 let credit = journal
                     .registry
                     .borrow_mut()
@@ -116,45 +184,22 @@ pub fn valuate(journal: &Journal, target: Option<Rc<Commodity>>) -> Result<(), S
                     rng: None,
                     description: format!(
                         "Adjust value of {} in account {}",
-                        pos.1.name, pos.0.name
+                        commodity.name, account.name
                     ),
                     postings: Booking::create(
                         credit,
-                        pos.0.clone(),
+                        account.clone(),
                         Decimal::ZERO,
-                        pos.1.clone(),
+                        commodity.clone(),
                         gain,
                     ),
-                    targets: Some(vec![pos.1.clone()]),
+                    targets: Some(vec![commodity.clone()]),
                 })
             }
             day.gains.set(gains).unwrap();
+            day.normalized_prices.set(cur_prices).unwrap();
 
-            for trx in day.transactions.iter() {
-                for b in trx.postings.iter() {
-                    // update quantities
-                    if !b.quantity.is_zero() && b.account.account_type.is_al() {
-                        quantities
-                            .entry((b.account.clone(), b.commodity.clone()))
-                            .and_modify(|q| *q += b.quantity)
-                            .or_insert(b.quantity);
-                    }
-                    // valuate transaction
-                    b.value.set(if t == b.commodity {
-                        b.quantity
-                    } else {
-                        let p = day
-                            .normalized_prices
-                            .get()
-                            .unwrap()
-                            .get(&b.commodity)
-                            .to_owned()
-                            .unwrap();
-                        p * b.quantity
-                    })
-                }
-            }
-            prev_prices = day.normalized_prices.get().unwrap()
+            prev_day = day
         }
     }
     Ok(())
