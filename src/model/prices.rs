@@ -52,6 +52,9 @@ impl Prices {
         prices.insert(target.clone(), target_price);
         if let Some(target_denominated) = self.prices.get(target) {
             for (neighbor, price) in target_denominated {
+                if prices.contains_key(neighbor) {
+                    continue;
+                }
                 self.normalize_rec(neighbor, price * target_price, prices)
             }
         }
