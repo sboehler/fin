@@ -8,10 +8,13 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use thiserror::Error;
 
-use crate::model::entities::{Booking, Commodity, Transaction};
 use crate::model::{
     entities::{Account, Assertion},
     journal::{Day, Journal},
+};
+use crate::model::{
+    entities::{Booking, Commodity, Transaction},
+    error::ModelError,
 };
 use crate::model::{
     entities::{Close, Open},
@@ -40,11 +43,7 @@ pub enum ProcessError {
         commodity: Rc<Commodity>,
         balance: Decimal,
     },
-    NoPriceFound {
-        date: NaiveDate,
-        commodity: Rc<Commodity>,
-        target: Rc<Commodity>,
-    },
+    ModelError(#[from] ModelError),
 }
 
 type Result<T> = result::Result<T, ProcessError>;
@@ -94,19 +93,15 @@ pub fn check(journal: &Journal) -> Result<()> {
             Ok(())
         })?;
         day.closings.iter().try_for_each(|c| {
-            quantities
-                .iter()
-                .filter(|((a, _), _)| *a == c.account)
-                .try_for_each(|((_, commodity), q)| {
-                    if !q.is_zero() {
-                        return Err(ProcessError::CloseNonzeroBalance {
-                            close: c.clone(),
-                            commodity: commodity.clone(),
-                            balance: *q,
-                        });
-                    }
-                    Ok(())
-                })?;
+            for (pos, qty) in quantities.iter() {
+                if pos.0 == c.account && !qty.is_zero() {
+                    return Err(ProcessError::CloseNonzeroBalance {
+                        close: c.clone(),
+                        commodity: pos.1.clone(),
+                        balance: *qty,
+                    });
+                }
+            }
             accounts.remove(&c.account);
             quantities.retain(|(a, _), _| a != &c.account);
             Ok(())
@@ -131,16 +126,11 @@ pub fn compute_valuation(journal: &Journal, valuation: Option<Rc<Commodity>>) ->
             day.transactions
                 .iter()
                 .flat_map(|t| t.postings.iter())
-                .try_for_each(|booking| match cur_prices.get(&booking.commodity) {
-                    Some(p) => {
-                        booking.value.set(booking.quantity * p);
-                        Ok(())
-                    }
-                    None => Err(ProcessError::NoPriceFound {
-                        date: day.date,
-                        commodity: booking.commodity.clone(),
-                        target: target.clone(),
-                    }),
+                .try_for_each(|booking| {
+                    cur_prices
+                        .valuate(&booking.quantity, &booking.commodity)
+                        .map(|v| booking.value.set(v))
+                        .map_err(ProcessError::ModelError)
                 })?;
 
             let prev_quantities = prev_day
@@ -160,29 +150,13 @@ pub fn compute_valuation(journal: &Journal, valuation: Option<Rc<Commodity>>) ->
                     if qty.is_zero() {
                         return Ok(None);
                     }
-                    let p_prev = prev_prices
-                        .get(commodity)
-                        .ok_or(ProcessError::NoPriceFound {
-                            date: prev_day.date,
-                            commodity: commodity.clone(),
-                            target: target.clone(),
-                        })?;
-                    let p_cur = cur_prices
-                        .get(commodity)
-                        .ok_or(ProcessError::NoPriceFound {
-                            date: day.date,
-                            commodity: commodity.clone(),
-                            target: target.clone(),
-                        })?;
-                    if (p_cur - p_prev).is_zero() {
+                    let v_prev = prev_prices.valuate(qty, commodity)?;
+                    let v_cur = cur_prices.valuate(qty, commodity)?;
+                    let gain = v_cur - v_prev;
+                    if gain.is_zero() {
                         return Ok(None);
                     }
-                    let gain = (p_cur - p_prev) * qty;
-                    let credit = journal
-                        .registry
-                        .borrow_mut()
-                        .account("Income:Valuation")
-                        .unwrap();
+                    let credit = journal.registry.borrow_mut().account("Income:Valuation")?;
                     Ok(Some(Transaction {
                         date: day.date,
                         rng: None,

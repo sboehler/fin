@@ -9,7 +9,6 @@ use super::entities::{Account, Assertion, Close, Commodity, Open, Price, Transac
 use super::prices::NormalizedPrices;
 use super::registry::Registry;
 
-#[derive(Debug)]
 pub struct Day {
     pub date: NaiveDate,
     pub prices: Vec<Price>,

@@ -1,4 +1,4 @@
-use std::{cell::Cell, cmp, rc::Rc};
+use std::{cell::Cell, cmp, fmt::Display, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -36,7 +36,7 @@ impl TryFrom<&str> for AccountType {
             "Equity" => Ok(AccountType::Equity),
             "Income" => Ok(AccountType::Income),
             "Expenses" => Ok(AccountType::Expenses),
-            _ => Err(ModelError::InvalidAccountType),
+            _ => Err(ModelError::InvalidAccountType(value.into())),
         }
     }
 }
@@ -53,10 +53,10 @@ impl Account {
             &[at, ref segments @ ..] => {
                 for segment in segments {
                     if segment.is_empty() {
-                        return Err(ModelError::InvalidAccountName);
+                        return Err(ModelError::InvalidAccountName(s.into()));
                     }
                     if segment.chars().any(|c| !c.is_alphanumeric()) {
-                        return Err(ModelError::InvalidAccountName);
+                        return Err(ModelError::InvalidAccountName(s.into()));
                     }
                 }
                 Ok(Account {
@@ -64,8 +64,14 @@ impl Account {
                     name: s.to_string(),
                 })
             }
-            _ => Err(ModelError::InvalidAccountName),
+            _ => Err(ModelError::InvalidAccountName(s.into())),
         }
+    }
+}
+
+impl Display for Account {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 
@@ -77,11 +83,17 @@ pub struct Commodity {
 impl Commodity {
     pub fn new(name: &str) -> Result<Commodity> {
         if name.is_empty() || !name.chars().all(char::is_alphanumeric) {
-            return Err(ModelError::InvalidCommodityName);
+            return Err(ModelError::InvalidCommodityName(name.into()));
         }
         Ok(Commodity {
             name: name.to_string(),
         })
+    }
+}
+
+impl Display for Commodity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 
