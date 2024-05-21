@@ -4,6 +4,8 @@ use std::{
     result,
 };
 
+pub mod cpr;
+
 use rust_decimal::Decimal;
 use thiserror::Error;
 
