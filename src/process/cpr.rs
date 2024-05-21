@@ -1,4 +1,9 @@
-use std::{error::Error, result};
+use std::{
+    error::Error,
+    result,
+    sync::mpsc::{channel, Receiver, Sender},
+    thread,
+};
 
 pub type Result<T> = result::Result<T, Box<dyn Error>>;
 
@@ -21,9 +26,40 @@ struct Foo {
     value: usize,
 }
 
+type Processor<T> = fn(receiver: Receiver<T>, sender: Sender<T>);
+
+pub fn seq_parallel<T>(ts: Vec<T>, fs: Vec<Processor<T>>) -> Result<Vec<T>>
+where
+    T: Send + 'static,
+{
+    let (tx, mut rx) = channel();
+
+    thread::spawn(move || {
+        for t in ts {
+            tx.send(t).unwrap();
+        }
+    });
+
+    for f in fs {
+        let (tx, rx_next) = channel();
+        thread::spawn(move || {
+            f(rx, tx);
+        });
+        rx = rx_next
+    }
+
+    let mut res = Vec::new();
+    for r in rx {
+        res.push(r)
+    }
+    Ok(res)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::process::cpr::{seq_serial, Foo};
+    use std::{sync::mpsc::Receiver, sync::mpsc::Sender};
+
+    use crate::process::cpr::{seq_parallel, seq_serial, Foo, Processor};
 
     #[test]
     fn test_seq_serial() {
@@ -33,9 +69,28 @@ mod tests {
         };
 
         assert_eq!(
-            vec![Foo { value: 4 }, Foo { value: 5 }, Foo { value: 6 }],
+            vec![Foo { value: 4 }, Foo { value: 14 }, Foo { value: 24 }],
             seq_serial(
-                vec![Foo { value: 1 }, Foo { value: 2 }, Foo { value: 3 }],
+                vec![Foo { value: 1 }, Foo { value: 11 }, Foo { value: 21 }],
+                vec![f, f, f]
+            )
+            .unwrap()
+        )
+    }
+
+    #[test]
+    fn test_seq_parallel() {
+        let f: Processor<Foo> = |rx: Receiver<Foo>, tx: Sender<Foo>| {
+            for mut f in rx {
+                f.value = f.value + 1;
+                tx.send(f).unwrap();
+            }
+        };
+
+        assert_eq!(
+            vec![Foo { value: 4 }, Foo { value: 14 }, Foo { value: 24 }],
+            seq_parallel::<Foo>(
+                vec![Foo { value: 1 }, Foo { value: 11 }, Foo { value: 21 }],
                 vec![f, f, f]
             )
             .unwrap()
