@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     result,
-    sync::mpsc::{channel, Receiver, Sender},
+    sync::mpsc::{sync_channel, Receiver, SyncSender},
     thread,
 };
 
@@ -26,22 +26,24 @@ struct Foo {
     value: usize,
 }
 
-type Processor<T> = fn(receiver: Receiver<T>, sender: Sender<T>);
+type Processor<T> = fn(receiver: Receiver<T>, sender: SyncSender<T>);
 
 pub fn seq_parallel<T>(ts: Vec<T>, fs: Vec<Processor<T>>) -> Result<Vec<T>>
 where
     T: Send + 'static,
 {
-    let (tx, mut rx) = channel();
+    let (tx, mut rx) = sync_channel(0);
 
     thread::spawn(move || {
         for t in ts {
-            tx.send(t).unwrap();
+            if let Err(e) = tx.send(t) {
+                panic!("{}", e);
+            }
         }
     });
 
     for f in fs {
-        let (tx, rx_next) = channel();
+        let (tx, rx_next) = sync_channel(0);
         thread::spawn(move || {
             f(rx, tx);
         });
@@ -55,16 +57,66 @@ where
     Ok(res)
 }
 
+type Processor2<T, E> = fn(arg: T) -> result::Result<T, E>;
+
+pub fn seq_parallel_abstract<T, E>(
+    ts: Vec<T>,
+    fs: Vec<Processor2<T, E>>,
+) -> result::Result<Vec<T>, E>
+where
+    T: Send + 'static,
+    E: Send + 'static,
+{
+    let (tx, mut rx) = sync_channel(0);
+
+    // producer
+    thread::spawn(move || {
+        for t in ts {
+            if tx.send(Ok(t)).is_err() {
+                return;
+            }
+        }
+    });
+
+    for f in fs {
+        let (tx, rx_next) = sync_channel(0);
+        thread::spawn(move || {
+            for res in rx {
+                match res {
+                    Ok(t) => match f(t) {
+                        Ok(t) => {
+                            if tx.send(Ok(t)).is_err() {
+                                return;
+                            }
+                        }
+                        Err(e) => {
+                            let _ = tx.send(Err(e));
+                            return;
+                        }
+                    },
+                    Err(e) => {
+                        let _ = tx.send(Err(e));
+                        return;
+                    }
+                }
+            }
+        });
+        rx = rx_next
+    }
+
+    rx.iter().collect::<result::Result<Vec<T>, E>>()
+}
+
 #[cfg(test)]
 mod tests {
-    use std::{sync::mpsc::Receiver, sync::mpsc::Sender};
+    use std::sync::mpsc::{Receiver, SyncSender};
 
-    use crate::process::cpr::{seq_parallel, seq_serial, Foo, Processor};
+    use crate::process::cpr::{seq_parallel, seq_parallel_abstract, seq_serial, Foo, Processor};
 
     #[test]
     fn test_seq_serial() {
         let f = |mut f: Foo| {
-            f.value = f.value + 1;
+            f.value += 1;
             Ok(f)
         };
 
@@ -80,16 +132,33 @@ mod tests {
 
     #[test]
     fn test_seq_parallel() {
-        let f: Processor<Foo> = |rx: Receiver<Foo>, tx: Sender<Foo>| {
+        let f: Processor<Foo> = |rx: Receiver<Foo>, tx: SyncSender<Foo>| {
             for mut f in rx {
-                f.value = f.value + 1;
+                f.value += 1;
                 tx.send(f).unwrap();
             }
         };
 
         assert_eq!(
-            vec![Foo { value: 4 }, Foo { value: 14 }, Foo { value: 24 }],
+            vec![Foo { value: 4 }, Foo { value: 14 }, Foo { value: 24 },],
             seq_parallel::<Foo>(
+                vec![Foo { value: 1 }, Foo { value: 11 }, Foo { value: 21 }],
+                vec![f, f, f]
+            )
+            .unwrap()
+        )
+    }
+
+    #[test]
+    fn test_seq_parallel_abstract() {
+        let f = |mut f: Foo| {
+            f.value += 1;
+            Ok(f)
+        };
+
+        assert_eq!(
+            vec![Foo { value: 4 }, Foo { value: 14 }, Foo { value: 24 }],
+            seq_parallel_abstract::<Foo, String>(
                 vec![Foo { value: 1 }, Foo { value: 11 }, Foo { value: 21 }],
                 vec![f, f, f]
             )
