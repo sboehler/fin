@@ -25,6 +25,7 @@
         name = "knut";
         buildInputs = with pkgs; [
           rustup
+          libiconv
         ];
       };
     });
