@@ -37,7 +37,7 @@ impl<'a> Analyzer<'a> {
     fn analyze(&mut self) -> Result<()> {
         for d in &self.file.directives {
             match d {
-                cst::Directive::Price(price) => self.analyze_price(price)?,
+                cst::Directive::Price(p) => self.analyze_price(p)?,
                 cst::Directive::Open(o) => self.analyze_open(o)?,
                 cst::Directive::Transaction(t) => self.analyze_transaction(t)?,
                 cst::Directive::Assertion(a) => self.analyze_assertion(a)?,

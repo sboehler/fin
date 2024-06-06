@@ -2,7 +2,7 @@ use std::{
     error::Error,
     result,
     sync::mpsc::{sync_channel, Receiver, SyncSender},
-    thread,
+    thread::{self, JoinHandle},
 };
 
 pub type Result<T> = result::Result<T, Box<dyn Error>>;
@@ -21,11 +21,6 @@ where
     Ok(res)
 }
 
-#[derive(Eq, PartialEq, Debug)]
-struct Foo {
-    value: usize,
-}
-
 type Processor<T> = fn(receiver: Receiver<T>, sender: SyncSender<T>);
 
 pub fn seq_parallel<T>(ts: Vec<T>, fs: Vec<Processor<T>>) -> Result<Vec<T>>
@@ -33,20 +28,21 @@ where
     T: Send + 'static,
 {
     let (tx, mut rx) = sync_channel(0);
+    let mut threads = Vec::new();
 
-    thread::spawn(move || {
+    threads.push(thread::spawn(move || {
         for t in ts {
             if let Err(e) = tx.send(t) {
                 panic!("{}", e);
             }
         }
-    });
+    }));
 
     for f in fs {
         let (tx, rx_next) = sync_channel(0);
-        thread::spawn(move || {
+        threads.push(thread::spawn(move || {
             f(rx, tx);
-        });
+        }));
         rx = rx_next
     }
 
@@ -54,6 +50,11 @@ where
     for r in rx {
         res.push(r)
     }
+    threads
+        .into_iter()
+        .map(JoinHandle::join)
+        .collect::<std::result::Result<(), _>>()
+        .unwrap();
     Ok(res)
 }
 
@@ -111,7 +112,12 @@ where
 mod tests {
     use std::sync::mpsc::{Receiver, SyncSender};
 
-    use crate::process::cpr::{seq_parallel, seq_parallel_abstract, seq_serial, Foo, Processor};
+    use crate::process::cpr::{seq_parallel, seq_parallel_abstract, seq_serial, Processor};
+
+    #[derive(Eq, PartialEq, Debug)]
+    struct Foo {
+        value: usize,
+    }
 
     #[test]
     fn test_seq_serial() {
