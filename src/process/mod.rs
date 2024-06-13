@@ -130,7 +130,30 @@ pub fn compute_prices(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Re
     Ok(())
 }
 
-pub fn compute_valuation(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
+pub fn valuate_transactions(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
+    if valuation.is_none() {
+        return Ok(());
+    };
+    for day in journal.days.values() {
+        let cur_prices = day
+            .normalized_prices
+            .get()
+            .expect("normalized prices have not been set");
+
+        day.transactions
+            .iter()
+            .flat_map(|t| t.postings.iter())
+            .try_for_each(|booking| {
+                cur_prices
+                    .valuate(&booking.quantity, &booking.commodity)
+                    .map(|v| booking.value.set(v))
+                    .map_err(ProcessError::ModelError)
+            })?;
+    }
+    Ok(())
+}
+
+pub fn compute_gains(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
     let Some(target) = valuation else {
         return Ok(());
     };
@@ -145,17 +168,6 @@ pub fn compute_valuation(journal: &Journal, valuation: Option<Rc<Commodity>>) ->
             .normalized_prices
             .get()
             .expect("normalized prices have not been set");
-
-        // valuate transactions
-        day.transactions
-            .iter()
-            .flat_map(|t| t.postings.iter())
-            .try_for_each(|booking| {
-                cur_prices
-                    .valuate(&booking.quantity, &booking.commodity)
-                    .map(|v| booking.value.set(v))
-                    .map_err(ProcessError::ModelError)
-            })?;
 
         // compute valuation gains since last day
         let gains = prev_q

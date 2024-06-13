@@ -1,5 +1,5 @@
 use crate::model::analyzer::analyze_files;
-use crate::process::{check, compute_prices, compute_valuation};
+use crate::process::{check, compute_gains, compute_prices, valuate_transactions};
 use crate::syntax::parse_files;
 use clap::Args;
 use std::{error::Error, path::PathBuf};
@@ -20,7 +20,8 @@ impl Command {
         if let Some(name) = &self.valuation {
             let commodity = journal.registry.borrow_mut().commodity(name)?;
             compute_prices(&journal, Some(commodity.clone()))?;
-            compute_valuation(&journal, Some(commodity))?
+            valuate_transactions(&journal, Some(commodity.clone()))?;
+            compute_gains(&journal, Some(commodity))?
         }
         Ok(())
     }
