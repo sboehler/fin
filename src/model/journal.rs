@@ -23,7 +23,7 @@ pub struct Day {
     pub quantities: OnceCell<Positions>,
 }
 
-type Positions = HashMap<(Rc<Account>, Rc<Commodity>), Decimal>;
+pub type Positions = HashMap<(Rc<Account>, Rc<Commodity>), Decimal>;
 
 impl Day {
     pub fn new(date: NaiveDate) -> Self {

@@ -71,6 +71,13 @@ pub struct NormalizedPrices {
 type Result<T> = result::Result<T, ModelError>;
 
 impl NormalizedPrices {
+    pub fn new(commodity: Rc<Commodity>) -> Self {
+        NormalizedPrices {
+            date: NaiveDate::default(),
+            target: commodity,
+            prices: HashMap::default(),
+        }
+    }
     pub fn valuate(&self, quantity: &Decimal, commodity: &Rc<Commodity>) -> Result<Decimal> {
         if let Some(p) = self.prices.get(commodity) {
             return Ok(quantity * p);

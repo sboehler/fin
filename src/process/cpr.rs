@@ -50,11 +50,7 @@ where
     for r in rx {
         res.push(r)
     }
-    threads
-        .into_iter()
-        .map(JoinHandle::join)
-        .collect::<std::result::Result<(), _>>()
-        .unwrap();
+    threads.into_iter().try_for_each(JoinHandle::join).unwrap();
     Ok(res)
 }
 
