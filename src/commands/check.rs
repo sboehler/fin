@@ -1,6 +1,6 @@
-use crate::process::check;
+use crate::model::analyzer::analyze_files;
+use crate::process::{check, compute_prices, compute_valuation};
 use crate::syntax::parse_files;
-use crate::{model::analyzer::analyze_files, process::compute_valuation};
 use clap::Args;
 use std::{error::Error, path::PathBuf};
 
@@ -19,6 +19,7 @@ impl Command {
         check(&journal)?;
         if let Some(name) = &self.valuation {
             let commodity = journal.registry.borrow_mut().commodity(name)?;
+            compute_prices(&journal, Some(commodity.clone()))?;
             compute_valuation(&journal, Some(commodity))?
         }
         Ok(())

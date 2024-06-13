@@ -23,27 +23,28 @@ use crate::model::{
 };
 
 #[derive(Error, Eq, PartialEq, Debug)]
-#[error("process error")]
 pub enum ProcessError {
-    AccountAlreadyOpen {
-        open: Open,
-    },
+    #[error("error processing {open:?}: account is already open")]
+    AccountAlreadyOpen { open: Open },
+    #[error("error booking transaction {transaction:?}: account {account:?} is not open")]
     TransactionAccountNotOpen {
         transaction: Transaction,
         account: Rc<Account>,
     },
-    AssertionAccountNotOpen {
-        assertion: Assertion,
-    },
+    #[error("error processing assertion {assertion:?}: account is not open")]
+    AssertionAccountNotOpen { assertion: Assertion },
+    #[error("assertion {assertion:?} failed: balance is {actual:?}")]
     AssertionIncorrectBalance {
         assertion: Assertion,
         actual: Decimal,
     },
+    #[error("error closing {close:?}: commodity {commodity:?} has non-zero balance {balance:?}")]
     CloseNonzeroBalance {
         close: Close,
         commodity: Rc<Commodity>,
         balance: Decimal,
     },
+    #[error("{0}")]
     ModelError(#[from] ModelError),
 }
 
@@ -114,81 +115,92 @@ pub fn check(journal: &Journal) -> Result<()> {
     Ok(())
 }
 
-pub fn compute_valuation(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
-    let mut maybe_prev_day: Option<&Day> = None;
+pub fn compute_prices(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
+    let Some(target) = valuation else {
+        return Ok(());
+    };
     let mut prices = Prices::default();
+    for day in journal.days.values() {
+        day.prices.iter().for_each(|p| prices.insert(p));
+        day.normalized_prices
+            .set(prices.normalize(&target))
+            .expect("normalized prices have already been set");
+    }
+    Ok(())
+}
 
-    if let Some(target) = valuation {
-        for day in journal.days.values() {
-            day.prices.iter().for_each(|p| prices.insert(p));
-            let cur_prices = prices.normalize(&target);
+pub fn compute_valuation(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
+    if valuation.is_some() {
+        return Ok(());
+    };
+    let mut maybe_prev_day: Option<&Day> = None;
+    for day in journal.days.values() {
+        let cur_prices = day
+            .normalized_prices
+            .get()
+            .expect("normalized prices have not been set");
 
-            // valuate transactions
-            day.transactions
+        // valuate transactions
+        day.transactions
+            .iter()
+            .flat_map(|t| t.postings.iter())
+            .try_for_each(|booking| {
+                cur_prices
+                    .valuate(&booking.quantity, &booking.commodity)
+                    .map(|v| booking.value.set(v))
+                    .map_err(ProcessError::ModelError)
+            })?;
+
+        if let Some(prev_day) = maybe_prev_day {
+            let prev_quantities = prev_day
+                .quantities
+                .get()
+                .expect("previous quantities are not initialized");
+
+            let prev_prices = prev_day
+                .normalized_prices
+                .get()
+                .expect("previous normalized prices are not yet computed");
+
+            // compute valuation gains since last day
+            let gains = prev_quantities
                 .iter()
-                .flat_map(|t| t.postings.iter())
-                .try_for_each(|booking| {
-                    cur_prices
-                        .valuate(&booking.quantity, &booking.commodity)
-                        .map(|v| booking.value.set(v))
-                        .map_err(ProcessError::ModelError)
-                })?;
+                .map(|((account, commodity), qty)| {
+                    if qty.is_zero() {
+                        return Ok(None);
+                    }
+                    let v_prev = prev_prices.valuate(qty, commodity)?;
+                    let v_cur = cur_prices.valuate(qty, commodity)?;
+                    let gain = v_cur - v_prev;
+                    if gain.is_zero() {
+                        return Ok(None);
+                    }
+                    let credit = journal.registry.borrow_mut().account("Income:Valuation")?;
+                    Ok(Some(Transaction {
+                        date: day.date,
+                        rng: None,
+                        description: format!(
+                            "Adjust value of {} in account {}",
+                            commodity.name, account.name
+                        ),
+                        postings: Booking::create(
+                            credit,
+                            account.clone(),
+                            Decimal::ZERO,
+                            commodity.clone(),
+                            gain,
+                        ),
+                        targets: Some(vec![commodity.clone()]),
+                    }))
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>();
 
-            if let Some(prev_day) = maybe_prev_day {
-                let prev_quantities = prev_day
-                    .quantities
-                    .get()
-                    .expect("previous quantities are not initialized");
-
-                let prev_prices = prev_day
-                    .normalized_prices
-                    .get()
-                    .expect("previous normalized prices are not yet computed");
-
-                // compute valuation gains since last day
-                let gains = prev_quantities
-                    .iter()
-                    .map(|((account, commodity), qty)| {
-                        if qty.is_zero() {
-                            return Ok(None);
-                        }
-                        let v_prev = prev_prices.valuate(qty, commodity)?;
-                        let v_cur = cur_prices.valuate(qty, commodity)?;
-                        let gain = v_cur - v_prev;
-                        if gain.is_zero() {
-                            return Ok(None);
-                        }
-                        let credit = journal.registry.borrow_mut().account("Income:Valuation")?;
-                        Ok(Some(Transaction {
-                            date: day.date,
-                            rng: None,
-                            description: format!(
-                                "Adjust value of {} in account {}",
-                                commodity.name, account.name
-                            ),
-                            postings: Booking::create(
-                                credit,
-                                account.clone(),
-                                Decimal::ZERO,
-                                commodity.clone(),
-                                gain,
-                            ),
-                            targets: Some(vec![commodity.clone()]),
-                        }))
-                    })
-                    .collect::<Result<Vec<_>>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>();
-
-                day.gains.set(gains).expect("gains have already been set");
-            }
-            day.normalized_prices
-                .set(cur_prices)
-                .expect("normalized prices have already been set");
-
-            maybe_prev_day = Some(day)
+            day.gains.set(gains).expect("gains have already been set");
         }
+        maybe_prev_day = Some(day)
     }
     Ok(())
 }
