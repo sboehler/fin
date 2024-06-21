@@ -25,6 +25,46 @@ impl Rng {
     pub fn is_empty(&self) -> bool {
         self.end == self.start
     }
+
+    pub fn context(&self) -> Vec<(usize, &str)> {
+        let (start_line, _) = self.file.position(self.start);
+        let (end_line, _) = self.file.position(self.end);
+        let ctx_start = start_line.saturating_sub(4);
+
+        self.file
+            .text
+            .lines()
+            .enumerate()
+            .skip(ctx_start)
+            .take(end_line - ctx_start)
+            .map(|(i, l)| (i + 1, l))
+            .collect::<Vec<_>>()
+    }
+}
+
+impl Display for Rng {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.context()
+            .iter()
+            .try_for_each(|(i, l)| writeln!(f, "{:5} |{}", i, l))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{File, Rng};
+
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_position() {
+        let f = File::mem(&["line1", "line2", "line3", "line4", "line5"].join("\n"));
+        let r = Rng::new(f, 13, 15);
+        assert_eq!(
+            ["    1 |line1", "    2 |line2", "    3 |line3", ""].join("\n"),
+            r.to_string(),
+        )
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

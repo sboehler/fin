@@ -49,6 +49,36 @@ pub enum ProcessError {
     ModelError(#[from] ModelError),
 }
 
+// impl Display for ProcessError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             ProcessError::AccountAlreadyOpen { open } => {
+//                 writeln!(
+//                     f,
+//                     "error processing open directive on {date}: account {account} is already open",
+//                     account = open.account,
+//                     date = open.date,
+//                 );
+//                 writeln!(f);
+
+//             }
+//             ProcessError::TransactionAccountNotOpen {
+//                 transaction,
+//                 account,
+//             } => todo!(),
+//             ProcessError::AssertionAccountNotOpen { assertion } => todo!(),
+//             ProcessError::AssertionIncorrectBalance { assertion, actual } => todo!(),
+//             ProcessError::CloseNonzeroBalance {
+//                 close,
+//                 commodity,
+//                 balance,
+//             } => todo!(),
+//             ProcessError::ModelError(_) => todo!(),
+//         }
+//         todo!()
+//     }
+// }
+
 type Result<T> = result::Result<T, ProcessError>;
 
 pub fn check(journal: &Journal) -> Result<()> {
