@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     rc::Rc,
     result,
 };
@@ -10,11 +11,6 @@ use rust_decimal::Decimal;
 use thiserror::Error;
 
 use crate::model::{
-    entities::{Account, Assertion},
-    journal::{Journal, Positions},
-    prices::NormalizedPrices,
-};
-use crate::model::{
     entities::{Booking, Commodity, Transaction},
     error::ModelError,
 };
@@ -22,62 +18,115 @@ use crate::model::{
     entities::{Close, Open},
     prices::Prices,
 };
+use crate::{
+    model::{
+        entities::{Account, Assertion},
+        journal::{Journal, Positions},
+        prices::NormalizedPrices,
+    },
+    syntax::cst::Rng,
+};
 
 #[derive(Error, Eq, PartialEq, Debug)]
 pub enum ProcessError {
-    #[error("error processing {open:?}: account is already open")]
-    AccountAlreadyOpen { open: Open },
-    #[error("error booking transaction {transaction:?}: account {account:?} is not open")]
+    AccountAlreadyOpen {
+        open: Open,
+    },
     TransactionAccountNotOpen {
         transaction: Transaction,
         account: Rc<Account>,
     },
-    #[error("error processing assertion {assertion:?}: account is not open")]
-    AssertionAccountNotOpen { assertion: Assertion },
-    #[error("assertion {assertion:?} failed: balance is {actual:?}")]
+    AssertionAccountNotOpen {
+        assertion: Assertion,
+    },
     AssertionIncorrectBalance {
         assertion: Assertion,
         actual: Decimal,
     },
-    #[error("error closing {close:?}: commodity {commodity:?} has non-zero balance {balance:?}")]
     CloseNonzeroBalance {
         close: Close,
         commodity: Rc<Commodity>,
         balance: Decimal,
     },
-    #[error("{0}")]
     ModelError(#[from] ModelError),
 }
 
-// impl Display for ProcessError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             ProcessError::AccountAlreadyOpen { open } => {
-//                 writeln!(
-//                     f,
-//                     "error processing open directive on {date}: account {account} is already open",
-//                     account = open.account,
-//                     date = open.date,
-//                 );
-//                 writeln!(f);
+impl ProcessError {
+    fn write_context(range: &Option<Rng>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(rng) = range {
+            writeln!(f)?;
+            if let Some(path) = &rng.file.path {
+                write!(f, "In file \"{}\", ", path.to_string_lossy())?;
+            }
+            let (line, col) = rng.file.position(rng.start);
+            writeln!(f, "line {line}, column {col}")?;
+            writeln!(f, "{}", rng)?;
+        }
+        Ok(())
+    }
+}
 
-//             }
-//             ProcessError::TransactionAccountNotOpen {
-//                 transaction,
-//                 account,
-//             } => todo!(),
-//             ProcessError::AssertionAccountNotOpen { assertion } => todo!(),
-//             ProcessError::AssertionIncorrectBalance { assertion, actual } => todo!(),
-//             ProcessError::CloseNonzeroBalance {
-//                 close,
-//                 commodity,
-//                 balance,
-//             } => todo!(),
-//             ProcessError::ModelError(_) => todo!(),
-//         }
-//         todo!()
-//     }
-// }
+impl Display for ProcessError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProcessError::AccountAlreadyOpen { open } => {
+                writeln!(
+                    f,
+                    "error processing open directive on {date}: account {account} is already open",
+                    date = open.date,
+                    account = open.account,
+                )?;
+                Self::write_context(&open.rng, f)?
+            }
+            ProcessError::TransactionAccountNotOpen {
+                transaction,
+                account,
+            } => {
+                writeln!(
+                    f,
+                    "error processing transaction directive on {date}: account {account} is not open",
+                    date = transaction.date,
+                )?;
+                Self::write_context(&transaction.rng, f)?
+            }
+            ProcessError::AssertionAccountNotOpen { assertion } => {
+                writeln!(
+                    f,
+                    "error processing balance directive on {date}: account {account} is not open",
+                    account = assertion.account,
+                    date = assertion.date,
+                )?;
+                Self::write_context(&assertion.rng, f)?
+            }
+            ProcessError::AssertionIncorrectBalance { assertion, actual } => {
+                writeln!(
+                    f,
+                    "assertion failure on {date}: account {account} has balance {actual} {commodity}, want {balance} {commodity}",
+                    account = assertion.account,
+                    commodity = assertion.commodity,
+                    balance = assertion.balance,
+                    date = assertion.date,
+                )?;
+                Self::write_context(&assertion.rng, f)?
+            }
+            ProcessError::CloseNonzeroBalance {
+                close,
+                commodity,
+                balance,
+            } => {
+                writeln!(
+                    f,
+                    "error processing close directive on {date}: account {account} still has a balance of {balance} {commodity}, want 0",
+                    date = close.date,
+                    account = close.account,
+                )?;
+                Self::write_context(&close.rng, f)?
+            }
+            ProcessError::ModelError(e) => write!(f, "{}", e)?,
+        }
+        Ok(())
+    }
+}
 
 type Result<T> = result::Result<T, ProcessError>;
 

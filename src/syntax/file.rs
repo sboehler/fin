@@ -6,14 +6,14 @@ use std::{
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct File {
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
     pub text: String,
 }
 
 impl File {
     pub fn mem(s: &str) -> Rc<File> {
         Rc::new(File {
-            path: "<memory>".into(),
+            path: None,
             text: s.to_owned(),
         })
     }
@@ -21,7 +21,7 @@ impl File {
     pub fn read(path: &Path) -> io::Result<Rc<File>> {
         Ok(Rc::new(File {
             text: fs::read_to_string(path)?,
-            path: path.to_path_buf(),
+            path: Some(path.to_path_buf()),
         }))
     }
 

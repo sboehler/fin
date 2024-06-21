@@ -15,6 +15,9 @@ impl std::fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let (line, col) = self.rng.file.position(self.rng.start);
         writeln!(f)?;
+        if let Some(p) = &self.rng.file.path {
+            writeln!(f, "In file \"{}\"", p.to_string_lossy())?;
+        }
         write!(
             f,
             "Line {line}, column {col}: while parsing {want}",
