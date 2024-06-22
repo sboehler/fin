@@ -56,10 +56,11 @@ impl ProcessError {
         if let Some(rng) = range {
             writeln!(f)?;
             if let Some(path) = &rng.file.path {
-                write!(f, "In file \"{}\", ", path.to_string_lossy())?;
+                write!(f, "Defined in file \"{}\", ", path.to_string_lossy())?;
             }
             let (line, col) = rng.file.position(rng.start);
             writeln!(f, "line {line}, column {col}")?;
+            writeln!(f)?;
             writeln!(f, "{}", rng)?;
         }
         Ok(())
@@ -72,7 +73,7 @@ impl Display for ProcessError {
             ProcessError::AccountAlreadyOpen { open } => {
                 writeln!(
                     f,
-                    "error processing open directive on {date}: account {account} is already open",
+                    "Error: open directive on {date}: account {account} is already open.",
                     date = open.date,
                     account = open.account,
                 )?;
@@ -84,7 +85,7 @@ impl Display for ProcessError {
             } => {
                 writeln!(
                     f,
-                    "error processing transaction directive on {date}: account {account} is not open",
+                    "Error: transaction directive on {date}: account {account} is not open.",
                     date = transaction.date,
                 )?;
                 Self::write_context(&transaction.rng, f)?
@@ -92,7 +93,7 @@ impl Display for ProcessError {
             ProcessError::AssertionAccountNotOpen { assertion } => {
                 writeln!(
                     f,
-                    "error processing balance directive on {date}: account {account} is not open",
+                    "Error: balance directive on {date}: account {account} is not open.",
                     account = assertion.account,
                     date = assertion.date,
                 )?;
@@ -101,7 +102,7 @@ impl Display for ProcessError {
             ProcessError::AssertionIncorrectBalance { assertion, actual } => {
                 writeln!(
                     f,
-                    "assertion failure on {date}: account {account} has balance {actual} {commodity}, want {balance} {commodity}",
+                    "Error: balance directive on {date}: account {account} has balance {actual} {commodity}, want {balance} {commodity}.",
                     account = assertion.account,
                     commodity = assertion.commodity,
                     balance = assertion.balance,
@@ -116,7 +117,7 @@ impl Display for ProcessError {
             } => {
                 writeln!(
                     f,
-                    "error processing close directive on {date}: account {account} still has a balance of {balance} {commodity}, want 0",
+                    "Error: close directive on {date}: account {account} still has a balance of {balance} {commodity}, want zero.",
                     date = close.date,
                     account = close.account,
                 )?;

@@ -29,14 +29,13 @@ impl Rng {
     pub fn context(&self) -> Vec<(usize, &str)> {
         let (start_line, _) = self.file.position(self.start);
         let (end_line, _) = self.file.position(self.end);
-        let ctx_start = start_line.saturating_sub(4);
 
         self.file
             .text
             .lines()
             .enumerate()
-            .skip(ctx_start)
-            .take(end_line - ctx_start)
+            .skip(start_line - 1)
+            .take(end_line - start_line)
             .map(|(i, l)| (i + 1, l))
             .collect::<Vec<_>>()
     }
