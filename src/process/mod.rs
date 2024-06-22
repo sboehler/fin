@@ -243,6 +243,8 @@ pub fn compute_gains(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Res
     let mut prev_q = &empty_q;
     let mut prev_p = &empty_p;
 
+    let credit = journal.registry.borrow_mut().account("Income:Valuation")?;
+
     for day in journal.days.values() {
         let cur_prices = day
             .normalized_prices
@@ -262,7 +264,6 @@ pub fn compute_gains(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Res
                 if gain.is_zero() {
                     return Ok(None);
                 }
-                let credit = journal.registry.borrow_mut().account("Income:Valuation")?;
                 Ok(Some(Transaction {
                     date: day.date,
                     rng: None,
@@ -271,7 +272,7 @@ pub fn compute_gains(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Res
                         commodity.name, account.name
                     ),
                     postings: Booking::create(
-                        credit,
+                        credit.clone(),
                         account.clone(),
                         Decimal::ZERO,
                         commodity.clone(),
