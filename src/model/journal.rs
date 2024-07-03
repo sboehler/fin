@@ -19,8 +19,6 @@ pub struct Day {
     pub closings: Vec<Close>,
 
     pub normalized_prices: OnceCell<NormalizedPrices>,
-    pub values: OnceCell<Positions>,
-    pub quantities: OnceCell<Positions>,
 }
 
 pub type Positions = HashMap<(Rc<Account>, Rc<Commodity>), Decimal>;
@@ -37,8 +35,6 @@ impl Day {
             closings: Vec::new(),
 
             normalized_prices: Default::default(),
-            values: Default::default(),
-            quantities: Default::default(),
         }
     }
 }

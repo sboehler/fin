@@ -1,9 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    rc::Rc,
-    result,
-};
+use std::{collections::HashSet, fmt::Display, rc::Rc, result};
 
 pub mod cpr;
 
@@ -132,7 +127,7 @@ impl Display for ProcessError {
 type Result<T> = result::Result<T, ProcessError>;
 
 pub fn check(journal: &Journal) -> Result<()> {
-    let mut quantities = HashMap::new();
+    let mut quantities = Positions::default();
     let mut accounts = HashSet::new();
 
     for day in journal {
@@ -186,12 +181,8 @@ pub fn check(journal: &Journal) -> Result<()> {
                 }
             }
             accounts.remove(&c.account);
-            quantities.retain(|(a, _), _| a != &c.account);
             Ok(())
         })?;
-        day.quantities
-            .set(quantities.clone())
-            .expect("quantities have been set already");
     }
     Ok(())
 }
@@ -237,10 +228,9 @@ pub fn compute_gains(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Re
     let Some(target) = valuation else {
         return Ok(());
     };
-    let empty_q = Positions::new();
+    let mut q = Positions::new();
     let empty_p: NormalizedPrices = NormalizedPrices::new(target);
 
-    let mut prev_q = &empty_q;
     let mut prev_p = &empty_p;
 
     let credit = journal.registry.borrow_mut().account("Income:Valuation")?;
@@ -252,7 +242,7 @@ pub fn compute_gains(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Re
             .expect("normalized prices have not been set");
 
         // compute valuation gains since last day
-        let gains = prev_q
+        let gains = q
             .iter()
             .map(|((account, commodity), qty)| {
                 if qty.is_zero() {
@@ -287,10 +277,16 @@ pub fn compute_gains(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Re
             .collect::<Vec<_>>();
 
         day.gains.set(gains).expect("gains have already been set");
-        prev_q = day
-            .quantities
-            .get()
-            .expect("quantities are not initialized");
+
+        day.transactions
+            .iter()
+            .flat_map(|t| t.postings.iter())
+            .filter(|b| b.account.account_type.is_al())
+            .for_each(|b| {
+                q.entry((b.account.clone(), b.commodity.clone()))
+                    .and_modify(|q| *q += b.quantity)
+                    .or_insert(b.quantity);
+            });
         prev_p = cur_prices;
     }
     Ok(())
