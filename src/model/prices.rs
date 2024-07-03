@@ -71,10 +71,10 @@ pub struct NormalizedPrices {
 type Result<T> = result::Result<T, ModelError>;
 
 impl NormalizedPrices {
-    pub fn new(commodity: Rc<Commodity>) -> Self {
+    pub fn new(commodity: &Rc<Commodity>) -> Self {
         NormalizedPrices {
             date: NaiveDate::default(),
-            target: commodity,
+            target: commodity.clone(),
             prices: HashMap::default(),
         }
     }

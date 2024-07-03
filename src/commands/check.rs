@@ -19,9 +19,9 @@ impl Command {
         check(&journal)?;
         if let Some(name) = &self.valuation {
             let commodity = journal.registry.borrow_mut().commodity(name)?;
-            compute_prices(&journal, Some(commodity.clone()))?;
-            valuate_transactions(&journal, Some(commodity.clone()))?;
-            compute_gains(&journal, Some(commodity))?
+            compute_prices(&journal, Some(&commodity))?;
+            valuate_transactions(&journal, Some(&commodity))?;
+            compute_gains(&journal, Some(&commodity))?
         }
         Ok(())
     }

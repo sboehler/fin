@@ -196,7 +196,7 @@ pub fn check(journal: &Journal) -> Result<()> {
     Ok(())
 }
 
-pub fn compute_prices(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
+pub fn compute_prices(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Result<()> {
     let Some(target) = valuation else {
         return Ok(());
     };
@@ -210,7 +210,7 @@ pub fn compute_prices(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Re
     Ok(())
 }
 
-pub fn valuate_transactions(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
+pub fn valuate_transactions(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Result<()> {
     if valuation.is_none() {
         return Ok(());
     };
@@ -233,7 +233,7 @@ pub fn valuate_transactions(journal: &Journal, valuation: Option<Rc<Commodity>>)
     Ok(())
 }
 
-pub fn compute_gains(journal: &Journal, valuation: Option<Rc<Commodity>>) -> Result<()> {
+pub fn compute_gains(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Result<()> {
     let Some(target) = valuation else {
         return Ok(());
     };
