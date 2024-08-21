@@ -1,6 +1,6 @@
 use std::cell::OnceCell;
 use std::collections::HashMap;
-use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+use std::{collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -40,7 +40,7 @@ impl Day {
 }
 
 pub struct Journal {
-    pub registry: Rc<RefCell<Registry>>,
+    pub registry: Rc<Registry>,
     pub days: BTreeMap<NaiveDate, Day>,
 }
 
@@ -53,7 +53,7 @@ impl Default for Journal {
 impl Journal {
     pub fn new() -> Self {
         Journal {
-            registry: Rc::new(RefCell::new(Registry::new())),
+            registry: Rc::new(Registry::new()),
             days: BTreeMap::new(),
         }
     }

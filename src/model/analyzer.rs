@@ -194,7 +194,6 @@ impl<'a> Analyzer<'a> {
     fn analyze_commodity(&mut self, commodity: &cst::Commodity) -> Result<Rc<Commodity>> {
         self.journal
             .registry
-            .borrow_mut()
             .commodity(commodity.0.text())
             .map_err(|_e| SyntaxError {
                 rng: commodity.0.clone(),
@@ -206,7 +205,6 @@ impl<'a> Analyzer<'a> {
     fn analyze_account(&mut self, account: &cst::Account) -> Result<Rc<Account>> {
         self.journal
             .registry
-            .borrow_mut()
             .account(account.range.text())
             .map_err(|_e| SyntaxError {
                 rng: account.range.clone(),

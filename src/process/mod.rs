@@ -233,7 +233,7 @@ pub fn compute_gains(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Re
 
     let mut prev_p = &empty_p;
 
-    let credit = journal.registry.borrow_mut().account("Income:Valuation")?;
+    let credit = journal.registry.account("Income:Valuation")?;
 
     for day in journal.days.values() {
         let cur_prices = day

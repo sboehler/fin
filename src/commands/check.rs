@@ -18,7 +18,7 @@ impl Command {
         let journal = analyze_files(&syntax_trees)?;
         check(&journal)?;
         if let Some(name) = &self.valuation {
-            let commodity = journal.registry.borrow_mut().commodity(name)?;
+            let commodity = journal.registry.commodity(name)?;
             compute_prices(&journal, Some(&commodity))?;
             valuate_transactions(&journal, Some(&commodity))?;
             compute_gains(&journal, Some(&commodity))?
