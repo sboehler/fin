@@ -39,17 +39,17 @@ impl std::fmt::Display for SyntaxError {
 }
 
 #[derive(Error, Debug)]
-pub enum FileError {
+pub enum ParserError {
     IO(PathBuf, io::Error),
     Cycle(PathBuf),
     InvalidPath(PathBuf),
     SyntaxError(SyntaxError),
 }
 
-impl Display for FileError {
+impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FileError::IO(path, e) => {
+            ParserError::IO(path, e) => {
                 writeln!(
                     f,
                     "error reading file: {file}:",
@@ -57,17 +57,17 @@ impl Display for FileError {
                 )?;
                 e.fmt(f)
             }
-            FileError::Cycle(path) => {
+            ParserError::Cycle(path) => {
                 writeln!(
                     f,
                     "cycle detected. File {file} is referenced at least twice",
                     file = path.to_string_lossy()
                 )
             }
-            FileError::InvalidPath(file) => {
+            ParserError::InvalidPath(file) => {
                 writeln!(f, "invalid path: {file}", file = file.to_string_lossy())
             }
-            FileError::SyntaxError(e) => writeln!(f, "{}", e),
+            ParserError::SyntaxError(e) => writeln!(f, "{}", e),
         }
     }
 }
