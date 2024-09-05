@@ -154,7 +154,7 @@ pub struct Transaction {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
     pub description: String,
-    pub postings: Vec<Booking>,
+    pub bookings: Vec<Booking>,
     pub targets: Option<Vec<Rc<Commodity>>>,
 }
 

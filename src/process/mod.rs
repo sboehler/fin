@@ -42,7 +42,7 @@ pub fn valuate_transactions(journal: &Journal, valuation: Option<&Rc<Commodity>>
 
         day.transactions
             .iter()
-            .flat_map(|t| t.postings.iter())
+            .flat_map(|t| t.bookings.iter())
             .try_for_each(|booking| {
                 cur_prices
                     .valuate(&booking.quantity, &booking.commodity)
@@ -89,7 +89,7 @@ pub fn compute_gains(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Re
                         "Adjust value of {} in account {}",
                         commodity.name, account.name
                     ),
-                    postings: Booking::create(
+                    bookings: Booking::create(
                         credit.clone(),
                         account.clone(),
                         Decimal::ZERO,
@@ -108,7 +108,7 @@ pub fn compute_gains(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Re
 
         day.transactions
             .iter()
-            .flat_map(|t| t.postings.iter())
+            .flat_map(|t| t.bookings.iter())
             .filter(|b| b.account.account_type.is_al())
             .for_each(|b| {
                 q.entry((b.account.clone(), b.commodity.clone()))

@@ -85,7 +85,7 @@ impl Journal {
                 Ok(())
             })?;
             day.transactions.iter().try_for_each(|t| {
-                t.postings.iter().try_for_each(|b| {
+                t.bookings.iter().try_for_each(|b| {
                     if !accounts.contains(&b.account) {
                         return Err(JournalError::TransactionAccountNotOpen {
                             transaction: t.clone(),

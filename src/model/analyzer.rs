@@ -108,7 +108,7 @@ impl Analyzer {
             rng: Some(t.range.clone()),
             date,
             description: t.description.content.text().to_string(),
-            postings: bookings,
+            bookings,
             targets: None,
         };
         let mut ts = match &t.addon {
@@ -233,13 +233,13 @@ impl Analyzer {
     ) -> Vec<Transaction> {
         let mut res: Vec<Transaction> = Vec::new();
         let p = Period(start, end).dates(interval, None);
-        for b in t.postings {
+        for b in t.bookings {
             if b.account.account_type.is_al() {
                 res.push(Transaction {
                     rng: t.rng.clone(),
                     date: t.date,
                     description: t.description.clone(),
-                    postings: Booking::create(
+                    bookings: Booking::create(
                         account.clone(),
                         b.account.clone(),
                         b.quantity,
@@ -268,7 +268,7 @@ impl Analyzer {
                             i + 1,
                             p.periods.len()
                         ),
-                        postings: Booking::create(
+                        bookings: Booking::create(
                             account.clone(),
                             b.account.clone(),
                             a,
