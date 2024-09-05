@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use chrono::NaiveDate;
@@ -6,7 +7,8 @@ use rust_decimal::Decimal;
 use super::entities::{
     Account, Assertion, Booking, Close, Commodity, Interval, Open, Price, Transaction,
 };
-use super::journal::Journal;
+use super::journal::{Day, Journal};
+use super::registry::Registry;
 use crate::{
     model::entities::Period,
     syntax::{
@@ -18,24 +20,34 @@ use crate::{
 type Result<T> = std::result::Result<T, SyntaxError>;
 
 pub fn analyze_files(files: &Vec<SyntaxFile>) -> Result<Journal> {
-    let mut journal = Journal::new();
+    let mut analyzer = Analyzer::new();
     for file in files {
-        Analyzer {
-            journal: &mut journal,
-            file,
-        }
-        .analyze()?
+        analyzer.analyze(file)?
     }
-    Ok(journal)
+    Ok(Journal {
+        registry: Rc::new(analyzer.registry),
+        days: analyzer.days,
+    })
 }
-struct Analyzer<'a> {
-    journal: &'a mut Journal,
-    file: &'a SyntaxFile,
+struct Analyzer {
+    registry: Registry,
+    days: BTreeMap<NaiveDate, Day>,
 }
 
-impl<'a> Analyzer<'a> {
-    fn analyze(&mut self) -> Result<()> {
-        for d in &self.file.directives {
+impl Analyzer {
+    fn new() -> Self {
+        Analyzer {
+            registry: Registry::default(),
+            days: Default::default(),
+        }
+    }
+
+    pub fn day(&mut self, d: NaiveDate) -> &mut Day {
+        self.days.entry(d).or_insert_with(|| Day::new(d))
+    }
+
+    fn analyze(&mut self, file: &SyntaxFile) -> Result<()> {
+        for d in &file.directives {
             match d {
                 cst::Directive::Price(p) => self.analyze_price(p)?,
                 cst::Directive::Open(o) => self.analyze_open(o)?,
@@ -53,7 +65,7 @@ impl<'a> Analyzer<'a> {
         let commodity = self.analyze_commodity(&p.commodity)?;
         let price = self.analyze_decimal(&p.price)?;
         let target = self.analyze_commodity(&p.target)?;
-        self.journal.day(date).prices.push(Price {
+        self.day(date).prices.push(Price {
             rng: Some(p.range.clone()),
             date,
             commodity,
@@ -66,7 +78,7 @@ impl<'a> Analyzer<'a> {
     fn analyze_open(&mut self, o: &cst::Open) -> Result<()> {
         let date = self.analyze_date(&o.date)?;
         let account = self.analyze_account(&o.account)?;
-        self.journal.day(date).openings.push(Open {
+        self.day(date).openings.push(Open {
             rng: Some(o.range.clone()),
             date,
             account,
@@ -125,7 +137,7 @@ impl<'a> Analyzer<'a> {
             None => vec![trx],
         };
 
-        self.journal.day(date).transactions.append(&mut ts);
+        self.day(date).transactions.append(&mut ts);
         Ok(())
     }
 
@@ -144,14 +156,14 @@ impl<'a> Analyzer<'a> {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
-        self.journal.day(date).assertions.append(&mut res);
+        self.day(date).assertions.append(&mut res);
         Ok(())
     }
 
     fn analyze_close(&mut self, c: &cst::Close) -> Result<()> {
         let date = self.analyze_date(&c.date)?;
         let account = self.analyze_account(&c.account)?;
-        self.journal.day(date).closings.push(Close {
+        self.day(date).closings.push(Close {
             rng: Some(c.range.clone()),
             date,
             account,
@@ -192,8 +204,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn analyze_commodity(&mut self, commodity: &cst::Commodity) -> Result<Rc<Commodity>> {
-        self.journal
-            .registry
+        self.registry
             .commodity(commodity.0.text())
             .map_err(|_e| SyntaxError {
                 rng: commodity.0.clone(),
@@ -203,8 +214,7 @@ impl<'a> Analyzer<'a> {
     }
 
     fn analyze_account(&mut self, account: &cst::Account) -> Result<Rc<Account>> {
-        self.journal
-            .registry
+        self.registry
             .account(account.range.text())
             .map_err(|_e| SyntaxError {
                 rng: account.range.clone(),
@@ -271,5 +281,11 @@ impl<'a> Analyzer<'a> {
             }
         }
         res
+    }
+}
+
+impl Default for Analyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }

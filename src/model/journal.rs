@@ -58,10 +58,6 @@ impl Journal {
         }
     }
 
-    pub fn day(&mut self, d: NaiveDate) -> &mut Day {
-        self.days.entry(d).or_insert_with(|| Day::new(d))
-    }
-
     pub fn min_date(&self) -> Option<NaiveDate> {
         self.days
             .values()
@@ -74,16 +70,6 @@ impl Journal {
             .values()
             .rfind(|d| !d.transactions.is_empty())
             .map(|d| d.date)
-    }
-
-    pub fn iter_mut(
-        &mut self,
-    ) -> std::collections::btree_map::ValuesMut<'_, chrono::NaiveDate, Day> {
-        self.days.values_mut()
-    }
-
-    pub fn iter(&mut self) -> std::collections::btree_map::Values<'_, chrono::NaiveDate, Day> {
-        self.days.values()
     }
 }
 
@@ -103,15 +89,5 @@ impl<'a> IntoIterator for &'a Journal {
 
     fn into_iter(self) -> Self::IntoIter {
         self.days.values()
-    }
-}
-
-impl<'a> IntoIterator for &'a mut Journal {
-    type Item = &'a mut Day;
-
-    type IntoIter = std::collections::btree_map::ValuesMut<'a, chrono::NaiveDate, Day>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.days.values_mut()
     }
 }
