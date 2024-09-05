@@ -1,5 +1,5 @@
 use crate::model::analyzer::analyze_files;
-use crate::process::{check, compute_gains, compute_prices, valuate_transactions};
+use crate::process::{compute_gains, compute_prices, valuate_transactions};
 use crate::syntax::parse_files;
 use clap::Args;
 use std::{error::Error, path::PathBuf};
@@ -16,7 +16,7 @@ impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let syntax_trees = parse_files(&self.journal)?;
         let journal = analyze_files(&syntax_trees)?;
-        check(&journal)?;
+        journal.check()?;
         if let Some(name) = &self.valuation {
             let commodity = journal.registry.commodity(name)?;
             compute_prices(&journal, Some(&commodity))?;

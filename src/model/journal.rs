@@ -1,12 +1,13 @@
 use std::cell::OnceCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{Account, Assertion, Close, Commodity, Open, Price, Transaction};
-use super::prices::NormalizedPrices;
+use super::error::JournalError;
+use super::prices::{NormalizedPrices, Prices};
 use super::registry::Registry;
 
 pub struct Day {
@@ -70,6 +71,80 @@ impl Journal {
             .values()
             .rfind(|d| !d.transactions.is_empty())
             .map(|d| d.date)
+    }
+
+    pub fn check(self: &Self) -> std::result::Result<(), JournalError> {
+        let mut quantities = Positions::default();
+        let mut accounts = HashSet::new();
+
+        for day in self {
+            day.openings.iter().try_for_each(|o| {
+                if !accounts.insert(o.account.clone()) {
+                    return Err(JournalError::AccountAlreadyOpen { open: o.clone() });
+                }
+                Ok(())
+            })?;
+            day.transactions.iter().try_for_each(|t| {
+                t.postings.iter().try_for_each(|b| {
+                    if !accounts.contains(&b.account) {
+                        return Err(JournalError::TransactionAccountNotOpen {
+                            transaction: t.clone(),
+                            account: b.account.clone(),
+                        });
+                    }
+                    quantities
+                        .entry((b.account.clone(), b.commodity.clone()))
+                        .and_modify(|q| *q += b.quantity)
+                        .or_insert(b.quantity);
+                    Ok(())
+                })
+            })?;
+            day.assertions.iter().try_for_each(|a| {
+                if !accounts.contains(&a.account) {
+                    return Err(JournalError::AssertionAccountNotOpen {
+                        assertion: a.clone(),
+                    });
+                }
+                let balance = quantities
+                    .get(&(a.account.clone(), a.commodity.clone()))
+                    .copied()
+                    .unwrap_or_default();
+                if balance != a.balance {
+                    return Err(JournalError::AssertionIncorrectBalance {
+                        assertion: a.clone(),
+                        actual: balance,
+                    });
+                }
+                Ok(())
+            })?;
+            day.closings.iter().try_for_each(|c| {
+                for (pos, qty) in quantities.iter() {
+                    if pos.0 == c.account && !qty.is_zero() {
+                        return Err(JournalError::CloseNonzeroBalance {
+                            close: c.clone(),
+                            commodity: pos.1.clone(),
+                            balance: *qty,
+                        });
+                    }
+                }
+                accounts.remove(&c.account);
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    pub fn compute_prices(
+        self: &Self,
+        valuation: &Rc<Commodity>,
+    ) -> BTreeMap<NaiveDate, NormalizedPrices> {
+        let mut prices = Prices::default();
+        let mut res = BTreeMap::new();
+        for day in self {
+            day.prices.iter().for_each(|p| prices.insert(p));
+            res.insert(day.date, prices.normalize(&valuation));
+        }
+        res
     }
 }
 
