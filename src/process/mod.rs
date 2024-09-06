@@ -1,7 +1,5 @@
 use std::{rc::Rc, result};
 
-pub mod cpr;
-
 use rust_decimal::Decimal;
 
 use crate::model::prices::Prices;
