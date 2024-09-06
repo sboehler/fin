@@ -21,7 +21,7 @@ pub fn compute_prices(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> R
         return Ok(());
     };
     let mut prices = Prices::default();
-    for day in journal.days.values() {
+    for day in journal {
         day.prices.iter().for_each(|p| prices.insert(p));
         day.normalized_prices
             .set(prices.normalize(&target))
@@ -34,7 +34,7 @@ pub fn valuate_transactions(journal: &Journal, valuation: Option<&Rc<Commodity>>
     if valuation.is_none() {
         return Ok(());
     };
-    for day in journal.days.values() {
+    for day in journal {
         let cur_prices = day
             .normalized_prices
             .get()
@@ -63,7 +63,7 @@ pub fn compute_gains(journal: &Journal, valuation: Option<&Rc<Commodity>>) -> Re
 
     let credit = journal.registry.account("Income:Valuation")?;
 
-    for day in journal.days.values() {
+    for day in journal {
         let cur_prices = day
             .normalized_prices
             .get()
