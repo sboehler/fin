@@ -61,7 +61,7 @@ impl Prices {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NormalizedPrices {
     date: NaiveDate,
     target: Rc<Commodity>,

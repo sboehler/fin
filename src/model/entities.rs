@@ -1,4 +1,4 @@
-use std::{cell::Cell, cmp, fmt::Display, rc::Rc};
+use std::{cmp, fmt::Display, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -119,7 +119,7 @@ pub struct Booking {
     pub other: Rc<Account>,
     pub commodity: Rc<Commodity>,
     pub quantity: Decimal,
-    pub value: Cell<Decimal>,
+    pub value: Decimal,
 }
 
 impl Booking {
@@ -136,14 +136,14 @@ impl Booking {
                 other: debit.clone(),
                 commodity: commodity.clone(),
                 quantity: -quantity,
-                value: Cell::new(-value),
+                value: -value,
             },
             Booking {
                 account: debit.clone(),
                 other: credit.clone(),
                 commodity: commodity.clone(),
                 quantity,
-                value: Cell::new(value),
+                value,
             },
         ]
     }
@@ -221,6 +221,19 @@ impl Period {
             interval,
             periods,
         }
+    }
+}
+
+impl Iterator for Period {
+    type Item = NaiveDate;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0 <= self.1 {
+            let res = self.0;
+            self.0 = res.checked_add_days(Days::new(1)).unwrap();
+            return Some(res);
+        }
+        None
     }
 }
 

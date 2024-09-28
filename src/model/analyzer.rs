@@ -27,6 +27,8 @@ pub fn analyze_files(files: &Vec<SyntaxFile>) -> Result<Journal> {
     Ok(Journal {
         registry: Rc::new(analyzer.registry),
         days: analyzer.days,
+        valuation: None,
+        closing: None,
     })
 }
 struct Analyzer {

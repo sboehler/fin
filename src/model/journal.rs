@@ -1,12 +1,14 @@
-use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::{collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
-use super::entities::{Account, Assertion, Close, Commodity, Open, Price, Transaction};
-use super::error::JournalError;
+use super::entities::{
+    start_of, Account, Assertion, Booking, Close, Commodity, Interval, Open, Period, Price,
+    Transaction,
+};
+use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
 use super::registry::Registry;
 
@@ -16,10 +18,9 @@ pub struct Day {
     pub assertions: Vec<Assertion>,
     pub openings: Vec<Open>,
     pub transactions: Vec<Transaction>,
-    pub gains: OnceCell<Vec<Transaction>>,
-    pub closings: Vec<Close>,
 
-    pub normalized_prices: OnceCell<NormalizedPrices>,
+    pub gains: Vec<Transaction>,
+    pub closings: Vec<Close>,
 }
 
 pub type Positions = HashMap<(Rc<Account>, Rc<Commodity>), Decimal>;
@@ -34,8 +35,6 @@ impl Day {
             transactions: Vec::new(),
             gains: Default::default(),
             closings: Vec::new(),
-
-            normalized_prices: Default::default(),
         }
     }
 }
@@ -43,6 +42,9 @@ impl Day {
 pub struct Journal {
     pub registry: Rc<Registry>,
     pub days: BTreeMap<NaiveDate, Day>,
+
+    pub valuation: Option<Rc<Commodity>>,
+    pub closing: Option<Interval>,
 }
 
 impl Default for Journal {
@@ -56,6 +58,8 @@ impl Journal {
         Journal {
             registry: Rc::new(Registry::new()),
             days: BTreeMap::new(),
+            valuation: None,
+            closing: None,
         }
     }
 
@@ -73,7 +77,14 @@ impl Journal {
             .map(|d| d.date)
     }
 
-    pub fn check(self: &Self) -> std::result::Result<(), JournalError> {
+    pub fn period(&self) -> Option<Period> {
+        self.days
+            .keys()
+            .next()
+            .and_then(|t0| self.days.keys().last().map(|t1| Period(*t0, *t1)))
+    }
+
+    pub fn check(&self) -> std::result::Result<(), JournalError> {
         let mut quantities = Positions::default();
         let mut accounts = HashSet::new();
 
@@ -134,17 +145,132 @@ impl Journal {
         Ok(())
     }
 
-    pub fn compute_prices(
-        self: &Self,
-        valuation: &Rc<Commodity>,
-    ) -> BTreeMap<NaiveDate, NormalizedPrices> {
+    pub fn process(
+        &mut self,
+        valuation: Option<&Rc<Commodity>>,
+        close: Option<Interval>,
+    ) -> Result<(), ModelError> {
         let mut prices = Prices::default();
-        let mut res = BTreeMap::new();
-        for day in self {
-            day.prices.iter().for_each(|p| prices.insert(p));
-            res.insert(day.date, prices.normalize(&valuation));
+        let mut quantities = Positions::default();
+        let mut prev_normalized_prices = None;
+
+        self.valuation = valuation.cloned();
+        self.closing = close;
+
+        for date in self.period().expect("journal is empty") {
+            let closings = close
+                .filter(|&interval| date == start_of(date, interval).unwrap())
+                .map(|_| Vec::new())
+                .unwrap_or_default();
+
+            if let Some(day) = self.days.get_mut(&date).as_mut() {
+                day.prices.iter().for_each(|p| prices.insert(p));
+                let normalized_prices = valuation.map(|p| prices.normalize(p));
+                let credit = self.registry.account("Income:Valuation")?;
+
+                Self::valuate_transactions(&mut day.transactions, &normalized_prices)?;
+
+                day.gains = Self::compute_gains(
+                    &normalized_prices,
+                    &quantities,
+                    &prev_normalized_prices,
+                    day.date,
+                    credit,
+                )?;
+                Self::update_quantities(&day.transactions, &mut quantities);
+                prev_normalized_prices = normalized_prices;
+                day.closings = closings
+            } else {
+                let mut day = Day::new(date);
+                day.closings = closings;
+                self.days.insert(date, day);
+            }
         }
-        res
+        Ok(())
+    }
+
+    fn update_quantities(
+        transactions: &[Transaction],
+        quantities: &mut std::collections::HashMap<(Rc<Account>, Rc<Commodity>), Decimal>,
+    ) {
+        transactions
+            .iter()
+            .flat_map(|t| t.bookings.iter())
+            .for_each(|b| {
+                quantities
+                    .entry((Rc::clone(&b.account), Rc::clone(&b.commodity)))
+                    .and_modify(|q| *q += b.quantity)
+                    .or_insert(b.quantity);
+            });
+    }
+
+    fn valuate_transactions(
+        transactions: &mut Vec<Transaction>,
+        normalized_prices: &Option<NormalizedPrices>,
+    ) -> Result<(), ModelError> {
+        for t in transactions {
+            for b in &mut t.bookings {
+                let value = normalized_prices
+                    .as_ref()
+                    .map(|p| p.valuate(&b.quantity, &b.commodity))
+                    .transpose()?
+                    .unwrap_or(Decimal::ZERO);
+                b.value = value
+            }
+        }
+        Ok(())
+    }
+
+    fn compute_gains(
+        normalized_prices: &Option<NormalizedPrices>,
+        quantities: &std::collections::HashMap<(Rc<Account>, Rc<Commodity>), Decimal>,
+        prev_normalized_prices: &Option<NormalizedPrices>,
+        date: NaiveDate,
+        credit: Rc<Account>,
+    ) -> Result<Vec<Transaction>, ModelError> {
+        let gains = normalized_prices
+            .as_ref()
+            .map(|np| {
+                Ok(quantities
+                    .iter()
+                    .map(|((account, commodity), qty)| {
+                        if qty.is_zero() || !account.account_type.is_al() {
+                            return Ok(None);
+                        }
+                        let v_prev = prev_normalized_prices
+                            .as_ref()
+                            .unwrap()
+                            .valuate(qty, commodity)?;
+                        let v_cur = np.valuate(qty, commodity)?;
+                        let gain = v_cur - v_prev;
+                        if gain.is_zero() {
+                            return Ok(None);
+                        }
+                        Ok(Some(Transaction {
+                            date,
+                            rng: None,
+                            description: format!(
+                                "Adjust value of {} in account {}",
+                                commodity.name, account.name
+                            ),
+                            bookings: Booking::create(
+                                credit.clone(),
+                                account.clone(),
+                                Decimal::ZERO,
+                                commodity.clone(),
+                                gain,
+                            ),
+                            targets: Some(vec![commodity.clone()]),
+                        }))
+                    })
+                    .collect::<Result<Vec<Option<Transaction>>, ModelError>>()?
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>())
+            })
+            .transpose()?
+            .unwrap_or_default();
+        Ok(gains)
     }
 }
 
