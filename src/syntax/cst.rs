@@ -37,7 +37,7 @@ impl Rng {
             .skip(start_line - 1)
             .take(end_line - start_line + 1)
             .map(|(i, l)| (i + 1, l))
-            .collect::<Vec<_>>()
+            .collect()
     }
 }
 
@@ -162,38 +162,38 @@ impl Display for Sequence {
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Token {
-    EOF,
-    Addon,
-    Accrual,
     Account,
-    Close,
+    AccountType,
+    Accrual,
+    Addon,
+    AlphaNum,
+    Any,
     Assertion,
-    SubAssertion,
-    Performance,
-    Include,
     BlankLine,
-    Quantity,
     Booking,
     Character(Character),
-    Sequence(Sequence),
-    Transaction,
-    Price,
-    Open,
-    QuotedString,
-    Digit,
-    AccountType,
-    Commodity,
-    File,
+    Close,
     Comment,
-    Directive,
-    AlphaNum,
-    Either(Vec<Token>),
-    Decimal,
-    Interval,
-    Any,
-    Date,
-    WhiteSpace,
+    Commodity,
     Custom(String),
+    Date,
+    Decimal,
+    Digit,
+    Directive,
+    EOF,
+    Either(Vec<Token>),
+    File,
+    Include,
+    Interval,
+    Open,
+    Performance,
+    Price,
+    Quantity,
+    QuotedString,
+    Sequence(Sequence),
+    SubAssertion,
+    Transaction,
+    WhiteSpace,
 }
 
 impl Display for Token {
