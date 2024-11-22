@@ -1,4 +1,4 @@
-use std::{cmp, fmt::Display, rc::Rc};
+use std::{cmp, collections::BTreeSet, fmt::Display, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -189,30 +189,36 @@ pub enum Interval {
 }
 
 impl Interval {
-    pub fn partition(self, period: Period, n: Option<usize>) -> Partition {
-        if self == Interval::Single {
-            return Partition {
-                period,
-                periods: vec![period],
-            };
+    /// StartOf returns the first date in the given period which
+    /// contains the receiver.
+    pub fn start_of(self: Interval, d: NaiveDate) -> Option<NaiveDate> {
+        use Interval::*;
+        match self {
+            Single | Daily => Some(d),
+            Weekly => d.checked_sub_days(Days::new(d.weekday().number_from_monday() as u64 - 1)),
+            Monthly => d.checked_sub_days(Days::new((d.day() - 1) as u64)),
+            Quarterly => NaiveDate::from_ymd_opt(d.year(), ((d.month() - 1) / 3 * 3) + 1, 1),
+            Yearly => NaiveDate::from_ymd_opt(d.year(), 1, 1),
         }
-        let mut periods = Vec::new();
-        let mut d = period.1;
-        let mut counter = 0;
-        while d >= period.0 {
-            match n {
-                Some(n) if counter == n => break,
-                Some(_) => counter += 1,
-                None => (),
-            }
-            let start = cmp::max(start_of(d, self).unwrap(), period.0);
-            periods.push(Period(start, d));
-            d = start_of(d, self)
-                .and_then(|d| d.checked_sub_days(Days::new(1)))
-                .unwrap();
+    }
+
+    /// StartOf returns the first date in the given period which
+    /// contains the receiver.
+    pub fn end_of(self, d: NaiveDate) -> Option<NaiveDate> {
+        use Interval::*;
+        match self {
+            Single | Daily => Some(d),
+            Weekly => d.checked_add_days(Days::new(7 - d.weekday().number_from_monday() as u64)),
+            Monthly => self
+                .start_of(d)
+                .and_then(|d| d.checked_add_months(Months::new(1)))
+                .and_then(|d| d.checked_sub_days(Days::new(1))),
+            Quarterly => self
+                .start_of(d)
+                .and_then(|d| d.checked_add_months(Months::new(3)))
+                .and_then(|d| d.checked_sub_days(Days::new(1))),
+            Yearly => NaiveDate::from_ymd_opt(d.year(), 12, 31),
         }
-        periods.reverse();
-        Partition { period, periods }
     }
 }
 
@@ -223,83 +229,58 @@ impl Period {
     pub fn dates(&self) -> impl Iterator<Item = NaiveDate> + '_ {
         self.0.iter_days().take_while(|d| d <= &self.1)
     }
-
-    pub fn partition(self, interval: Interval, n: Option<usize>) -> Partition {
-        if interval == Interval::Single {
-            return Partition {
-                period: self,
-                periods: vec![self],
-            };
-        }
-        let mut periods = Vec::new();
-        let mut d = self.1;
-        let mut counter = 0;
-        while d >= self.0 {
-            match n {
-                Some(n) if counter == n => break,
-                Some(_) => counter += 1,
-                None => (),
-            }
-            let start = cmp::max(start_of(d, interval).unwrap(), self.0);
-            periods.push(Period(start, d));
-            d = start_of(d, interval)
-                .and_then(|d| d.checked_sub_days(Days::new(1)))
-                .unwrap();
-        }
-        periods.reverse();
-        Partition {
-            period: self,
-            periods,
-        }
-    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
 
 pub struct Partition {
-    pub period: Period,
     pub periods: Vec<Period>,
 }
 
 impl Partition {
-    pub fn new(periods: Vec<Period>) -> Option<Self> {
-        match (periods.first(), periods.last()) {
-            (Some(first), Some(last)) => Some(Partition {
-                periods: periods.clone(),
-                period: Period(first.0, last.1),
-            }),
+    pub fn new(periods: Vec<Period>) -> Self {
+        Partition { periods }
+    }
+
+    pub fn cover(&self) -> Option<Period> {
+        match (self.periods.first(), self.periods.last()) {
+            (Some(first), Some(last)) => Some(Period(first.0, last.1)),
             _ => None,
         }
     }
-}
 
-/// StartOf returns the first date in the given period which
-/// contains the receiver.
-pub fn start_of(d: NaiveDate, p: Interval) -> Option<NaiveDate> {
-    use Interval::*;
-    match p {
-        Single | Daily => Some(d),
-        Weekly => d.checked_sub_days(Days::new(d.weekday().number_from_monday() as u64 - 1)),
-        Monthly => d.checked_sub_days(Days::new((d.day() - 1) as u64)),
-        Quarterly => NaiveDate::from_ymd_opt(d.year(), ((d.month() - 1) / 3 * 3) + 1, 1),
-        Yearly => NaiveDate::from_ymd_opt(d.year(), 1, 1),
+    pub fn from_interval(period: Period, interval: Interval) -> Partition {
+        if interval == Interval::Single {
+            return Partition {
+                periods: vec![period],
+            };
+        }
+        let mut periods = Vec::new();
+        let mut d = period.1;
+        while d >= period.0 {
+            let start = cmp::max(interval.start_of(d).unwrap(), period.0);
+            periods.push(Period(start, d));
+            d = interval
+                .start_of(d)
+                .and_then(|d| d.checked_sub_days(Days::new(1)))
+                .unwrap();
+        }
+        periods.reverse();
+        Partition { periods }
     }
-}
 
-/// StartOf returns the first date in the given period which
-/// contains the receiver.
-pub fn end_of(d: NaiveDate, p: Interval) -> Option<NaiveDate> {
-    use Interval::*;
-    match p {
-        Single | Daily => Some(d),
-        Weekly => d.checked_add_days(Days::new(7 - d.weekday().number_from_monday() as u64)),
-        Monthly => start_of(d, Monthly)
-            .and_then(|d| d.checked_add_months(Months::new(1)))
-            .and_then(|d| d.checked_sub_days(Days::new(1))),
-        Quarterly => start_of(d, Quarterly)
-            .and_then(|d| d.checked_add_months(Months::new(3)))
-            .and_then(|d| d.checked_sub_days(Days::new(1))),
-        Yearly => NaiveDate::from_ymd_opt(d.year(), 12, 31),
+    pub fn start_dates(&self) -> BTreeSet<NaiveDate> {
+        self.periods.iter().map(|p| p.0).collect()
+    }
+
+    pub fn end_dates(&self) -> BTreeSet<NaiveDate> {
+        self.periods.iter().map(|p| p.0).collect()
+    }
+
+    pub fn last_n(&self, n: usize) -> Partition {
+        Partition {
+            periods: self.periods.iter().rev().take(n).rev().copied().collect(),
+        }
     }
 }
 
@@ -321,9 +302,8 @@ mod test_period {
     #[test]
     fn test_dates() {
         assert_eq!(
-            Period(date(2022, 1, 1), date(2022, 3, 20)).partition(Monthly, None),
+            Partition::from_interval(Period(date(2022, 1, 1), date(2022, 3, 20)), Monthly),
             Partition {
-                period: Period(date(2022, 1, 1), date(2022, 3, 20)),
                 periods: vec![
                     Period(date(2022, 1, 1), date(2022, 1, 31)),
                     Period(date(2022, 2, 1), date(2022, 2, 28)),
@@ -332,9 +312,9 @@ mod test_period {
             }
         );
         assert_eq!(
-            Period(date(2022, 1, 1), date(2022, 12, 20)).partition(Monthly, Some(4)),
+            Partition::from_interval(Period(date(2022, 1, 1), date(2022, 12, 20)), Monthly)
+                .last_n(4),
             Partition {
-                period: Period(date(2022, 1, 1), date(2022, 12, 20)),
                 periods: vec![
                     Period(date(2022, 9, 1), date(2022, 9, 30)),
                     Period(date(2022, 10, 1), date(2022, 10, 31)),
@@ -348,22 +328,22 @@ mod test_period {
     #[test]
     fn test_start_of() {
         let d = date(2022, 6, 22);
-        assert_eq!(start_of(d, Single), dt(2022, 6, 22));
-        assert_eq!(start_of(d, Daily), dt(2022, 6, 22));
-        assert_eq!(start_of(d, Weekly), dt(2022, 6, 20));
-        assert_eq!(start_of(d, Monthly), dt(2022, 6, 1));
-        assert_eq!(start_of(d, Quarterly), dt(2022, 4, 1));
-        assert_eq!(start_of(d, Yearly), dt(2022, 1, 1))
+        assert_eq!(Single.start_of(d), dt(2022, 6, 22));
+        assert_eq!(Daily.start_of(d), dt(2022, 6, 22));
+        assert_eq!(Weekly.start_of(d), dt(2022, 6, 20));
+        assert_eq!(Monthly.start_of(d), dt(2022, 6, 1));
+        assert_eq!(Quarterly.start_of(d), dt(2022, 4, 1));
+        assert_eq!(Yearly.start_of(d), dt(2022, 1, 1))
     }
 
     #[test]
     fn test_end_of() {
         let d = date(2022, 6, 22);
-        assert_eq!(end_of(d, Single), dt(2022, 6, 22));
-        assert_eq!(end_of(d, Daily), dt(2022, 6, 22));
-        assert_eq!(end_of(d, Weekly), dt(2022, 6, 26));
-        assert_eq!(end_of(d, Monthly), dt(2022, 6, 30));
-        assert_eq!(end_of(d, Quarterly), dt(2022, 6, 30));
-        assert_eq!(end_of(d, Yearly), dt(2022, 12, 31))
+        assert_eq!(Single.end_of(d), dt(2022, 6, 22));
+        assert_eq!(Daily.end_of(d), dt(2022, 6, 22));
+        assert_eq!(Weekly.end_of(d), dt(2022, 6, 26));
+        assert_eq!(Monthly.end_of(d), dt(2022, 6, 30));
+        assert_eq!(Quarterly.end_of(d), dt(2022, 6, 30));
+        assert_eq!(Yearly.end_of(d), dt(2022, 12, 31))
     }
 }

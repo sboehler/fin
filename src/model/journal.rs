@@ -5,8 +5,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    start_of, Account, Assertion, Booking, Close, Commodity, Interval, Open, Period, Price,
-    Transaction,
+    Account, Assertion, Booking, Close, Commodity, Interval, Open, Period, Price, Transaction,
 };
 use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
@@ -159,7 +158,7 @@ impl Journal {
 
         for date in self.period().expect("journal is empty").dates() {
             let closings = close
-                .filter(|&interval| date == start_of(date, interval).unwrap())
+                .filter(|&interval| date == interval.start_of(date).unwrap())
                 .map(|_| Vec::new())
                 .unwrap_or_default();
 

@@ -5,7 +5,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    Account, Assertion, Booking, Close, Commodity, Interval, Open, Price, Transaction,
+    Account, Assertion, Booking, Close, Commodity, Interval, Open, Partition, Price, Transaction,
 };
 use super::journal::{Day, Journal};
 use super::registry::Registry;
@@ -234,7 +234,7 @@ impl Analyzer {
         account: Rc<Account>,
     ) -> Vec<Transaction> {
         let mut res: Vec<Transaction> = Vec::new();
-        let p = interval.partition(Period(start, end), None);
+        let p = Partition::from_interval(Period(start, end), interval);
         for b in t.bookings {
             if b.account.account_type.is_al() {
                 res.push(Transaction {
