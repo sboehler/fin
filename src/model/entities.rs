@@ -232,7 +232,6 @@ impl Period {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd)]
-
 pub struct Partition {
     pub periods: Vec<Period>,
 }
