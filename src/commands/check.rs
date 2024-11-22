@@ -22,6 +22,9 @@ impl Command {
             .map(|s| journal.registry.commodity(s))
             .transpose()?;
         journal.process(val.as_ref(), None)?;
+        for b in journal.query() {
+            println!("{}", b.description)
+        }
         Ok(())
     }
 }

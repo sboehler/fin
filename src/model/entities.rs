@@ -153,7 +153,7 @@ impl Booking {
 pub struct Transaction {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
-    pub description: String,
+    pub description: Rc<String>,
     pub bookings: Vec<Booking>,
     pub targets: Option<Vec<Rc<Commodity>>>,
 }

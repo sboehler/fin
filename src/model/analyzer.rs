@@ -109,7 +109,7 @@ impl Analyzer {
         let mut trx = Transaction {
             rng: Some(t.range.clone()),
             date,
-            description: t.description.content.text().to_string(),
+            description: t.description.content.text().to_string().into(),
             bookings,
             targets: None,
         };
@@ -269,7 +269,8 @@ impl Analyzer {
                             t.description,
                             i + 1,
                             p.periods.len()
-                        ),
+                        )
+                        .into(),
                         bookings: Booking::create(
                             account.clone(),
                             b.account.clone(),

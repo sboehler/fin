@@ -88,7 +88,7 @@ impl Journal {
         let mut quantities = Positions::default();
         let mut accounts = HashSet::new();
 
-        for day in self {
+        for day in self.days.values() {
             day.openings.iter().try_for_each(|o| {
                 if !accounts.insert(o.account.clone()) {
                     return Err(JournalError::AccountAlreadyOpen { open: o.clone() });
@@ -157,14 +157,17 @@ impl Journal {
         self.valuation = valuation.cloned();
         self.closing = close;
 
-        for date in self.period().expect("journal is empty") {
+        let dates = self.period().expect("journal is empty");
+
+        for date in dates {
             let closings = close
                 .filter(|&interval| date == start_of(date, interval).unwrap())
                 .map(|_| Vec::new())
                 .unwrap_or_default();
 
-            if let Some(day) = self.days.get_mut(&date).as_mut() {
+            if let Some(day) = self.days.get_mut(&date) {
                 day.prices.iter().for_each(|p| prices.insert(p));
+
                 let normalized_prices = valuation.map(|p| prices.normalize(p));
                 let credit = self.registry.account("Income:Valuation")?;
 
@@ -210,12 +213,11 @@ impl Journal {
     ) -> Result<(), ModelError> {
         for t in transactions {
             for b in &mut t.bookings {
-                let value = normalized_prices
+                b.value = normalized_prices
                     .as_ref()
                     .map(|p| p.valuate(&b.quantity, &b.commodity))
                     .transpose()?
                     .unwrap_or(Decimal::ZERO);
-                b.value = value
             }
         }
         Ok(())
@@ -252,7 +254,8 @@ impl Journal {
                             description: format!(
                                 "Adjust value of {} in account {}",
                                 commodity.name, account.name
-                            ),
+                            )
+                            .into(),
                             bookings: Booking::create(
                                 credit.clone(),
                                 account.clone(),
@@ -274,21 +277,31 @@ impl Journal {
     }
 }
 
-impl IntoIterator for Journal {
-    type Item = Day;
-
-    type IntoIter = std::collections::btree_map::IntoValues<chrono::NaiveDate, Day>;
-    fn into_iter(self) -> Self::IntoIter {
-        self.days.into_values()
+impl Journal {
+    pub fn query(&self) -> impl Iterator<Item = Row> + '_ {
+        return self.days.values().flat_map(|day| {
+            day.transactions
+                .iter()
+                .chain(day.gains.iter())
+                .flat_map(|t| {
+                    t.bookings.iter().map(|b| Row {
+                        date: t.date,
+                        description: t.description.clone(),
+                        account: b.account.clone(),
+                        other: b.other.clone(),
+                        commodity: b.commodity.clone(),
+                        valuation: self.valuation.clone(),
+                    })
+                })
+        });
     }
 }
 
-impl<'a> IntoIterator for &'a Journal {
-    type Item = &'a Day;
-
-    type IntoIter = std::collections::btree_map::Values<'a, chrono::NaiveDate, Day>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.days.values()
-    }
+pub struct Row {
+    pub date: NaiveDate,
+    pub account: Rc<Account>,
+    pub other: Rc<Account>,
+    pub commodity: Rc<Commodity>,
+    pub valuation: Option<Rc<Commodity>>,
+    pub description: Rc<String>,
 }
