@@ -157,9 +157,7 @@ impl Journal {
         self.valuation = valuation.cloned();
         self.closing = close;
 
-        let dates = self.period().expect("journal is empty");
-
-        for date in dates {
+        for date in self.period().expect("journal is empty").dates() {
             let closings = close
                 .filter(|&interval| date == start_of(date, interval).unwrap())
                 .map(|_| Vec::new())

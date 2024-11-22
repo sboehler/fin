@@ -196,7 +196,7 @@ impl Analyzer {
             "monthly" => Ok(Interval::Monthly),
             "quarterly" => Ok(Interval::Quarterly),
             "yearly" => Ok(Interval::Yearly),
-            "once" => Ok(Interval::Once),
+            "once" => Ok(Interval::Single),
             _ => Err(SyntaxError {
                 rng: d.clone(),
                 want: cst::Token::Decimal,
@@ -234,7 +234,7 @@ impl Analyzer {
         account: Rc<Account>,
     ) -> Vec<Transaction> {
         let mut res: Vec<Transaction> = Vec::new();
-        let p = Period(start, end).dates(interval, None);
+        let p = interval.partition(Period(start, end), None);
         for b in t.bookings {
             if b.account.account_type.is_al() {
                 res.push(Transaction {
