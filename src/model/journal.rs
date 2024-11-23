@@ -327,45 +327,45 @@ impl Closer {
     }
 
     pub fn process(&mut self, r: Row) -> Vec<Row> {
-        if self.current >= self.dates.len() {
-            return vec![r];
-        }
         let mut res = Vec::new();
-        if r.date >= self.dates[self.current] {
-            let closing_date = self.dates[self.current];
-            res.extend(self.quantities.iter().map(|(k, v)| Row {
-                date: closing_date,
-                description: Rc::new("".into()),
-                account: k.0.clone(),
-                other: self.equity.clone(),
-                commodity: k.1.clone(),
-                quantity: -v.0,
-                value: -v.1,
-                valuation: r.valuation.clone(),
-            }));
-            res.extend(self.quantities.iter().map(|(k, v)| Row {
-                date: closing_date,
-                description: Rc::new("".into()),
-                account: self.equity.clone(),
-                other: k.0.clone(),
-                commodity: k.1.clone(),
-                quantity: v.0,
-                value: v.1,
-                valuation: r.valuation.clone(),
-            }));
+        if self.current < self.dates.len() {
+            if r.date >= self.dates[self.current] {
+                let closing_date = self.dates[self.current];
+                res.extend(self.quantities.iter().map(|(k, v)| Row {
+                    date: closing_date,
+                    description: Rc::new("".into()),
+                    account: k.0.clone(),
+                    other: self.equity.clone(),
+                    commodity: k.1.clone(),
+                    quantity: -v.0,
+                    value: -v.1,
+                    valuation: r.valuation.clone(),
+                }));
+                res.extend(self.quantities.iter().map(|(k, v)| Row {
+                    date: closing_date,
+                    description: Rc::new("".into()),
+                    account: self.equity.clone(),
+                    other: k.0.clone(),
+                    commodity: k.1.clone(),
+                    quantity: v.0,
+                    value: v.1,
+                    valuation: r.valuation.clone(),
+                }));
 
-            self.current += 1;
-            self.quantities.clear();
+                self.current += 1;
+                self.quantities.clear();
+            }
+            if r.account.account_type.is_ie() {
+                self.quantities
+                    .entry((r.account.clone(), r.commodity.clone()))
+                    .and_modify(|(q, v)| {
+                        *q += r.quantity;
+                        *v += r.value;
+                    })
+                    .or_insert((r.quantity, r.value));
+            };
         }
-        if r.account.account_type.is_ie() {
-            self.quantities
-                .entry((r.account.clone(), r.commodity.clone()))
-                .and_modify(|(q, v)| {
-                    *q += r.quantity;
-                    *v += r.value;
-                })
-                .or_insert((r.quantity, r.value));
-        };
+        res.push(r);
         res
     }
 }
