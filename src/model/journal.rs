@@ -5,8 +5,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    Account, Assertion, Booking, Close, Commodity, Interval, Open, Partition, Period, Price,
-    Transaction,
+    Account, Assertion, Booking, Close, Commodity, Interval, Open, Period, Price, Transaction,
 };
 use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
@@ -355,7 +354,7 @@ impl Closer {
                 valuation: r.valuation.clone(),
             }));
 
-            self.current = self.current + 1;
+            self.current += 1;
             self.quantities.clear();
         }
         if r.account.account_type.is_ie() {
