@@ -1,5 +1,6 @@
 use crate::model::analyzer::analyze_files;
 use crate::syntax::parse_files;
+use chrono::NaiveDate;
 use clap::Args;
 use std::{error::Error, path::PathBuf};
 
@@ -9,6 +10,9 @@ pub struct Command {
 
     #[arg(short, long, value_name = "COMMODITY")]
     valuation: Option<String>,
+
+    #[arg(short, long, value_name = "FROM_DATE")]
+    from_date: Option<NaiveDate>,
 }
 
 impl Command {
@@ -22,9 +26,16 @@ impl Command {
             .map(|s| journal.registry.commodity(s))
             .transpose()?;
         journal.process(val.as_ref(), None)?;
-        for b in journal.query() {
-            println!("{}", b.description)
-        }
+        journal
+            .query()
+            .filter_map(|mut r| {
+                if !self.from_date.map(|d| r.date >= d).unwrap_or(true) {
+                    return None;
+                }
+                r.account = journal.registry.shorten(r.account, 0)?;
+                Some(r)
+            })
+            .for_each(|b| println!("{}", b.account));
         Ok(())
     }
 }

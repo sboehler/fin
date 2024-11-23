@@ -33,6 +33,16 @@ impl Registry {
         Ok(a)
     }
 
+    pub fn shorten(&self, account: Rc<Account>, levels: usize) -> Option<Rc<Account>> {
+        let segments = account
+            .name
+            .split(":")
+            .take(levels)
+            .collect::<Vec<_>>()
+            .join(":");
+        self.account(&segments).ok()
+    }
+
     pub fn commodity(&self, s: &str) -> Result<Rc<Commodity>, ModelError> {
         if let Some(a) = self.commodities.borrow().get(s) {
             return Ok(a.clone());
