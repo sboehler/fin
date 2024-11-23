@@ -268,11 +268,11 @@ impl Partition {
         Partition { periods }
     }
 
-    pub fn start_dates(&self) -> BTreeSet<NaiveDate> {
+    pub fn start_dates(&self) -> Vec<NaiveDate> {
         self.periods.iter().map(|p| p.0).collect()
     }
 
-    pub fn end_dates(&self) -> BTreeSet<NaiveDate> {
+    pub fn end_dates(&self) -> Vec<NaiveDate> {
         self.periods.iter().map(|p| p.0).collect()
     }
 

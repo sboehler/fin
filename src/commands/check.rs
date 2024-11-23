@@ -1,4 +1,5 @@
-use crate::model::analyzer::analyze_files;
+use crate::model::entities::{Interval, Partition};
+use crate::model::{analyzer::analyze_files, journal::Closer};
 use crate::syntax::parse_files;
 use chrono::NaiveDate;
 use clap::Args;
@@ -26,15 +27,15 @@ impl Command {
             .map(|s| journal.registry.commodity(s))
             .transpose()?;
         journal.process(val.as_ref(), None)?;
+        let partition = Partition::from_interval(journal.period().unwrap(), Interval::Monthly);
+
+        let mut closer = Closer::new(
+            partition.start_dates(),
+            journal.registry.account("Equity:Equity").unwrap(),
+        );
         journal
             .query()
-            .filter_map(|mut r| {
-                if !self.from_date.map(|d| r.date >= d).unwrap_or(true) {
-                    return None;
-                }
-                r.account = journal.registry.shorten(r.account, 0)?;
-                Some(r)
-            })
+            .flat_map(|b| closer.process(b))
             .for_each(|b| println!("{}", b.account));
         Ok(())
     }
