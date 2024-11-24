@@ -33,7 +33,7 @@ impl Registry {
         Ok(a)
     }
 
-    pub fn shorten(&self, account: Rc<Account>, levels: usize) -> Option<Rc<Account>> {
+    pub fn shorten(&self, account: &Rc<Account>, levels: usize) -> Option<Rc<Account>> {
         let segments = account
             .name
             .split(":")

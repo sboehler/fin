@@ -1,4 +1,4 @@
-use std::{cmp, collections::BTreeSet, fmt::Display, rc::Rc};
+use std::{cmp, fmt::Display, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -228,6 +228,10 @@ pub struct Period(pub NaiveDate, pub NaiveDate);
 impl Period {
     pub fn dates(&self) -> impl Iterator<Item = NaiveDate> + '_ {
         self.0.iter_days().take_while(|d| d <= &self.1)
+    }
+
+    pub fn contains(&self, d: NaiveDate) -> bool {
+        self.0 <= d && d <= self.1
     }
 }
 

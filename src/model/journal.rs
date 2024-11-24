@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::{collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
+use regex::RegexSet;
 use rust_decimal::Decimal;
 
 use super::entities::{
@@ -297,6 +298,7 @@ impl Journal {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Row {
     pub date: NaiveDate,
     pub account: Rc<Account>,
@@ -367,5 +369,138 @@ impl Closer {
         }
         res.push(r);
         res
+    }
+}
+
+pub struct Filter {
+    period: Option<Period>,
+    account: Option<RegexSet>,
+    commodity: Option<RegexSet>,
+}
+impl Filter {
+    pub fn process(&self, r: Row) -> bool {
+        self.period
+            .map(|period| period.contains(r.date))
+            .unwrap_or(true)
+            && self
+                .account
+                .as_ref()
+                .map(|account| account.is_match(&r.account.name) || account.is_match(&r.other.name))
+                .unwrap_or(true)
+            && self
+                .commodity
+                .as_ref()
+                .map(|commodity| commodity.is_match(&r.commodity.name))
+                .unwrap_or(true)
+    }
+}
+
+pub struct Aligner {
+    pub dates: Vec<NaiveDate>,
+}
+
+impl Aligner {
+    pub fn process(&self, mut r: Row) -> Option<Row> {
+        match self.dates.binary_search(&r.date) {
+            Ok(_) => Some(r),
+            Err(i) if i >= self.dates.len() => None,
+            Err(i) => {
+                r.date = self.dates[i];
+                Some(r)
+            }
+        }
+    }
+}
+
+pub struct MultiperiodTree {
+    dates: Vec<NaiveDate>,
+    registry: Rc<Registry>,
+
+    root: Node<Value>,
+}
+
+impl MultiperiodTree {
+    pub fn new(registry: Rc<Registry>, dates: Vec<NaiveDate>) -> Self {
+        MultiperiodTree {
+            dates,
+            registry,
+            root: Node::new(Value::new(AccountV::Root)),
+        }
+    }
+
+    fn align(&self, date: &NaiveDate) -> Option<usize> {
+        match self.dates.binary_search(date) {
+            Ok(i) => Some(i),
+            Err(i) if i >= self.dates.len() => None,
+            Err(i) => Some(i),
+        }
+    }
+
+    pub fn register(&mut self, r: Row) {
+        let Some(i) = self.align(&r.date) else { return };
+        let n = self
+            .root
+            .lookup_or_create_mut(&r.account.name.split(":").collect::<Vec<&str>>(), || {
+                Value::new(AccountV::Account(r.account.clone()))
+            });
+        n.value
+            .quantities
+            .entry(r.commodity.clone())
+            .and_modify(|v| v[i] += r.quantity)
+            .or_insert_with(|| vec![Decimal::ZERO; self.dates.len()]);
+        n.value
+            .values
+            .entry(r.commodity.clone())
+            .and_modify(|v| v[i] += r.value)
+            .or_insert_with(|| vec![Decimal::ZERO; self.dates.len()]);
+    }
+}
+
+pub enum AccountV {
+    Root,
+    Account(Rc<Account>),
+}
+
+pub struct Value {
+    pub account: AccountV,
+    pub quantities: HashMap<Rc<Commodity>, Vec<Decimal>>,
+    pub values: HashMap<Rc<Commodity>, Vec<Decimal>>,
+}
+
+impl Value {
+    fn new(account: AccountV) -> Self {
+        Self {
+            account,
+            quantities: Default::default(),
+            values: Default::default(),
+        }
+    }
+}
+
+struct Node<V> {
+    children: HashMap<String, Node<V>>,
+    value: V,
+}
+
+impl<V> Node<V> {
+    fn new(value: V) -> Self {
+        Node {
+            value,
+            children: HashMap::new(),
+        }
+    }
+
+    pub fn lookup_or_create_mut<F>(&mut self, names: &[&str], f: F) -> &mut Node<V>
+    where
+        F: Fn() -> V,
+    {
+        match *names {
+            [first, ref rest @ ..] => self
+                .children
+                .entry(first.into())
+                .or_insert_with(|| Node::new(f()))
+                .lookup_or_create_mut(rest, f),
+            [] => self,
+        }
     }
 }
