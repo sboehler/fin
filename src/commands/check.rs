@@ -1,7 +1,8 @@
 use crate::model::entities::{Interval, Partition};
 use crate::model::{analyzer::analyze_files, journal::Closer};
+use crate::report::multiperiod_balance::MultiperiodBalance;
 use crate::syntax::parse_files;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
 use clap::Args;
 use std::{error::Error, path::PathBuf};
 
@@ -33,10 +34,15 @@ impl Command {
             partition.start_dates(),
             journal.registry.account("Equity:Equity").unwrap(),
         );
+        let mut t = MultiperiodBalance::new(vec![Utc::now().date_naive()]);
         journal
             .query()
             .flat_map(|b| closer.process(b))
-            .for_each(|b| println!("{}", b.account));
+            .for_each(|b| {
+                println!("{}", b.account);
+                t.register(b);
+            });
+
         Ok(())
     }
 }
