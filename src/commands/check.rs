@@ -39,9 +39,10 @@ impl Command {
             .query()
             .flat_map(|b| closer.process(b))
             .for_each(|b| {
-                println!("{}", b.account);
+                // println!("{}", b.account);
                 t.register(b);
             });
+        t.print();
 
         Ok(())
     }
