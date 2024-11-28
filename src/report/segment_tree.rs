@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, iter};
 
 pub struct Node<V> {
     children: HashMap<String, Node<V>>,
@@ -15,46 +15,51 @@ impl<V: Default> Default for Node<V> {
 }
 
 impl<V> Node<V> {
-    pub fn post_order<F>(&self, mut f: F)
-    where
-        F: FnMut(&[&str]),
-    {
-        let mut path = Vec::new();
-        self.post_order_rec(&mut path, &mut f);
+    pub fn iter_post(&self) -> impl Iterator<Item = (Vec<&str>, &V)> {
+        self.iter_post_rec(Vec::new())
     }
 
-    fn post_order_rec<'a, 'b, F>(&'a self, v: &mut Vec<&'b str>, f: &mut F)
+    fn iter_post_rec<'a, 'b>(
+        &'a self,
+        parent: Vec<&'b str>,
+    ) -> Box<dyn Iterator<Item = (Vec<&'b str>, &'b V)> + 'b>
     where
-        F: FnMut(&[&str]),
         'a: 'b,
     {
-        self.children.iter().for_each(|(segment, child)| {
-            v.push(segment);
-            child.post_order_rec(v, f);
-            v.pop();
-        });
-        f(v);
+        let p = parent.clone();
+        Box::new(
+            self.children
+                .iter()
+                .flat_map(move |(segment, child)| {
+                    let mut path = p.clone();
+                    path.push(segment);
+                    child.iter_post_rec(path)
+                })
+                .chain(iter::once((parent, &self.value))),
+        )
     }
 
-    pub fn pre_order<F>(&self, mut f: F)
-    where
-        F: FnMut(&[&str]),
-    {
-        let mut path = Vec::new();
-        self.pre_order_rec(&mut path, &mut f);
+    pub fn iter_pre(&self) -> impl Iterator<Item = (Vec<&str>, &V)> {
+        self.iter_pre_rec(Vec::new())
     }
 
-    fn pre_order_rec<'a, 'b, F>(&'a self, v: &mut Vec<&'b str>, f: &mut F)
+    fn iter_pre_rec<'a, 'b>(
+        &'a self,
+        parent: Vec<&'b str>,
+    ) -> Box<dyn Iterator<Item = (Vec<&'b str>, &'b V)> + 'b>
     where
-        F: FnMut(&[&str]),
         'a: 'b,
     {
-        f(v);
-        self.children.iter().for_each(|(segment, child)| {
-            v.push(segment);
-            child.pre_order_rec(v, f);
-            v.pop();
-        });
+        let p = parent.clone();
+        Box::new(
+            iter::once((parent, &self.value)).chain(self.children.iter().flat_map(
+                move |(segment, child)| {
+                    let mut path = p.clone();
+                    path.push(segment);
+                    child.iter_pre_rec(path)
+                },
+            )),
+        )
     }
 }
 

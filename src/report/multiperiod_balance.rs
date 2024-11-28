@@ -45,7 +45,7 @@ impl MultiperiodBalance {
     }
 
     pub fn print(&self) {
-        self.root.post_order(|v| println!("{:?}", v));
+        self.root.iter_pre().for_each(|(v, _)| println!("{:?}", v));
     }
 
     pub fn render(&self) -> Table {
