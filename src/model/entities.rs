@@ -1,5 +1,6 @@
 use std::{
     cmp,
+    collections::HashMap,
     fmt::Display,
     iter::Sum,
     ops::{Add, AddAssign, Neg, Sub, SubAssign},
@@ -431,5 +432,50 @@ impl Neg for Amount {
 impl Sum for Amount {
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.reduce(|acc, e| acc + e).unwrap_or_default()
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct Positions {
+    positions: HashMap<(Rc<Account>, Rc<Commodity>), Amount>,
+}
+
+impl Positions {
+    pub fn insert_quantity(
+        &mut self,
+        account: &Rc<Account>,
+        commodity: &Rc<Commodity>,
+        quantity: Decimal,
+    ) {
+        self.positions
+            .entry((account.clone(), commodity.clone()))
+            .and_modify(|q| q.quantity += quantity)
+            .or_insert(Amount::new(quantity, Decimal::ZERO));
+    }
+
+    pub fn insert(&mut self, account: &Rc<Account>, commodity: &Rc<Commodity>, amount: Amount) {
+        self.positions
+            .entry((account.clone(), commodity.clone()))
+            .and_modify(|a| *a += amount)
+            .or_insert(Amount::ZERO);
+    }
+
+    pub fn get(&self, account: &Rc<Account>, commodity: &Rc<Commodity>) -> Amount {
+        self.positions
+            .get(&(account.clone(), commodity.clone()))
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub fn amounts(&self) -> impl Iterator<Item = (&(Rc<Account>, Rc<Commodity>), Amount)> {
+        self.positions.iter().map(|(k, a)| (k, *a))
+    }
+
+    pub fn quantities(&self) -> impl Iterator<Item = (&(Rc<Account>, Rc<Commodity>), Decimal)> {
+        self.positions.iter().map(|(k, a)| (k, a.quantity))
+    }
+
+    pub fn clear(&mut self) {
+        self.positions.clear();
     }
 }

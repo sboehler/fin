@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::{collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
@@ -6,8 +6,8 @@ use regex::RegexSet;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    Account, Amount, Assertion, Booking, Close, Commodity, Interval, Open, Period, Price,
-    Transaction,
+    Account, Amount, Assertion, Booking, Close, Commodity, Interval, Open, Period, Positions,
+    Price, Transaction,
 };
 use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
@@ -22,51 +22,6 @@ pub struct Day {
 
     pub gains: Vec<Transaction>,
     pub closings: Vec<Close>,
-}
-
-#[derive(Default, Clone)]
-pub struct Positions {
-    positions: HashMap<(Rc<Account>, Rc<Commodity>), Amount>,
-}
-
-impl Positions {
-    pub fn insert_quantity(
-        &mut self,
-        account: &Rc<Account>,
-        commodity: &Rc<Commodity>,
-        quantity: Decimal,
-    ) {
-        self.positions
-            .entry((account.clone(), commodity.clone()))
-            .and_modify(|q| q.quantity += quantity)
-            .or_insert(Amount::new(quantity, Decimal::ZERO));
-    }
-
-    pub fn insert(&mut self, account: &Rc<Account>, commodity: &Rc<Commodity>, amount: Amount) {
-        self.positions
-            .entry((account.clone(), commodity.clone()))
-            .and_modify(|a| *a += amount)
-            .or_insert(Amount::ZERO);
-    }
-
-    pub fn get(&self, account: &Rc<Account>, commodity: &Rc<Commodity>) -> Amount {
-        self.positions
-            .get(&(account.clone(), commodity.clone()))
-            .copied()
-            .unwrap_or_default()
-    }
-
-    pub fn amounts(&self) -> impl Iterator<Item = (&(Rc<Account>, Rc<Commodity>), Amount)> {
-        self.positions.iter().map(|(k, a)| (k, *a))
-    }
-
-    pub fn quantities(&self) -> impl Iterator<Item = (&(Rc<Account>, Rc<Commodity>), Decimal)> {
-        self.positions.iter().map(|(k, a)| (k, a.quantity))
-    }
-
-    pub fn clear(&mut self) {
-        self.positions.clear();
-    }
 }
 
 impl Day {
@@ -388,7 +343,7 @@ impl Closer {
                 );
 
                 self.current += 1;
-                self.quantities.positions.clear();
+                self.quantities.clear();
             }
             if r.account.account_type.is_ie() {
                 self.quantities.insert(&r.account, &r.commodity, r.amount)
