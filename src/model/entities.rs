@@ -447,11 +447,6 @@ impl Sum for Amount {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct Positions {
-    positions: HashMap<(Rc<Account>, Rc<Commodity>), Amount>,
-}
-
 #[derive(Clone)]
 pub struct VecAmount {
     amounts: Vec<Amount>,
@@ -556,6 +551,11 @@ impl Neg for VecAmount {
             amounts: self.amounts.iter().copied().map(Neg::neg).collect(),
         }
     }
+}
+
+#[derive(Default, Clone)]
+pub struct Positions {
+    positions: HashMap<(Rc<Account>, Rc<Commodity>), Amount>,
 }
 
 impl Positions {
