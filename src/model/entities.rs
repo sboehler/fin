@@ -526,8 +526,7 @@ where
         self.elements
             .iter_mut()
             .zip(rhs.elements.iter())
-            .map(|(a, b)| *a += *b)
-            .collect()
+            .for_each(|(a, b)| *a += *b)
     }
 }
 
@@ -543,8 +542,7 @@ where
         self.elements
             .iter_mut()
             .zip(rhs.elements.iter())
-            .map(|(a, b)| *a -= *b)
-            .collect()
+            .for_each(|(a, b)| *a -= *b)
     }
 }
 
