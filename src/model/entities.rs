@@ -366,7 +366,7 @@ impl Amount {
         value: Decimal::ZERO,
     };
 
-    fn new(quantity: Decimal, value: Decimal) -> Self {
+    pub fn new(quantity: Decimal, value: Decimal) -> Self {
         Amount { quantity, value }
     }
 }

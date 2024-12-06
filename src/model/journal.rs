@@ -24,8 +24,50 @@ pub struct Day {
     pub closings: Vec<Close>,
 }
 
-pub type Positions = HashMap<(Rc<Account>, Rc<Commodity>), Decimal>;
-pub type Positions2 = HashMap<(Rc<Account>, Rc<Commodity>), Amount>;
+#[derive(Default, Clone)]
+pub struct Positions {
+    positions: HashMap<(Rc<Account>, Rc<Commodity>), Amount>,
+}
+
+impl Positions {
+    pub fn insert_quantity(
+        &mut self,
+        account: &Rc<Account>,
+        commodity: &Rc<Commodity>,
+        quantity: Decimal,
+    ) {
+        self.positions
+            .entry((account.clone(), commodity.clone()))
+            .and_modify(|q| q.quantity += quantity)
+            .or_insert(Amount::new(quantity, Decimal::ZERO));
+    }
+
+    pub fn insert(&mut self, account: &Rc<Account>, commodity: &Rc<Commodity>, amount: Amount) {
+        self.positions
+            .entry((account.clone(), commodity.clone()))
+            .and_modify(|a| *a += amount)
+            .or_insert(Amount::ZERO);
+    }
+
+    pub fn get(&self, account: &Rc<Account>, commodity: &Rc<Commodity>) -> Amount {
+        self.positions
+            .get(&(account.clone(), commodity.clone()))
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub fn amounts(&self) -> impl Iterator<Item = (&(Rc<Account>, Rc<Commodity>), Amount)> {
+        self.positions.iter().map(|(k, a)| (k, *a))
+    }
+
+    pub fn quantities(&self) -> impl Iterator<Item = (&(Rc<Account>, Rc<Commodity>), Decimal)> {
+        self.positions.iter().map(|(k, a)| (k, a.quantity))
+    }
+
+    pub fn clear(&mut self) {
+        self.positions.clear();
+    }
+}
 
 impl Day {
     pub fn new(date: NaiveDate) -> Self {
@@ -105,10 +147,7 @@ impl Journal {
                             account: b.account.clone(),
                         });
                     }
-                    quantities
-                        .entry((b.account.clone(), b.commodity.clone()))
-                        .and_modify(|q| *q += b.amount.quantity)
-                        .or_insert(b.amount.quantity);
+                    quantities.insert_quantity(&b.account, &b.commodity, b.amount.quantity);
                     Ok(())
                 })
             })?;
@@ -118,10 +157,7 @@ impl Journal {
                         assertion: a.clone(),
                     });
                 }
-                let balance = quantities
-                    .get(&(a.account.clone(), a.commodity.clone()))
-                    .copied()
-                    .unwrap_or_default();
+                let balance = quantities.get(&a.account, &a.commodity).quantity;
                 if balance != a.balance {
                     return Err(JournalError::AssertionIncorrectBalance {
                         assertion: a.clone(),
@@ -131,12 +167,12 @@ impl Journal {
                 Ok(())
             })?;
             day.closings.iter().try_for_each(|c| {
-                for (pos, qty) in quantities.iter() {
+                for (pos, qty) in quantities.quantities() {
                     if pos.0 == c.account && !qty.is_zero() {
                         return Err(JournalError::CloseNonzeroBalance {
                             close: c.clone(),
                             commodity: pos.1.clone(),
-                            balance: *qty,
+                            balance: qty,
                         });
                     }
                 }
@@ -192,19 +228,11 @@ impl Journal {
         Ok(())
     }
 
-    fn update_quantities(
-        transactions: &[Transaction],
-        quantities: &mut std::collections::HashMap<(Rc<Account>, Rc<Commodity>), Decimal>,
-    ) {
+    fn update_quantities(transactions: &[Transaction], quantities: &mut Positions) {
         transactions
             .iter()
             .flat_map(|t| t.bookings.iter())
-            .for_each(|b| {
-                quantities
-                    .entry((Rc::clone(&b.account), Rc::clone(&b.commodity)))
-                    .and_modify(|q| *q += b.amount.quantity)
-                    .or_insert(b.amount.quantity);
-            });
+            .for_each(|b| quantities.insert_quantity(&b.account, &b.commodity, b.amount.quantity));
     }
 
     fn valuate_transactions(
@@ -225,7 +253,7 @@ impl Journal {
 
     fn compute_gains(
         normalized_prices: &Option<NormalizedPrices>,
-        quantities: &std::collections::HashMap<(Rc<Account>, Rc<Commodity>), Decimal>,
+        quantities: &Positions,
         prev_normalized_prices: &Option<NormalizedPrices>,
         date: NaiveDate,
         credit: Rc<Account>,
@@ -234,7 +262,7 @@ impl Journal {
             .as_ref()
             .map(|np| {
                 Ok(quantities
-                    .iter()
+                    .quantities()
                     .map(|((account, commodity), qty)| {
                         if qty.is_zero() || !account.account_type.is_al() {
                             return Ok(None);
@@ -242,8 +270,8 @@ impl Journal {
                         let v_prev = prev_normalized_prices
                             .as_ref()
                             .unwrap()
-                            .valuate(qty, commodity)?;
-                        let v_cur = np.valuate(qty, commodity)?;
+                            .valuate(&qty, commodity)?;
+                        let v_cur = np.valuate(&qty, commodity)?;
                         let gain = v_cur - v_prev;
                         if gain.is_zero() {
                             return Ok(None);
@@ -312,7 +340,7 @@ pub struct Row {
 pub struct Closer {
     dates: Vec<NaiveDate>,
     current: usize,
-    quantities: Positions2,
+    quantities: Positions,
 
     equity: Rc<Account>,
 }
@@ -322,7 +350,7 @@ impl Closer {
         Closer {
             dates,
             equity,
-            quantities: HashMap::new(),
+            quantities: Default::default(),
             current: 0,
         }
     }
@@ -332,35 +360,38 @@ impl Closer {
         if self.current < self.dates.len() {
             if r.date >= self.dates[self.current] {
                 let closing_date = self.dates[self.current];
-                res.extend(self.quantities.iter().map(|(k, v)| Row {
-                    date: closing_date,
-                    description: Rc::new("".into()),
-                    account: k.0.clone(),
-                    other: self.equity.clone(),
-                    commodity: k.1.clone(),
-                    amount: *v,
-                    valuation: r.valuation.clone(),
-                }));
-                res.extend(self.quantities.iter().map(|(k, v)| Row {
-                    date: closing_date,
-                    description: Rc::new("".into()),
-                    account: self.equity.clone(),
-                    other: k.0.clone(),
-                    commodity: k.1.clone(),
-                    amount: *v,
-                    valuation: r.valuation.clone(),
-                }));
+                res.extend(
+                    self.quantities
+                        .amounts()
+                        .map(|((account, commodity), amount)| Row {
+                            date: closing_date,
+                            description: Rc::new("".into()),
+                            account: account.clone(),
+                            other: self.equity.clone(),
+                            commodity: commodity.clone(),
+                            amount,
+                            valuation: r.valuation.clone(),
+                        }),
+                );
+                res.extend(
+                    self.quantities
+                        .amounts()
+                        .map(|((account, commodity), amount)| Row {
+                            date: closing_date,
+                            description: Rc::new("".into()),
+                            account: self.equity.clone(),
+                            other: account.clone(),
+                            commodity: commodity.clone(),
+                            amount,
+                            valuation: r.valuation.clone(),
+                        }),
+                );
 
                 self.current += 1;
-                self.quantities.clear();
+                self.quantities.positions.clear();
             }
             if r.account.account_type.is_ie() {
-                self.quantities
-                    .entry((r.account.clone(), r.commodity.clone()))
-                    .and_modify(|amount| {
-                        *amount += r.amount;
-                    })
-                    .or_insert(r.amount);
+                self.quantities.insert(&r.account, &r.commodity, r.amount)
             };
         }
         res.push(r);
