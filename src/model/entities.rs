@@ -510,6 +510,10 @@ where
     pub fn elements(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
     }
+
+    pub fn into_elements(self) -> impl Iterator<Item = T> {
+        self.elements.into_iter()
+    }
 }
 
 impl<T> AddAssign<&Vector<T>> for Vector<T>
@@ -532,13 +536,26 @@ where
     T: SubAssign<T> + Default + Copy,
 {
     fn sub_assign(&mut self, rhs: &Self) {
-        self.elements
-            .resize_with(rhs.elements.len(), Default::default);
+        if self.elements.len() < rhs.elements.len() {
+            self.elements
+                .resize_with(rhs.elements.len(), Default::default);
+        }
         self.elements
             .iter_mut()
             .zip(rhs.elements.iter())
             .map(|(a, b)| *a -= *b)
             .collect()
+    }
+}
+
+impl<'a, T> Sum<&'a Vector<T>> for Vector<T>
+where
+    T: Default + AddAssign<T> + Copy,
+{
+    fn sum<I: Iterator<Item = &'a Vector<T>>>(iter: I) -> Self {
+        let mut res = Default::default();
+        iter.for_each(|v| res += v);
+        res
     }
 }
 
@@ -549,6 +566,7 @@ impl<T> Index<usize> for Vector<T> {
         &self.elements[index]
     }
 }
+
 impl<T> IndexMut<usize> for Vector<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.elements[index]

@@ -83,28 +83,20 @@ impl MultiperiodBalance {
         t.add_row(table::Row::Separator);
 
         self.root.iter_pre().for_each(|(v, k)| {
-            let row_header = table::Cell::Text {
+            let header_cell = table::Cell::Text {
                 indent: v.len() - 1,
                 text: v.join(":"),
                 align: Alignment::Left,
             };
-
-            let values = k
+            let value_cells = k
                 .commodities
                 .values()
-                .fold(Vector::default(), |mut acc, e| {
-                    acc += e;
-                    acc
-                });
-
-            let cells = iter::once(row_header)
-                .chain(
-                    values
-                        .elements()
-                        .map(|a| table::Cell::Decimal { value: a.value }),
-                )
-                .collect();
-            t.add_row(table::Row::Row { cells });
+                .sum::<Vector<Amount>>()
+                .into_elements()
+                .map(|a| table::Cell::Decimal { value: a.value });
+            t.add_row(table::Row::Row {
+                cells: iter::once(header_cell).chain(value_cells).collect(),
+            });
         });
         t
     }
