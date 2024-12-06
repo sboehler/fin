@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::Alignment,
     iter::{self},
     rc::Rc,
 };
@@ -7,7 +8,7 @@ use std::{
 use chrono::NaiveDate;
 
 use crate::model::{
-    entities::{Amount, Commodity},
+    entities::{Commodity, VecAmount},
     journal::Row,
 };
 
@@ -24,7 +25,13 @@ pub struct MultiperiodBalance {
 
 #[derive(Default)]
 pub struct AmountsByCommodity {
-    commodities: HashMap<Rc<Commodity>, Vec<Amount>>,
+    commodities: HashMap<Rc<Commodity>, VecAmount>,
+}
+
+impl AmountsByCommodity {
+    pub fn sum(&self, mut target: VecAmount) {
+        self.commodities.values().for_each(|v| target += v)
+    }
 }
 
 impl MultiperiodBalance {
@@ -50,7 +57,7 @@ impl MultiperiodBalance {
             .lookup_or_create_mut(&r.account.name.split(":").collect::<Vec<&str>>())
             .commodities
             .entry(r.commodity.clone())
-            .or_insert_with(|| vec![Amount::ZERO; self.dates.len()]);
+            .or_insert_with(|| VecAmount::new(self.dates.len()));
         c[i] += r.amount;
     }
 
@@ -74,6 +81,31 @@ impl MultiperiodBalance {
             .collect();
         t.add_row(table::Row::Row { cells: header });
         t.add_row(table::Row::Separator);
+
+        self.root.iter_pre().for_each(|(v, k)| {
+            let row_header = table::Cell::Text {
+                indent: v.len() - 1,
+                text: v.join(":"),
+                align: Alignment::Left,
+            };
+
+            let values =
+                k.commodities
+                    .values()
+                    .fold(VecAmount::new(self.dates.len()), |mut acc, e| {
+                        acc += e;
+                        acc
+                    });
+
+            let cells = iter::once(row_header)
+                .chain(
+                    values
+                        .amounts()
+                        .map(|a| table::Cell::Decimal { value: a.value }),
+                )
+                .collect();
+            t.add_row(table::Row::Row { cells });
+        });
         t
     }
 }

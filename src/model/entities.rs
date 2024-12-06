@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     iter::Sum,
-    ops::{Add, AddAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Index, IndexMut, Neg, Sub, SubAssign},
     rc::Rc,
 };
 
@@ -400,8 +400,20 @@ impl AddAssign for Amount {
     }
 }
 
+impl AddAssign<&Amount> for Amount {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.quantity += rhs.quantity;
+        self.value += rhs.value;
+    }
+}
 impl SubAssign for Amount {
     fn sub_assign(&mut self, rhs: Self) {
+        self.quantity -= rhs.quantity;
+        self.value -= rhs.value;
+    }
+}
+impl SubAssign<&Amount> for Amount {
+    fn sub_assign(&mut self, rhs: &Self) {
         self.quantity -= rhs.quantity;
         self.value -= rhs.value;
     }
@@ -438,6 +450,112 @@ impl Sum for Amount {
 #[derive(Default, Clone)]
 pub struct Positions {
     positions: HashMap<(Rc<Account>, Rc<Commodity>), Amount>,
+}
+
+#[derive(Clone)]
+pub struct VecAmount {
+    amounts: Vec<Amount>,
+}
+
+impl VecAmount {
+    pub fn new(size: usize) -> Self {
+        Self {
+            amounts: vec![Amount::ZERO; size],
+        }
+    }
+
+    pub fn amounts(&self) -> impl Iterator<Item = &Amount> {
+        self.amounts.iter()
+    }
+}
+
+impl IndexMut<usize> for VecAmount {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.amounts[index]
+    }
+}
+
+impl Index<usize> for VecAmount {
+    type Output = Amount;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.amounts[index]
+    }
+}
+
+impl Add<&VecAmount> for VecAmount {
+    type Output = Self;
+
+    fn add(self, rhs: &Self) -> Self::Output {
+        Self {
+            amounts: self
+                .amounts
+                .iter()
+                .zip(rhs.amounts.iter())
+                .map(|(a, b)| *a + *b)
+                .collect(),
+        }
+    }
+}
+
+impl Add<&VecAmount> for &VecAmount {
+    type Output = VecAmount;
+
+    fn add(self, rhs: &VecAmount) -> Self::Output {
+        VecAmount {
+            amounts: self
+                .amounts
+                .iter()
+                .zip(rhs.amounts.iter())
+                .map(|(a, b)| *a + *b)
+                .collect(),
+        }
+    }
+}
+
+impl AddAssign<&VecAmount> for VecAmount {
+    fn add_assign(&mut self, rhs: &Self) {
+        self.amounts
+            .iter_mut()
+            .zip(rhs.amounts.iter())
+            .map(|(a, b)| a.add_assign(b))
+            .collect()
+    }
+}
+
+impl Sub<&VecAmount> for VecAmount {
+    type Output = Self;
+
+    fn sub(self, rhs: &Self) -> Self::Output {
+        Self {
+            amounts: self
+                .amounts
+                .iter()
+                .zip(rhs.amounts.iter())
+                .map(|(a, b)| a.sub(*b))
+                .collect(),
+        }
+    }
+}
+
+impl SubAssign<&VecAmount> for VecAmount {
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.amounts
+            .iter_mut()
+            .zip(rhs.amounts.iter())
+            .map(|(a, b)| a.sub_assign(b))
+            .collect()
+    }
+}
+
+impl Neg for VecAmount {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self {
+            amounts: self.amounts.iter().copied().map(Neg::neg).collect(),
+        }
+    }
 }
 
 impl Positions {
