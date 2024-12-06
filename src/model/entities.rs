@@ -447,112 +447,6 @@ impl Sum for Amount {
     }
 }
 
-#[derive(Clone)]
-pub struct VecAmount {
-    amounts: Vec<Amount>,
-}
-
-impl VecAmount {
-    pub fn new(size: usize) -> Self {
-        Self {
-            amounts: vec![Amount::ZERO; size],
-        }
-    }
-
-    pub fn amounts(&self) -> impl Iterator<Item = &Amount> {
-        self.amounts.iter()
-    }
-}
-
-impl IndexMut<usize> for VecAmount {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.amounts[index]
-    }
-}
-
-impl Index<usize> for VecAmount {
-    type Output = Amount;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.amounts[index]
-    }
-}
-
-impl Add<&VecAmount> for VecAmount {
-    type Output = Self;
-
-    fn add(self, rhs: &Self) -> Self::Output {
-        Self {
-            amounts: self
-                .amounts
-                .iter()
-                .zip(rhs.amounts.iter())
-                .map(|(a, b)| *a + *b)
-                .collect(),
-        }
-    }
-}
-
-impl Add<&VecAmount> for &VecAmount {
-    type Output = VecAmount;
-
-    fn add(self, rhs: &VecAmount) -> Self::Output {
-        VecAmount {
-            amounts: self
-                .amounts
-                .iter()
-                .zip(rhs.amounts.iter())
-                .map(|(a, b)| *a + *b)
-                .collect(),
-        }
-    }
-}
-
-impl AddAssign<&VecAmount> for VecAmount {
-    fn add_assign(&mut self, rhs: &Self) {
-        self.amounts
-            .iter_mut()
-            .zip(rhs.amounts.iter())
-            .map(|(a, b)| a.add_assign(b))
-            .collect()
-    }
-}
-
-impl Sub<&VecAmount> for VecAmount {
-    type Output = Self;
-
-    fn sub(self, rhs: &Self) -> Self::Output {
-        Self {
-            amounts: self
-                .amounts
-                .iter()
-                .zip(rhs.amounts.iter())
-                .map(|(a, b)| a.sub(*b))
-                .collect(),
-        }
-    }
-}
-
-impl SubAssign<&VecAmount> for VecAmount {
-    fn sub_assign(&mut self, rhs: &Self) {
-        self.amounts
-            .iter_mut()
-            .zip(rhs.amounts.iter())
-            .map(|(a, b)| a.sub_assign(b))
-            .collect()
-    }
-}
-
-impl Neg for VecAmount {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        Self {
-            amounts: self.amounts.iter().copied().map(Neg::neg).collect(),
-        }
-    }
-}
-
 #[derive(Default, Clone)]
 pub struct Positions {
     positions: HashMap<(Rc<Account>, Rc<Commodity>), Amount>,
@@ -595,5 +489,68 @@ impl Positions {
 
     pub fn clear(&mut self) {
         self.positions.clear();
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct Vector<T> {
+    elements: Vec<T>,
+}
+
+impl<T> Vector<T>
+where
+    T: Default + Clone,
+{
+    pub fn new(size: usize) -> Self {
+        Self {
+            elements: vec![Default::default(); size],
+        }
+    }
+
+    pub fn elements(&self) -> impl Iterator<Item = &T> {
+        self.elements.iter()
+    }
+}
+
+impl<T> AddAssign<&Vector<T>> for Vector<T>
+where
+    T: AddAssign<T> + Default + Copy,
+{
+    fn add_assign(&mut self, rhs: &Self) {
+        self.elements
+            .resize_with(rhs.elements.len(), Default::default);
+        self.elements
+            .iter_mut()
+            .zip(rhs.elements.iter())
+            .map(|(a, b)| *a += *b)
+            .collect()
+    }
+}
+
+impl<T> SubAssign<&Vector<T>> for Vector<T>
+where
+    T: SubAssign<T> + Default + Copy,
+{
+    fn sub_assign(&mut self, rhs: &Self) {
+        self.elements
+            .resize_with(rhs.elements.len(), Default::default);
+        self.elements
+            .iter_mut()
+            .zip(rhs.elements.iter())
+            .map(|(a, b)| *a -= *b)
+            .collect()
+    }
+}
+
+impl<T> Index<usize> for Vector<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.elements[index]
+    }
+}
+impl<T> IndexMut<usize> for Vector<T> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.elements[index]
     }
 }

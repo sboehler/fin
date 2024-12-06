@@ -8,7 +8,7 @@ use std::{
 use chrono::NaiveDate;
 
 use crate::model::{
-    entities::{Commodity, VecAmount},
+    entities::{Amount, Commodity, Vector},
     journal::Row,
 };
 
@@ -25,11 +25,11 @@ pub struct MultiperiodBalance {
 
 #[derive(Default)]
 pub struct AmountsByCommodity {
-    commodities: HashMap<Rc<Commodity>, VecAmount>,
+    commodities: HashMap<Rc<Commodity>, Vector<Amount>>,
 }
 
 impl AmountsByCommodity {
-    pub fn sum(&self, mut target: VecAmount) {
+    pub fn sum(&self, mut target: Vector<Amount>) {
         self.commodities.values().for_each(|v| target += v)
     }
 }
@@ -57,7 +57,7 @@ impl MultiperiodBalance {
             .lookup_or_create_mut(&r.account.name.split(":").collect::<Vec<&str>>())
             .commodities
             .entry(r.commodity.clone())
-            .or_insert_with(|| VecAmount::new(self.dates.len()));
+            .or_insert_with(|| Vector::new(self.dates.len()));
         c[i] += r.amount;
     }
 
@@ -89,18 +89,18 @@ impl MultiperiodBalance {
                 align: Alignment::Left,
             };
 
-            let values =
-                k.commodities
-                    .values()
-                    .fold(VecAmount::new(self.dates.len()), |mut acc, e| {
-                        acc += e;
-                        acc
-                    });
+            let values = k
+                .commodities
+                .values()
+                .fold(Vector::default(), |mut acc, e| {
+                    acc += e;
+                    acc
+                });
 
             let cells = iter::once(row_header)
                 .chain(
                     values
-                        .amounts()
+                        .elements()
                         .map(|a| table::Cell::Decimal { value: a.value }),
                 )
                 .collect();
