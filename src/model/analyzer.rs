@@ -244,7 +244,7 @@ impl Analyzer {
                     bookings: Booking::create(
                         account.clone(),
                         b.account.clone(),
-                        b.quantity,
+                        b.amount.quantity,
                         b.commodity.clone(),
                         Decimal::ZERO,
                     ),
@@ -254,12 +254,12 @@ impl Analyzer {
 
             if b.account.account_type.is_ie() {
                 let n = Decimal::from(p.periods.len());
-                let amount = b.quantity / n;
-                let rem = b.quantity - amount * n;
+                let quantity = b.amount.quantity / n;
+                let rem = b.amount.quantity - quantity * n;
                 for (i, dt) in p.periods.iter().enumerate() {
                     let a = match i {
-                        0 => amount + rem,
-                        _ => amount,
+                        0 => quantity + rem,
+                        _ => quantity,
                     };
                     res.push(Transaction {
                         rng: t.rng.clone(),

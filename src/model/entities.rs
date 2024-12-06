@@ -1,7 +1,13 @@
-use std::{cmp, fmt::Display, rc::Rc};
+use std::{
+    cmp,
+    fmt::Display,
+    iter::Sum,
+    ops::{Add, AddAssign, Neg, Sub, SubAssign},
+    rc::Rc,
+};
 
 use chrono::NaiveDate;
-use rust_decimal::Decimal;
+use rust_decimal::{prelude::Zero, Decimal};
 
 use super::error::ModelError;
 
@@ -118,8 +124,7 @@ pub struct Booking {
     pub account: Rc<Account>,
     pub other: Rc<Account>,
     pub commodity: Rc<Commodity>,
-    pub quantity: Decimal,
-    pub value: Decimal,
+    pub amount: Amount,
 }
 
 impl Booking {
@@ -135,15 +140,13 @@ impl Booking {
                 account: credit.clone(),
                 other: debit.clone(),
                 commodity: commodity.clone(),
-                quantity: -quantity,
-                value: -value,
+                amount: Amount::new(-quantity, -value),
             },
             Booking {
                 account: debit.clone(),
                 other: credit.clone(),
                 commodity: commodity.clone(),
-                quantity,
-                value,
+                amount: Amount::new(quantity, value),
             },
         ]
     }
@@ -348,5 +351,85 @@ mod test_period {
         assert_eq!(Monthly.end_of(d), dt(2022, 6, 30));
         assert_eq!(Quarterly.end_of(d), dt(2022, 6, 30));
         assert_eq!(Yearly.end_of(d), dt(2022, 12, 31))
+    }
+}
+
+#[derive(Default, Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Amount {
+    pub quantity: Decimal,
+    pub value: Decimal,
+}
+
+impl Amount {
+    pub const ZERO: Self = Self {
+        quantity: Decimal::ZERO,
+        value: Decimal::ZERO,
+    };
+
+    fn new(quantity: Decimal, value: Decimal) -> Self {
+        Amount { quantity, value }
+    }
+}
+
+impl Zero for Amount {
+    fn zero() -> Self {
+        Self::ZERO
+    }
+
+    fn is_zero(&self) -> bool {
+        self == &Self::ZERO
+    }
+}
+
+impl Add for Amount {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            quantity: self.quantity + rhs.quantity,
+            value: self.value + rhs.value,
+        }
+    }
+}
+
+impl AddAssign for Amount {
+    fn add_assign(&mut self, rhs: Self) {
+        self.quantity += rhs.quantity;
+        self.value += rhs.value;
+    }
+}
+
+impl SubAssign for Amount {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.quantity -= rhs.quantity;
+        self.value -= rhs.value;
+    }
+}
+
+impl Sub for Amount {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            quantity: self.quantity - rhs.quantity,
+            value: self.value - rhs.value,
+        }
+    }
+}
+
+impl Neg for Amount {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self {
+            quantity: -self.quantity,
+            value: -self.value,
+        }
+    }
+}
+
+impl Sum for Amount {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|acc, e| acc + e).unwrap_or_default()
     }
 }

@@ -1,9 +1,15 @@
-use std::{collections::HashMap, iter, rc::Rc};
+use std::{
+    collections::HashMap,
+    iter::{self},
+    rc::Rc,
+};
 
 use chrono::NaiveDate;
-use rust_decimal::Decimal;
 
-use crate::model::{entities::Commodity, journal::Row};
+use crate::model::{
+    entities::{Amount, Commodity},
+    journal::Row,
+};
 
 use super::{
     segment_tree::Node,
@@ -14,6 +20,11 @@ pub struct MultiperiodBalance {
     dates: Vec<NaiveDate>,
 
     root: Node<AmountsByCommodity>,
+}
+
+#[derive(Default)]
+pub struct AmountsByCommodity {
+    commodities: HashMap<Rc<Commodity>, Vec<Amount>>,
 }
 
 impl MultiperiodBalance {
@@ -39,9 +50,8 @@ impl MultiperiodBalance {
             .lookup_or_create_mut(&r.account.name.split(":").collect::<Vec<&str>>())
             .commodities
             .entry(r.commodity.clone())
-            .or_insert_with(|| vec![(Decimal::ZERO, Decimal::ZERO); self.dates.len()]);
-        c[i].0 += r.quantity;
-        c[i].1 += r.value;
+            .or_insert_with(|| vec![Amount::ZERO; self.dates.len()]);
+        c[i] += r.amount;
     }
 
     pub fn print(&self) {
@@ -66,9 +76,4 @@ impl MultiperiodBalance {
         t.add_row(table::Row::Separator);
         t
     }
-}
-
-#[derive(Default)]
-pub struct AmountsByCommodity {
-    pub commodities: HashMap<Rc<Commodity>, Vec<(Decimal, Decimal)>>,
 }

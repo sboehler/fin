@@ -6,7 +6,8 @@ use regex::RegexSet;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    Account, Assertion, Booking, Close, Commodity, Interval, Open, Period, Price, Transaction,
+    Account, Amount, Assertion, Booking, Close, Commodity, Interval, Open, Period, Price,
+    Transaction,
 };
 use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
@@ -24,7 +25,7 @@ pub struct Day {
 }
 
 pub type Positions = HashMap<(Rc<Account>, Rc<Commodity>), Decimal>;
-pub type Positions2 = HashMap<(Rc<Account>, Rc<Commodity>), (Decimal, Decimal)>;
+pub type Positions2 = HashMap<(Rc<Account>, Rc<Commodity>), Amount>;
 
 impl Day {
     pub fn new(date: NaiveDate) -> Self {
@@ -106,8 +107,8 @@ impl Journal {
                     }
                     quantities
                         .entry((b.account.clone(), b.commodity.clone()))
-                        .and_modify(|q| *q += b.quantity)
-                        .or_insert(b.quantity);
+                        .and_modify(|q| *q += b.amount.quantity)
+                        .or_insert(b.amount.quantity);
                     Ok(())
                 })
             })?;
@@ -201,8 +202,8 @@ impl Journal {
             .for_each(|b| {
                 quantities
                     .entry((Rc::clone(&b.account), Rc::clone(&b.commodity)))
-                    .and_modify(|q| *q += b.quantity)
-                    .or_insert(b.quantity);
+                    .and_modify(|q| *q += b.amount.quantity)
+                    .or_insert(b.amount.quantity);
             });
     }
 
@@ -212,9 +213,9 @@ impl Journal {
     ) -> Result<(), ModelError> {
         for t in transactions {
             for b in &mut t.bookings {
-                b.value = normalized_prices
+                b.amount.value = normalized_prices
                     .as_ref()
-                    .map(|p| p.valuate(&b.quantity, &b.commodity))
+                    .map(|p| p.valuate(&b.amount.quantity, &b.commodity))
                     .transpose()?
                     .unwrap_or(Decimal::ZERO);
             }
@@ -290,8 +291,7 @@ impl Journal {
                         other: b.other.clone(),
                         commodity: b.commodity.clone(),
                         valuation: self.valuation.clone(),
-                        quantity: b.quantity,
-                        value: b.value,
+                        amount: b.amount,
                     })
                 })
         });
@@ -306,8 +306,7 @@ pub struct Row {
     pub commodity: Rc<Commodity>,
     pub valuation: Option<Rc<Commodity>>,
     pub description: Rc<String>,
-    pub quantity: Decimal,
-    pub value: Decimal,
+    pub amount: Amount,
 }
 
 pub struct Closer {
@@ -339,8 +338,7 @@ impl Closer {
                     account: k.0.clone(),
                     other: self.equity.clone(),
                     commodity: k.1.clone(),
-                    quantity: -v.0,
-                    value: -v.1,
+                    amount: *v,
                     valuation: r.valuation.clone(),
                 }));
                 res.extend(self.quantities.iter().map(|(k, v)| Row {
@@ -349,8 +347,7 @@ impl Closer {
                     account: self.equity.clone(),
                     other: k.0.clone(),
                     commodity: k.1.clone(),
-                    quantity: v.0,
-                    value: v.1,
+                    amount: *v,
                     valuation: r.valuation.clone(),
                 }));
 
@@ -360,11 +357,10 @@ impl Closer {
             if r.account.account_type.is_ie() {
                 self.quantities
                     .entry((r.account.clone(), r.commodity.clone()))
-                    .and_modify(|(q, v)| {
-                        *q += r.quantity;
-                        *v += r.value;
+                    .and_modify(|amount| {
+                        *amount += r.amount;
                     })
-                    .or_insert((r.quantity, r.value));
+                    .or_insert(r.amount);
             };
         }
         res.push(r);
