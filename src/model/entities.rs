@@ -447,51 +447,6 @@ impl Sum for Amount {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct Positions {
-    positions: HashMap<(Rc<Account>, Rc<Commodity>), Amount>,
-}
-
-impl Positions {
-    pub fn insert_quantity(
-        &mut self,
-        account: &Rc<Account>,
-        commodity: &Rc<Commodity>,
-        quantity: Decimal,
-    ) {
-        self.positions
-            .entry((account.clone(), commodity.clone()))
-            .and_modify(|q| q.quantity += quantity)
-            .or_insert(Amount::new(quantity, Decimal::ZERO));
-    }
-
-    pub fn insert(&mut self, account: &Rc<Account>, commodity: &Rc<Commodity>, amount: Amount) {
-        self.positions
-            .entry((account.clone(), commodity.clone()))
-            .and_modify(|a| *a += amount)
-            .or_insert(Amount::ZERO);
-    }
-
-    pub fn get(&self, account: &Rc<Account>, commodity: &Rc<Commodity>) -> Amount {
-        self.positions
-            .get(&(account.clone(), commodity.clone()))
-            .copied()
-            .unwrap_or_default()
-    }
-
-    pub fn amounts(&self) -> impl Iterator<Item = (&(Rc<Account>, Rc<Commodity>), Amount)> {
-        self.positions.iter().map(|(k, a)| (k, *a))
-    }
-
-    pub fn quantities(&self) -> impl Iterator<Item = (&(Rc<Account>, Rc<Commodity>), Decimal)> {
-        self.positions.iter().map(|(k, a)| (k, a.quantity))
-    }
-
-    pub fn clear(&mut self) {
-        self.positions.clear();
-    }
-}
-
 #[derive(Clone, Default)]
 pub struct Vector<T> {
     elements: Vec<T>,
@@ -568,5 +523,62 @@ impl<T> Index<usize> for Vector<T> {
 impl<T> IndexMut<usize> for Vector<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.elements[index]
+    }
+}
+
+#[derive(Clone)]
+pub struct Positions<K, V> {
+    positions: HashMap<K, V>,
+}
+
+impl<K, V> Default for Positions<K, V> {
+    fn default() -> Self {
+        Self {
+            positions: Default::default(),
+        }
+    }
+}
+
+impl<'a, K, V> Positions<K, V>
+where
+    K: Eq + std::hash::Hash + Clone,
+    V: AddAssign<&'a V> + Clone + 'a,
+{
+    pub fn add(&mut self, header: &K, value: &'a V) {
+        if let Some(target) = self.positions.get_mut(header) {
+            *target += value
+        } else {
+            self.positions.insert(header.clone(), value.clone());
+        }
+    }
+
+    pub fn add_all<I: Iterator<Item = (&'a K, &'a V)>>(&mut self, iter: I)
+    where
+        K: 'a,
+        V: 'a,
+    {
+        iter.for_each(|(k, v)| self.add(k, v));
+    }
+
+    pub fn get_or_create<F>(&'a mut self, header: &'a K, default: F) -> &'a mut V
+    where
+        F: Fn() -> V,
+    {
+        self.positions.entry(header.clone()).or_insert_with(default)
+    }
+
+    pub fn get(&self, key: &K) -> V
+    where
+        V: Default,
+    {
+        self.positions.get(key).cloned().unwrap_or_default()
+    }
+
+    pub fn positions(&self) -> impl Iterator<Item = (&K, &V)> {
+        self.positions.iter()
+    }
+
+    pub fn clear(&mut self) {
+        self.positions.clear();
     }
 }

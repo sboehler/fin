@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fmt::Alignment,
     iter::{self},
     rc::Rc,
@@ -8,7 +7,7 @@ use std::{
 use chrono::NaiveDate;
 
 use crate::model::{
-    entities::{Amount, Commodity, Vector},
+    entities::{Amount, Commodity, Positions, Vector},
     journal::Row,
 };
 
@@ -25,12 +24,12 @@ pub struct MultiperiodBalance {
 
 #[derive(Default)]
 pub struct AmountsByCommodity {
-    commodities: HashMap<Rc<Commodity>, Vector<Amount>>,
+    amounts_by_commodity: Positions<Rc<Commodity>, Vector<Amount>>,
 }
 
 impl AmountsByCommodity {
-    pub fn sum(&self, mut target: Vector<Amount>) {
-        self.commodities.values().for_each(|v| target += v)
+    pub fn sum(&self) -> Vector<Amount> {
+        self.amounts_by_commodity.positions().map(|(_, v)| v).sum()
     }
 }
 
@@ -55,9 +54,8 @@ impl MultiperiodBalance {
         let c = self
             .root
             .lookup_or_create_mut(&r.account.name.split(":").collect::<Vec<&str>>())
-            .commodities
-            .entry(r.commodity.clone())
-            .or_insert_with(|| Vector::new(self.dates.len()));
+            .amounts_by_commodity
+            .get_or_create(&r.commodity, || Vector::new(self.dates.len()));
         c[i] += r.amount;
     }
 
@@ -89,8 +87,9 @@ impl MultiperiodBalance {
                 align: Alignment::Left,
             };
             let value_cells = k
-                .commodities
-                .values()
+                .amounts_by_commodity
+                .positions()
+                .map(|(_, v)| v)
                 .sum::<Vector<Amount>>()
                 .into_elements()
                 .map(|a| table::Cell::Decimal { value: a.value });

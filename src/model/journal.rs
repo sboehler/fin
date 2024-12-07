@@ -102,7 +102,10 @@ impl Journal {
                             account: b.account.clone(),
                         });
                     }
-                    quantities.insert_quantity(&b.account, &b.commodity, b.amount.quantity);
+                    quantities.add(
+                        &(b.account.clone(), b.commodity.clone()),
+                        &b.amount.quantity,
+                    );
                     Ok(())
                 })
             })?;
@@ -112,7 +115,7 @@ impl Journal {
                         assertion: a.clone(),
                     });
                 }
-                let balance = quantities.get(&a.account, &a.commodity).quantity;
+                let balance = quantities.get(&(a.account.clone(), a.commodity.clone()));
                 if balance != a.balance {
                     return Err(JournalError::AssertionIncorrectBalance {
                         assertion: a.clone(),
@@ -122,12 +125,12 @@ impl Journal {
                 Ok(())
             })?;
             day.closings.iter().try_for_each(|c| {
-                for (pos, qty) in quantities.quantities() {
+                for (pos, qty) in quantities.positions() {
                     if pos.0 == c.account && !qty.is_zero() {
                         return Err(JournalError::CloseNonzeroBalance {
                             close: c.clone(),
                             commodity: pos.1.clone(),
-                            balance: qty,
+                            balance: *qty,
                         });
                     }
                 }
@@ -183,11 +186,19 @@ impl Journal {
         Ok(())
     }
 
-    fn update_quantities(transactions: &[Transaction], quantities: &mut Positions) {
+    fn update_quantities(
+        transactions: &[Transaction],
+        quantities: &mut Positions<(Rc<Account>, Rc<Commodity>), Decimal>,
+    ) {
         transactions
             .iter()
             .flat_map(|t| t.bookings.iter())
-            .for_each(|b| quantities.insert_quantity(&b.account, &b.commodity, b.amount.quantity));
+            .for_each(|b| {
+                quantities.add(
+                    &(b.account.clone(), b.commodity.clone()),
+                    &b.amount.quantity,
+                )
+            });
     }
 
     fn valuate_transactions(
@@ -208,7 +219,7 @@ impl Journal {
 
     fn compute_gains(
         normalized_prices: &Option<NormalizedPrices>,
-        quantities: &Positions,
+        quantities: &Positions<(Rc<Account>, Rc<Commodity>), Decimal>,
         prev_normalized_prices: &Option<NormalizedPrices>,
         date: NaiveDate,
         credit: Rc<Account>,
@@ -217,7 +228,7 @@ impl Journal {
             .as_ref()
             .map(|np| {
                 Ok(quantities
-                    .quantities()
+                    .positions()
                     .map(|((account, commodity), qty)| {
                         if qty.is_zero() || !account.account_type.is_al() {
                             return Ok(None);
@@ -225,8 +236,8 @@ impl Journal {
                         let v_prev = prev_normalized_prices
                             .as_ref()
                             .unwrap()
-                            .valuate(&qty, commodity)?;
-                        let v_cur = np.valuate(&qty, commodity)?;
+                            .valuate(qty, commodity)?;
+                        let v_cur = np.valuate(qty, commodity)?;
                         let gain = v_cur - v_prev;
                         if gain.is_zero() {
                             return Ok(None);
@@ -295,7 +306,7 @@ pub struct Row {
 pub struct Closer {
     dates: Vec<NaiveDate>,
     current: usize,
-    quantities: Positions,
+    quantities: Positions<(Rc<Account>, Rc<Commodity>), Amount>,
 
     equity: Rc<Account>,
 }
@@ -317,27 +328,27 @@ impl Closer {
                 let closing_date = self.dates[self.current];
                 res.extend(
                     self.quantities
-                        .amounts()
+                        .positions()
                         .map(|((account, commodity), amount)| Row {
                             date: closing_date,
                             description: Rc::new("".into()),
                             account: account.clone(),
                             other: self.equity.clone(),
                             commodity: commodity.clone(),
-                            amount,
+                            amount: *amount,
                             valuation: r.valuation.clone(),
                         }),
                 );
                 res.extend(
                     self.quantities
-                        .amounts()
+                        .positions()
                         .map(|((account, commodity), amount)| Row {
                             date: closing_date,
                             description: Rc::new("".into()),
                             account: self.equity.clone(),
                             other: account.clone(),
                             commodity: commodity.clone(),
-                            amount,
+                            amount: *amount,
                             valuation: r.valuation.clone(),
                         }),
                 );
@@ -346,7 +357,8 @@ impl Closer {
                 self.quantities.clear();
             }
             if r.account.account_type.is_ie() {
-                self.quantities.insert(&r.account, &r.commodity, r.amount)
+                self.quantities
+                    .add(&(r.account.clone(), r.commodity.clone()), &r.amount)
             };
         }
         res.push(r);
