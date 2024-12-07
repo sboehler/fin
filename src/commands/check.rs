@@ -32,9 +32,10 @@ impl Command {
 
         let mut closer = Closer::new(
             partition.start_dates(),
-            journal.registry.account("Equity:Equity").unwrap(),
+            journal.registry.account_id("Equity:Equity").unwrap(),
         );
-        let mut t = MultiperiodBalance::new(vec![Utc::now().date_naive()]);
+        let mut t =
+            MultiperiodBalance::new(journal.registry.clone(), vec![Utc::now().date_naive()]);
         journal
             .query()
             .flat_map(|b| closer.process(b))

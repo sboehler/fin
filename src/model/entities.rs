@@ -14,7 +14,7 @@ use super::error::ModelError;
 
 type Result<T> = std::result::Result<T, ModelError>;
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub enum AccountType {
     Assets,
     Liabilities,
@@ -46,6 +46,12 @@ impl TryFrom<&str> for AccountType {
             _ => Err(ModelError::InvalidAccountType(value.into())),
         }
     }
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub struct AccountID {
+    pub account_type: AccountType,
+    pub id: usize,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
@@ -80,6 +86,11 @@ impl Display for Account {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
     }
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub struct CommodityID {
+    pub id: usize,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
@@ -117,21 +128,21 @@ pub struct Price {
 pub struct Open {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
-    pub account: Rc<Account>,
+    pub account: AccountID,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Booking {
-    pub account: Rc<Account>,
-    pub other: Rc<Account>,
+    pub account: AccountID,
+    pub other: AccountID,
     pub commodity: Rc<Commodity>,
     pub amount: Amount,
 }
 
 impl Booking {
     pub fn create(
-        credit: Rc<Account>,
-        debit: Rc<Account>,
+        credit: AccountID,
+        debit: AccountID,
         quantity: Decimal,
         commodity: Rc<Commodity>,
         value: Decimal,
@@ -166,7 +177,7 @@ pub struct Transaction {
 pub struct Assertion {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
-    pub account: Rc<Account>,
+    pub account: AccountID,
     pub balance: Decimal,
     pub commodity: Rc<Commodity>,
 }
@@ -175,7 +186,7 @@ pub struct Assertion {
 pub struct Close {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
-    pub account: Rc<Account>,
+    pub account: AccountID,
 }
 
 use chrono::{Datelike, Days, Months};
@@ -560,11 +571,11 @@ where
         iter.for_each(|(k, v)| self.add(k, v));
     }
 
-    pub fn get_or_create<F>(&'a mut self, header: &'a K, default: F) -> &'a mut V
+    pub fn get_or_create<F>(&'a mut self, key: &'a K, default: F) -> &'a mut V
     where
         F: Fn() -> V,
     {
-        self.positions.entry(header.clone()).or_insert_with(default)
+        self.positions.entry(key.clone()).or_insert_with(default)
     }
 
     pub fn get(&self, key: &K) -> V

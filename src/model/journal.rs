@@ -2,11 +2,10 @@ use std::collections::HashSet;
 use std::{collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
-use regex::RegexSet;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    Account, Amount, Assertion, Booking, Close, Commodity, Interval, Open, Period, Positions,
+    AccountID, Amount, Assertion, Booking, Close, Commodity, Interval, Open, Period, Positions,
     Price, Transaction,
 };
 use super::error::{JournalError, ModelError};
@@ -90,7 +89,10 @@ impl Journal {
         for day in self.days.values() {
             day.openings.iter().try_for_each(|o| {
                 if !accounts.insert(o.account.clone()) {
-                    return Err(JournalError::AccountAlreadyOpen { open: o.clone() });
+                    return Err(JournalError::AccountAlreadyOpen {
+                        open: o.clone(),
+                        account_name: self.registry.account_name(o.account),
+                    });
                 }
                 Ok(())
             })?;
@@ -99,7 +101,7 @@ impl Journal {
                     if !accounts.contains(&b.account) {
                         return Err(JournalError::TransactionAccountNotOpen {
                             transaction: t.clone(),
-                            account: b.account.clone(),
+                            account_name: self.registry.account_name(b.account),
                         });
                     }
                     quantities.add(
@@ -113,6 +115,7 @@ impl Journal {
                 if !accounts.contains(&a.account) {
                     return Err(JournalError::AssertionAccountNotOpen {
                         assertion: a.clone(),
+                        account_name: self.registry.account_name(a.account),
                     });
                 }
                 let balance = quantities.get(&(a.account.clone(), a.commodity.clone()));
@@ -120,6 +123,7 @@ impl Journal {
                     return Err(JournalError::AssertionIncorrectBalance {
                         assertion: a.clone(),
                         actual: balance,
+                        account_name: self.registry.account_name(a.account),
                     });
                 }
                 Ok(())
@@ -131,6 +135,7 @@ impl Journal {
                             close: c.clone(),
                             commodity: pos.1.clone(),
                             balance: *qty,
+                            account_name: self.registry.account_name(c.account),
                         });
                     }
                 }
@@ -163,11 +168,12 @@ impl Journal {
                 day.prices.iter().for_each(|p| prices.insert(p));
 
                 let normalized_prices = valuation.map(|p| prices.normalize(p));
-                let credit = self.registry.account("Income:Valuation")?;
+                let credit = self.registry.account_id("Income:Valuation")?;
 
                 Self::valuate_transactions(&mut day.transactions, &normalized_prices)?;
 
                 day.gains = Self::compute_gains(
+                    self.registry.clone(),
                     &normalized_prices,
                     &quantities,
                     &prev_normalized_prices,
@@ -188,17 +194,12 @@ impl Journal {
 
     fn update_quantities(
         transactions: &[Transaction],
-        quantities: &mut Positions<(Rc<Account>, Rc<Commodity>), Decimal>,
+        quantities: &mut Positions<(AccountID, Rc<Commodity>), Decimal>,
     ) {
         transactions
             .iter()
             .flat_map(|t| t.bookings.iter())
-            .for_each(|b| {
-                quantities.add(
-                    &(b.account.clone(), b.commodity.clone()),
-                    &b.amount.quantity,
-                )
-            });
+            .for_each(|b| quantities.add(&(b.account, b.commodity.clone()), &b.amount.quantity));
     }
 
     fn valuate_transactions(
@@ -218,11 +219,12 @@ impl Journal {
     }
 
     fn compute_gains(
+        registry: Rc<Registry>,
         normalized_prices: &Option<NormalizedPrices>,
-        quantities: &Positions<(Rc<Account>, Rc<Commodity>), Decimal>,
+        quantities: &Positions<(AccountID, Rc<Commodity>), Decimal>,
         prev_normalized_prices: &Option<NormalizedPrices>,
         date: NaiveDate,
-        credit: Rc<Account>,
+        credit: AccountID,
     ) -> Result<Vec<Transaction>, ModelError> {
         let gains = normalized_prices
             .as_ref()
@@ -247,7 +249,8 @@ impl Journal {
                             rng: None,
                             description: format!(
                                 "Adjust value of {} in account {}",
-                                commodity.name, account.name
+                                commodity.name,
+                                registry.account_name(*account)
                             )
                             .into(),
                             bookings: Booking::create(
@@ -295,8 +298,8 @@ impl Journal {
 #[derive(Debug, Clone)]
 pub struct Row {
     pub date: NaiveDate,
-    pub account: Rc<Account>,
-    pub other: Rc<Account>,
+    pub account: AccountID,
+    pub other: AccountID,
     pub commodity: Rc<Commodity>,
     pub valuation: Option<Rc<Commodity>>,
     pub description: Rc<String>,
@@ -306,13 +309,13 @@ pub struct Row {
 pub struct Closer {
     dates: Vec<NaiveDate>,
     current: usize,
-    quantities: Positions<(Rc<Account>, Rc<Commodity>), Amount>,
+    quantities: Positions<(AccountID, Rc<Commodity>), Amount>,
 
-    equity: Rc<Account>,
+    equity: AccountID,
 }
 
 impl Closer {
-    pub fn new(dates: Vec<NaiveDate>, equity: Rc<Account>) -> Self {
+    pub fn new(dates: Vec<NaiveDate>, equity: AccountID) -> Self {
         Closer {
             dates,
             equity,
@@ -366,25 +369,25 @@ impl Closer {
     }
 }
 
-pub struct Filter {
-    period: Option<Period>,
-    account: Option<RegexSet>,
-    commodity: Option<RegexSet>,
-}
-impl Filter {
-    pub fn process(&self, r: Row) -> bool {
-        self.period
-            .map(|period| period.contains(r.date))
-            .unwrap_or(true)
-            && self
-                .account
-                .as_ref()
-                .map(|account| account.is_match(&r.account.name) || account.is_match(&r.other.name))
-                .unwrap_or(true)
-            && self
-                .commodity
-                .as_ref()
-                .map(|commodity| commodity.is_match(&r.commodity.name))
-                .unwrap_or(true)
-    }
-}
+// pub struct Filter {
+//     period: Option<Period>,
+//     account: Option<RegexSet>,
+//     commodity: Option<RegexSet>,
+// }
+// impl Filter {
+//     pub fn process(&self, r: Row) -> bool {
+//         self.period
+//             .map(|period| period.contains(r.date))
+//             .unwrap_or(true)
+//             && self
+//                 .account
+//                 .as_ref()
+//                 .map(|account| account.is_match(&r.account.name) || account.is_match(&r.other.name))
+//                 .unwrap_or(true)
+//             && self
+//                 .commodity
+//                 .as_ref()
+//                 .map(|commodity| commodity.is_match(&r.commodity.name))
+//                 .unwrap_or(true)
+//     }
+// }

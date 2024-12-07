@@ -5,7 +5,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    Account, Assertion, Booking, Close, Commodity, Interval, Open, Partition, Price, Transaction,
+    AccountID, Assertion, Booking, Close, Commodity, Interval, Open, Partition, Price, Transaction,
 };
 use super::journal::{Day, Journal};
 use super::registry::Registry;
@@ -215,9 +215,9 @@ impl Analyzer {
             })
     }
 
-    fn analyze_account(&mut self, account: &cst::Account) -> Result<Rc<Account>> {
+    fn analyze_account(&mut self, account: &cst::Account) -> Result<AccountID> {
         self.registry
-            .account(account.range.text())
+            .account_id(account.range.text())
             .map_err(|_e| SyntaxError {
                 rng: account.range.clone(),
                 want: cst::Token::Account,
@@ -231,7 +231,7 @@ impl Analyzer {
         start: NaiveDate,
         end: NaiveDate,
         interval: Interval,
-        account: Rc<Account>,
+        account: AccountID,
     ) -> Vec<Transaction> {
         let mut res: Vec<Transaction> = Vec::new();
         let p = Partition::from_interval(Period(start, end), interval);

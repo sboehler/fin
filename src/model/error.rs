@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::syntax::cst::Rng;
 
-use super::entities::{Account, Assertion, Close, Commodity, Open, Transaction};
+use super::entities::{Assertion, Close, Commodity, Open, Transaction};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ModelError {
@@ -47,22 +47,26 @@ impl Display for ModelError {
 pub enum JournalError {
     AccountAlreadyOpen {
         open: Open,
+        account_name: String,
     },
     TransactionAccountNotOpen {
         transaction: Transaction,
-        account: Rc<Account>,
+        account_name: String,
     },
     AssertionAccountNotOpen {
         assertion: Assertion,
+        account_name: String,
     },
     AssertionIncorrectBalance {
         assertion: Assertion,
         actual: Decimal,
+        account_name: String,
     },
     CloseNonzeroBalance {
         close: Close,
         commodity: Rc<Commodity>,
         balance: Decimal,
+        account_name: String,
     },
 }
 
@@ -85,40 +89,46 @@ impl JournalError {
 impl Display for JournalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JournalError::AccountAlreadyOpen { open } => {
+            JournalError::AccountAlreadyOpen { open, account_name } => {
                 writeln!(
                     f,
                     "Error: open directive on {date}: account {account} is already open.",
                     date = open.date,
-                    account = open.account,
+                    account = account_name,
                 )?;
                 Self::write_context(&open.rng, f)?
             }
             JournalError::TransactionAccountNotOpen {
                 transaction,
-                account,
+                account_name,
             } => {
                 writeln!(
                     f,
-                    "Error: transaction directive on {date}: account {account} is not open.",
+                    "Error: transaction directive on {date}: account {account_name} is not open.",
                     date = transaction.date,
                 )?;
                 Self::write_context(&transaction.rng, f)?
             }
-            JournalError::AssertionAccountNotOpen { assertion } => {
+            JournalError::AssertionAccountNotOpen {
+                assertion,
+                account_name,
+            } => {
                 writeln!(
                     f,
                     "Error: balance directive on {date}: account {account} is not open.",
-                    account = assertion.account,
+                    account = account_name,
                     date = assertion.date,
                 )?;
                 Self::write_context(&assertion.rng, f)?
             }
-            JournalError::AssertionIncorrectBalance { assertion, actual } => {
+            JournalError::AssertionIncorrectBalance {
+                assertion,
+                actual,
+                account_name,
+            } => {
                 writeln!(
                     f,
-                    "Error: balance directive on {date}: account {account} has balance {actual} {commodity}, want {balance} {commodity}.",
-                    account = assertion.account,
+                    "Error: balance directive on {date}: account {account_name} has balance {actual} {commodity}, want {balance} {commodity}.",
                     commodity = assertion.commodity,
                     balance = assertion.balance,
                     date = assertion.date,
@@ -129,12 +139,12 @@ impl Display for JournalError {
                 close,
                 commodity,
                 balance,
+                account_name,
             } => {
                 writeln!(
                     f,
-                    "Error: close directive on {date}: account {account} still has a balance of {balance} {commodity}, want zero.",
+                    "Error: close directive on {date}: account {account_name} still has a balance of {balance} {commodity}, want zero.",
                     date = close.date,
-                    account = close.account,
                 )?;
                 Self::write_context(&close.rng, f)?
             }

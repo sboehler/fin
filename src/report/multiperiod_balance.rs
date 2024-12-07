@@ -9,6 +9,7 @@ use chrono::NaiveDate;
 use crate::model::{
     entities::{Amount, Commodity, Positions, Vector},
     journal::Row,
+    registry::Registry,
 };
 
 use super::{
@@ -18,6 +19,7 @@ use super::{
 
 pub struct MultiperiodBalance {
     dates: Vec<NaiveDate>,
+    registry: Rc<Registry>,
 
     root: Node<AmountsByCommodity>,
 }
@@ -34,9 +36,10 @@ impl AmountsByCommodity {
 }
 
 impl MultiperiodBalance {
-    pub fn new(dates: Vec<NaiveDate>) -> Self {
+    pub fn new(registry: Rc<Registry>, dates: Vec<NaiveDate>) -> Self {
         MultiperiodBalance {
             dates,
+            registry,
             root: Default::default(),
         }
     }
@@ -51,9 +54,10 @@ impl MultiperiodBalance {
 
     pub fn register(&mut self, r: Row) {
         let Some(i) = self.align(r.date) else { return };
+        let name = self.registry.account_name(r.account);
         let c = self
             .root
-            .lookup_or_create_mut(&r.account.name.split(":").collect::<Vec<&str>>())
+            .lookup_or_create_mut(&name.split(":").collect::<Vec<&str>>())
             .amounts_by_commodity
             .get_or_create(&r.commodity, || Vector::new(self.dates.len()));
         c[i] += r.amount;
