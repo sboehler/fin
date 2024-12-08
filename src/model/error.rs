@@ -46,25 +46,25 @@ impl Display for ModelError {
 #[derive(Error, Eq, PartialEq, Debug)]
 pub enum JournalError {
     AccountAlreadyOpen {
-        open: Open,
+        open: Box<Open>,
         account_name: String,
     },
     TransactionAccountNotOpen {
-        transaction: Transaction,
+        transaction: Box<Transaction>,
         account_name: String,
     },
     AssertionAccountNotOpen {
-        assertion: Assertion,
+        assertion: Box<Assertion>,
         account_name: String,
     },
     AssertionIncorrectBalance {
-        assertion: Assertion,
+        assertion: Box<Assertion>,
         actual: Decimal,
         account_name: String,
         commodity_name: String,
     },
     CloseNonzeroBalance {
-        close: Close,
+        close: Box<Close>,
         commodity_name: String,
         balance: Decimal,
         account_name: String,

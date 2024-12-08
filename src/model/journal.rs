@@ -90,7 +90,7 @@ impl Journal {
             day.openings.iter().try_for_each(|o| {
                 if !accounts.insert(o.account) {
                     return Err(JournalError::AccountAlreadyOpen {
-                        open: o.clone(),
+                        open: Box::new(o.clone()),
                         account_name: self.registry.account_name(o.account),
                     });
                 }
@@ -100,28 +100,25 @@ impl Journal {
                 t.bookings.iter().try_for_each(|b| {
                     if !accounts.contains(&b.account) {
                         return Err(JournalError::TransactionAccountNotOpen {
-                            transaction: t.clone(),
+                            transaction: Box::new(t.clone()),
                             account_name: self.registry.account_name(b.account),
                         });
                     }
-                    quantities.add(
-                        &(b.account, b.commodity),
-                        &b.amount.quantity,
-                    );
+                    quantities.add(&(b.account, b.commodity), &b.amount.quantity);
                     Ok(())
                 })
             })?;
             day.assertions.iter().try_for_each(|a| {
                 if !accounts.contains(&a.account) {
                     return Err(JournalError::AssertionAccountNotOpen {
-                        assertion: a.clone(),
+                        assertion: Box::new(a.clone()),
                         account_name: self.registry.account_name(a.account),
                     });
                 }
                 let balance = quantities.get(&(a.account, a.commodity));
                 if balance != a.balance {
                     return Err(JournalError::AssertionIncorrectBalance {
-                        assertion: a.clone(),
+                        assertion: Box::new(a.clone()),
                         actual: balance,
                         account_name: self.registry.account_name(a.account),
                         commodity_name: self.registry.commodity_name(a.commodity),
@@ -133,7 +130,7 @@ impl Journal {
                 for (pos, qty) in quantities.positions() {
                     if pos.0 == c.account && !qty.is_zero() {
                         return Err(JournalError::CloseNonzeroBalance {
-                            close: c.clone(),
+                            close: Box::new(c.clone()),
                             commodity_name: self.registry.commodity_name(pos.1),
                             balance: *qty,
                             account_name: self.registry.account_name(c.account),
@@ -366,8 +363,7 @@ impl Closer {
                 self.quantities.clear();
             }
             if r.account.account_type.is_ie() {
-                self.quantities
-                    .add(&(r.account, r.commodity), &r.amount)
+                self.quantities.add(&(r.account, r.commodity), &r.amount)
             };
         }
         res.push(r);
