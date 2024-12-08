@@ -38,7 +38,7 @@ impl Registry {
         self.accounts.borrow_mut().push(a);
         let id = AccountID {
             id: self.accounts.borrow().len() - 1,
-            account_type: account_type,
+            account_type,
         };
         self.accounts_by_name.borrow_mut().insert(s.to_string(), id);
         Ok(id)

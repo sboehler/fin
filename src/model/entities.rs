@@ -149,15 +149,15 @@ impl Booking {
     ) -> Vec<Booking> {
         vec![
             Booking {
-                account: credit.clone(),
-                other: debit.clone(),
-                commodity: commodity.clone(),
+                account: credit,
+                other: debit,
+                commodity,
                 amount: Amount::new(-quantity, -value),
             },
             Booking {
-                account: debit.clone(),
-                other: credit.clone(),
-                commodity: commodity.clone(),
+                account: debit,
+                other: credit,
+                commodity,
                 amount: Amount::new(quantity, value),
             },
         ]

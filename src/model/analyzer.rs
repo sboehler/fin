@@ -243,10 +243,10 @@ impl Analyzer {
                     date: t.date,
                     description: t.description.clone(),
                     bookings: Booking::create(
-                        account.clone(),
-                        b.account.clone(),
+                        account,
+                        b.account,
                         b.amount.quantity,
-                        b.commodity.clone(),
+                        b.commodity,
                         Decimal::ZERO,
                     ),
                     targets: t.targets.clone(),
@@ -273,10 +273,10 @@ impl Analyzer {
                         )
                         .into(),
                         bookings: Booking::create(
-                            account.clone(),
-                            b.account.clone(),
+                            account,
+                            b.account,
                             a,
-                            b.commodity.clone(),
+                            b.commodity,
                             Decimal::ZERO,
                         ),
                         targets: t.targets.clone(),

@@ -25,13 +25,13 @@ impl Prices {
         );
         self.date = price.date;
         self.prices
-            .entry(price.target.clone())
+            .entry(price.target)
             .or_default()
-            .insert(price.commodity.clone(), price.price);
+            .insert(price.commodity, price.price);
         self.prices
-            .entry(price.commodity.clone())
+            .entry(price.commodity)
             .or_default()
-            .insert(price.target.clone(), Decimal::ONE / price.price);
+            .insert(price.target, Decimal::ONE / price.price);
     }
 
     pub fn normalize(&self, target: &CommodityID) -> NormalizedPrices {
@@ -39,7 +39,7 @@ impl Prices {
         self.normalize_rec(target, Decimal::ONE, &mut prices);
         NormalizedPrices {
             date: self.date,
-            target: target.clone(),
+            target: *target,
             prices,
         }
     }
@@ -50,7 +50,7 @@ impl Prices {
         target_price: Decimal,
         prices: &mut HashMap<CommodityID, Decimal>,
     ) {
-        prices.insert(target.clone(), target_price);
+        prices.insert(*target, target_price);
         if let Some(target_denominated) = self.prices.get(target) {
             for (neighbor, price) in target_denominated {
                 if prices.contains_key(neighbor) {
@@ -75,7 +75,7 @@ impl NormalizedPrices {
     pub fn new(commodity: &CommodityID) -> Self {
         NormalizedPrices {
             date: NaiveDate::default(),
-            target: commodity.clone(),
+            target: *commodity,
             prices: HashMap::default(),
         }
     }

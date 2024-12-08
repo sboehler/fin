@@ -88,7 +88,7 @@ impl Journal {
 
         for day in self.days.values() {
             day.openings.iter().try_for_each(|o| {
-                if !accounts.insert(o.account.clone()) {
+                if !accounts.insert(o.account) {
                     return Err(JournalError::AccountAlreadyOpen {
                         open: o.clone(),
                         account_name: self.registry.account_name(o.account),
@@ -105,7 +105,7 @@ impl Journal {
                         });
                     }
                     quantities.add(
-                        &(b.account.clone(), b.commodity.clone()),
+                        &(b.account, b.commodity),
                         &b.amount.quantity,
                     );
                     Ok(())
@@ -118,7 +118,7 @@ impl Journal {
                         account_name: self.registry.account_name(a.account),
                     });
                 }
-                let balance = quantities.get(&(a.account.clone(), a.commodity.clone()));
+                let balance = quantities.get(&(a.account, a.commodity));
                 if balance != a.balance {
                     return Err(JournalError::AssertionIncorrectBalance {
                         assertion: a.clone(),
@@ -204,7 +204,7 @@ impl Journal {
         transactions
             .iter()
             .flat_map(|t| t.bookings.iter())
-            .for_each(|b| quantities.add(&(b.account, b.commodity.clone()), &b.amount.quantity));
+            .for_each(|b| quantities.add(&(b.account, b.commodity), &b.amount.quantity));
     }
 
     fn valuate_transactions(
@@ -260,13 +260,13 @@ impl Journal {
                             )
                             .into(),
                             bookings: Booking::create(
-                                credit.clone(),
-                                account.clone(),
+                                credit,
+                                *account,
                                 Decimal::ZERO,
-                                commodity.clone(),
+                                *commodity,
                                 gain,
                             ),
-                            targets: Some(vec![commodity.clone()]),
+                            targets: Some(vec![*commodity]),
                         }))
                     })
                     .collect::<Result<Vec<Option<Transaction>>, ModelError>>()?
@@ -290,10 +290,10 @@ impl Journal {
                     t.bookings.iter().map(|b| Row {
                         date: t.date,
                         description: t.description.clone(),
-                        account: b.account.clone(),
-                        other: b.other.clone(),
-                        commodity: b.commodity.clone(),
-                        valuation: self.valuation.clone(),
+                        account: b.account,
+                        other: b.other,
+                        commodity: b.commodity,
+                        valuation: self.valuation,
                         amount: b.amount,
                     })
                 })
@@ -341,11 +341,11 @@ impl Closer {
                         .map(|((account, commodity), amount)| Row {
                             date: closing_date,
                             description: Rc::new("".into()),
-                            account: account.clone(),
-                            other: self.equity.clone(),
-                            commodity: commodity.clone(),
+                            account: *account,
+                            other: self.equity,
+                            commodity: *commodity,
                             amount: *amount,
-                            valuation: r.valuation.clone(),
+                            valuation: r.valuation,
                         }),
                 );
                 res.extend(
@@ -354,11 +354,11 @@ impl Closer {
                         .map(|((account, commodity), amount)| Row {
                             date: closing_date,
                             description: Rc::new("".into()),
-                            account: self.equity.clone(),
-                            other: account.clone(),
-                            commodity: commodity.clone(),
+                            account: self.equity,
+                            other: *account,
+                            commodity: *commodity,
                             amount: *amount,
-                            valuation: r.valuation.clone(),
+                            valuation: r.valuation,
                         }),
                 );
 
@@ -367,7 +367,7 @@ impl Closer {
             }
             if r.account.account_type.is_ie() {
                 self.quantities
-                    .add(&(r.account.clone(), r.commodity.clone()), &r.amount)
+                    .add(&(r.account, r.commodity), &r.amount)
             };
         }
         res.push(r);
