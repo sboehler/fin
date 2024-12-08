@@ -119,9 +119,9 @@ impl Display for Commodity {
 pub struct Price {
     pub rng: Option<Rng>,
     pub date: NaiveDate,
-    pub commodity: Rc<Commodity>,
+    pub commodity: CommodityID,
     pub price: Decimal,
-    pub target: Rc<Commodity>,
+    pub target: CommodityID,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -135,7 +135,7 @@ pub struct Open {
 pub struct Booking {
     pub account: AccountID,
     pub other: AccountID,
-    pub commodity: Rc<Commodity>,
+    pub commodity: CommodityID,
     pub amount: Amount,
 }
 
@@ -144,7 +144,7 @@ impl Booking {
         credit: AccountID,
         debit: AccountID,
         quantity: Decimal,
-        commodity: Rc<Commodity>,
+        commodity: CommodityID,
         value: Decimal,
     ) -> Vec<Booking> {
         vec![
@@ -170,7 +170,7 @@ pub struct Transaction {
     pub date: NaiveDate,
     pub description: Rc<String>,
     pub bookings: Vec<Booking>,
-    pub targets: Option<Vec<Rc<Commodity>>>,
+    pub targets: Option<Vec<CommodityID>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -179,7 +179,7 @@ pub struct Assertion {
     pub date: NaiveDate,
     pub account: AccountID,
     pub balance: Decimal,
-    pub commodity: Rc<Commodity>,
+    pub commodity: CommodityID,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

@@ -5,7 +5,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    AccountID, Amount, Assertion, Booking, Close, Commodity, Interval, Open, Period, Positions,
+    AccountID, Amount, Assertion, Booking, Close, CommodityID, Interval, Open, Period, Positions,
     Price, Transaction,
 };
 use super::error::{JournalError, ModelError};
@@ -41,7 +41,7 @@ pub struct Journal {
     pub registry: Rc<Registry>,
     pub days: BTreeMap<NaiveDate, Day>,
 
-    pub valuation: Option<Rc<Commodity>>,
+    pub valuation: Option<CommodityID>,
     pub closing: Option<Interval>,
 }
 
@@ -124,6 +124,7 @@ impl Journal {
                         assertion: a.clone(),
                         actual: balance,
                         account_name: self.registry.account_name(a.account),
+                        commodity_name: self.registry.commodity_name(a.commodity),
                     });
                 }
                 Ok(())
@@ -133,7 +134,7 @@ impl Journal {
                     if pos.0 == c.account && !qty.is_zero() {
                         return Err(JournalError::CloseNonzeroBalance {
                             close: c.clone(),
-                            commodity: pos.1.clone(),
+                            commodity_name: self.registry.commodity_name(pos.1),
                             balance: *qty,
                             account_name: self.registry.account_name(c.account),
                         });
@@ -148,7 +149,7 @@ impl Journal {
 
     pub fn process(
         &mut self,
-        valuation: Option<&Rc<Commodity>>,
+        valuation: Option<&CommodityID>,
         close: Option<Interval>,
     ) -> Result<(), ModelError> {
         let mut prices = Prices::default();
@@ -170,7 +171,11 @@ impl Journal {
                 let normalized_prices = valuation.map(|p| prices.normalize(p));
                 let credit = self.registry.account_id("Income:Valuation")?;
 
-                Self::valuate_transactions(&mut day.transactions, &normalized_prices)?;
+                Self::valuate_transactions(
+                    &self.registry,
+                    &mut day.transactions,
+                    &normalized_prices,
+                )?;
 
                 day.gains = Self::compute_gains(
                     self.registry.clone(),
@@ -194,7 +199,7 @@ impl Journal {
 
     fn update_quantities(
         transactions: &[Transaction],
-        quantities: &mut Positions<(AccountID, Rc<Commodity>), Decimal>,
+        quantities: &mut Positions<(AccountID, CommodityID), Decimal>,
     ) {
         transactions
             .iter()
@@ -203,6 +208,7 @@ impl Journal {
     }
 
     fn valuate_transactions(
+        registry: &Rc<Registry>,
         transactions: &mut Vec<Transaction>,
         normalized_prices: &Option<NormalizedPrices>,
     ) -> Result<(), ModelError> {
@@ -210,7 +216,7 @@ impl Journal {
             for b in &mut t.bookings {
                 b.amount.value = normalized_prices
                     .as_ref()
-                    .map(|p| p.valuate(&b.amount.quantity, &b.commodity))
+                    .map(|p| p.valuate(registry, &b.amount.quantity, &b.commodity))
                     .transpose()?
                     .unwrap_or(Decimal::ZERO);
             }
@@ -221,7 +227,7 @@ impl Journal {
     fn compute_gains(
         registry: Rc<Registry>,
         normalized_prices: &Option<NormalizedPrices>,
-        quantities: &Positions<(AccountID, Rc<Commodity>), Decimal>,
+        quantities: &Positions<(AccountID, CommodityID), Decimal>,
         prev_normalized_prices: &Option<NormalizedPrices>,
         date: NaiveDate,
         credit: AccountID,
@@ -238,8 +244,8 @@ impl Journal {
                         let v_prev = prev_normalized_prices
                             .as_ref()
                             .unwrap()
-                            .valuate(qty, commodity)?;
-                        let v_cur = np.valuate(qty, commodity)?;
+                            .valuate(&registry, qty, commodity)?;
+                        let v_cur = np.valuate(&registry, qty, commodity)?;
                         let gain = v_cur - v_prev;
                         if gain.is_zero() {
                             return Ok(None);
@@ -249,7 +255,7 @@ impl Journal {
                             rng: None,
                             description: format!(
                                 "Adjust value of {} in account {}",
-                                commodity.name,
+                                registry.commodity_name(*commodity),
                                 registry.account_name(*account)
                             )
                             .into(),
@@ -300,8 +306,8 @@ pub struct Row {
     pub date: NaiveDate,
     pub account: AccountID,
     pub other: AccountID,
-    pub commodity: Rc<Commodity>,
-    pub valuation: Option<Rc<Commodity>>,
+    pub commodity: CommodityID,
+    pub valuation: Option<CommodityID>,
     pub description: Rc<String>,
     pub amount: Amount,
 }
@@ -309,7 +315,7 @@ pub struct Row {
 pub struct Closer {
     dates: Vec<NaiveDate>,
     current: usize,
-    quantities: Positions<(AccountID, Rc<Commodity>), Amount>,
+    quantities: Positions<(AccountID, CommodityID), Amount>,
 
     equity: AccountID,
 }

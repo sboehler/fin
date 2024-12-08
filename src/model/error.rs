@@ -1,4 +1,4 @@
-use std::{fmt::Display, rc::Rc};
+use std::fmt::Display;
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::syntax::cst::Rng;
 
-use super::entities::{Assertion, Close, Commodity, Open, Transaction};
+use super::entities::{Assertion, Close, Open, Transaction};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ModelError {
@@ -15,8 +15,8 @@ pub enum ModelError {
     InvalidAccountName(String),
     NoPriceFound {
         date: NaiveDate,
-        commodity: Rc<Commodity>,
-        target: Rc<Commodity>,
+        commodity_name: String,
+        target_name: String,
     },
 }
 
@@ -28,8 +28,8 @@ impl Display for ModelError {
             Self::InvalidAccountName(s) => write!(f, "invalid account name: {}", s),
             Self::NoPriceFound {
                 date,
-                commodity,
-                target,
+                commodity_name: commodity,
+                target_name: target,
             } => {
                 write!(
                     f,
@@ -61,10 +61,11 @@ pub enum JournalError {
         assertion: Assertion,
         actual: Decimal,
         account_name: String,
+        commodity_name: String,
     },
     CloseNonzeroBalance {
         close: Close,
-        commodity: Rc<Commodity>,
+        commodity_name: String,
         balance: Decimal,
         account_name: String,
     },
@@ -125,11 +126,11 @@ impl Display for JournalError {
                 assertion,
                 actual,
                 account_name,
+                commodity_name,
             } => {
                 writeln!(
                     f,
-                    "Error: balance directive on {date}: account {account_name} has balance {actual} {commodity}, want {balance} {commodity}.",
-                    commodity = assertion.commodity,
+                    "Error: balance directive on {date}: account {account_name} has balance {actual} {commodity_name}, want {balance} {commodity_name}.",
                     balance = assertion.balance,
                     date = assertion.date,
                 )?;
@@ -137,13 +138,13 @@ impl Display for JournalError {
             }
             JournalError::CloseNonzeroBalance {
                 close,
-                commodity,
+                commodity_name,
                 balance,
                 account_name,
             } => {
                 writeln!(
                     f,
-                    "Error: close directive on {date}: account {account_name} still has a balance of {balance} {commodity}, want zero.",
+                    "Error: close directive on {date}: account {account_name} still has a balance of {balance} {commodity_name}, want zero.",
                     date = close.date,
                 )?;
                 Self::write_context(&close.rng, f)?

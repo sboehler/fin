@@ -5,7 +5,8 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    AccountID, Assertion, Booking, Close, Commodity, Interval, Open, Partition, Price, Transaction,
+    AccountID, Assertion, Booking, Close, CommodityID, Interval, Open, Partition, Price,
+    Transaction,
 };
 use super::journal::{Day, Journal};
 use super::registry::Registry;
@@ -205,9 +206,9 @@ impl Analyzer {
         }
     }
 
-    fn analyze_commodity(&mut self, commodity: &cst::Commodity) -> Result<Rc<Commodity>> {
+    fn analyze_commodity(&mut self, commodity: &cst::Commodity) -> Result<CommodityID> {
         self.registry
-            .commodity(commodity.0.text())
+            .commodity_id(commodity.0.text())
             .map_err(|_e| SyntaxError {
                 rng: commodity.0.clone(),
                 want: cst::Token::Commodity,

@@ -25,7 +25,7 @@ impl Command {
         let val = self
             .valuation
             .as_ref()
-            .map(|s| journal.registry.commodity(s))
+            .map(|s| journal.registry.commodity_id(s))
             .transpose()?;
         journal.process(val.as_ref(), None)?;
         let partition = Partition::from_interval(journal.period().unwrap(), Interval::Monthly);

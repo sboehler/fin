@@ -7,7 +7,7 @@ use std::{
 use chrono::NaiveDate;
 
 use crate::model::{
-    entities::{Amount, Commodity, Positions, Vector},
+    entities::{Amount, CommodityID, Positions, Vector},
     journal::Row,
     registry::Registry,
 };
@@ -26,7 +26,7 @@ pub struct MultiperiodBalance {
 
 #[derive(Default)]
 pub struct AmountsByCommodity {
-    amounts_by_commodity: Positions<Rc<Commodity>, Vector<Amount>>,
+    amounts_by_commodity: Positions<CommodityID, Vector<Amount>>,
 }
 
 impl AmountsByCommodity {

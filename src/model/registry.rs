@@ -1,15 +1,16 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap};
 
 use super::{
-    entities::{Account, AccountID, Commodity},
+    entities::{Account, AccountID, Commodity, CommodityID},
     error::ModelError,
 };
 
 pub struct Registry {
-    commodities: RefCell<HashMap<String, Rc<Commodity>>>,
+    commodities_by_name: RefCell<HashMap<String, CommodityID>>,
     accounts_by_name: RefCell<HashMap<String, AccountID>>,
 
     accounts: RefCell<Vec<Account>>,
+    commodities: RefCell<Vec<Commodity>>,
 }
 
 impl Default for Registry {
@@ -22,8 +23,9 @@ impl Registry {
     pub fn new() -> Self {
         Registry {
             accounts_by_name: RefCell::new(HashMap::new()),
-            commodities: RefCell::new(HashMap::new()),
+            commodities_by_name: RefCell::new(HashMap::new()),
             accounts: Default::default(),
+            commodities: Default::default(),
         }
     }
 
@@ -56,14 +58,22 @@ impl Registry {
         self.account_id(&segments).ok()
     }
 
-    pub fn commodity(&self, s: &str) -> Result<Rc<Commodity>, ModelError> {
-        if let Some(a) = self.commodities.borrow().get(s) {
-            return Ok(a.clone());
+    pub fn commodity_id(&self, s: &str) -> Result<CommodityID, ModelError> {
+        if let Some(a) = self.commodities_by_name.borrow().get(s) {
+            return Ok(*a);
         }
-        let commodity = Rc::new(Commodity::new(s)?);
-        self.commodities
+        let commodity = Commodity::new(s)?;
+        let id = CommodityID {
+            id: self.commodities.borrow().len(),
+        };
+        self.commodities.borrow_mut().push(commodity);
+        self.commodities_by_name
             .borrow_mut()
-            .insert(s.to_string(), commodity.clone());
-        Ok(commodity)
+            .insert(s.to_string(), id);
+        Ok(id)
+    }
+
+    pub fn commodity_name(&self, id: CommodityID) -> String {
+        self.commodities.borrow()[id.id].name.clone()
     }
 }

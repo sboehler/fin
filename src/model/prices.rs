@@ -4,14 +4,15 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::{
-    entities::{Commodity, Price},
+    entities::{CommodityID, Price},
     error::ModelError,
+    registry::Registry,
 };
 
 #[derive(Default)]
 pub struct Prices {
     date: NaiveDate,
-    prices: HashMap<Rc<Commodity>, HashMap<Rc<Commodity>, Decimal>>,
+    prices: HashMap<CommodityID, HashMap<CommodityID, Decimal>>,
 }
 
 impl Prices {
@@ -33,7 +34,7 @@ impl Prices {
             .insert(price.target.clone(), Decimal::ONE / price.price);
     }
 
-    pub fn normalize(&self, target: &Rc<Commodity>) -> NormalizedPrices {
+    pub fn normalize(&self, target: &CommodityID) -> NormalizedPrices {
         let mut prices = HashMap::default();
         self.normalize_rec(target, Decimal::ONE, &mut prices);
         NormalizedPrices {
@@ -45,9 +46,9 @@ impl Prices {
 
     fn normalize_rec(
         &self,
-        target: &Rc<Commodity>,
+        target: &CommodityID,
         target_price: Decimal,
-        prices: &mut HashMap<Rc<Commodity>, Decimal>,
+        prices: &mut HashMap<CommodityID, Decimal>,
     ) {
         prices.insert(target.clone(), target_price);
         if let Some(target_denominated) = self.prices.get(target) {
@@ -64,28 +65,33 @@ impl Prices {
 #[derive(Debug, Clone)]
 pub struct NormalizedPrices {
     date: NaiveDate,
-    target: Rc<Commodity>,
-    prices: HashMap<Rc<Commodity>, Decimal>,
+    target: CommodityID,
+    prices: HashMap<CommodityID, Decimal>,
 }
 
 type Result<T> = result::Result<T, ModelError>;
 
 impl NormalizedPrices {
-    pub fn new(commodity: &Rc<Commodity>) -> Self {
+    pub fn new(commodity: &CommodityID) -> Self {
         NormalizedPrices {
             date: NaiveDate::default(),
             target: commodity.clone(),
             prices: HashMap::default(),
         }
     }
-    pub fn valuate(&self, quantity: &Decimal, commodity: &Rc<Commodity>) -> Result<Decimal> {
+    pub fn valuate(
+        &self,
+        registry: &Rc<Registry>,
+        quantity: &Decimal,
+        commodity: &CommodityID,
+    ) -> Result<Decimal> {
         if let Some(p) = self.prices.get(commodity) {
             return Ok(quantity * p);
         }
         Err(ModelError::NoPriceFound {
             date: self.date,
-            commodity: commodity.clone(),
-            target: self.target.clone(),
+            commodity_name: registry.commodity_name(*commodity),
+            target_name: registry.commodity_name(self.target),
         })
     }
 }
