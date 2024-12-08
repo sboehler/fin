@@ -1,7 +1,6 @@
 use std::{
     cmp,
     collections::HashMap,
-    fmt::Display,
     iter::Sum,
     ops::{Add, AddAssign, Index, IndexMut, Neg, Sub, SubAssign},
     rc::Rc,
@@ -11,8 +10,6 @@ use chrono::NaiveDate;
 use rust_decimal::{prelude::Zero, Decimal};
 
 use super::error::ModelError;
-
-type Result<T> = std::result::Result<T, ModelError>;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Ord, PartialOrd)]
 pub enum AccountType {
@@ -54,65 +51,9 @@ pub struct AccountID {
     pub id: usize,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
-pub struct Account {
-    pub account_type: AccountType,
-    pub name: String,
-}
-
-impl Account {
-    pub fn new(s: &str) -> Result<Account> {
-        match s.split(':').collect::<Vec<_>>().as_slice() {
-            &[at, ref segments @ ..] => {
-                for segment in segments {
-                    if segment.is_empty() {
-                        return Err(ModelError::InvalidAccountName(s.into()));
-                    }
-                    if segment.chars().any(|c| !c.is_alphanumeric()) {
-                        return Err(ModelError::InvalidAccountName(s.into()));
-                    }
-                }
-                Ok(Account {
-                    account_type: AccountType::try_from(at)?,
-                    name: s.to_string(),
-                })
-            }
-            _ => Err(ModelError::InvalidAccountName(s.into())),
-        }
-    }
-}
-
-impl Display for Account {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
-    }
-}
-
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub struct CommodityID {
     pub id: usize,
-}
-
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
-pub struct Commodity {
-    pub name: String,
-}
-
-impl Commodity {
-    pub fn new(name: &str) -> Result<Commodity> {
-        if name.is_empty() || !name.chars().all(char::is_alphanumeric) {
-            return Err(ModelError::InvalidCommodityName(name.into()));
-        }
-        Ok(Commodity {
-            name: name.to_string(),
-        })
-    }
-}
-
-impl Display for Commodity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

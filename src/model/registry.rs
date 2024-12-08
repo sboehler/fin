@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, fmt::Display};
 
 use super::{
-    entities::{Account, AccountID, Commodity, CommodityID},
+    entities::{AccountID, AccountType, CommodityID},
     error::ModelError,
 };
 
@@ -74,5 +74,61 @@ impl Registry {
 
     pub fn commodity_name(&self, id: CommodityID) -> String {
         self.commodities.borrow()[id.id].name.clone()
+    }
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
+struct Commodity {
+    name: String,
+}
+
+impl Commodity {
+    pub fn new(name: &str) -> Result<Commodity, ModelError> {
+        if name.is_empty() || !name.chars().all(char::is_alphanumeric) {
+            return Err(ModelError::InvalidCommodityName(name.into()));
+        }
+        Ok(Commodity {
+            name: name.to_string(),
+        })
+    }
+}
+
+impl Display for Commodity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Ord, PartialOrd)]
+struct Account {
+    account_type: AccountType,
+    name: String,
+}
+
+impl Account {
+    pub fn new(s: &str) -> Result<Account, ModelError> {
+        match s.split(':').collect::<Vec<_>>().as_slice() {
+            &[at, ref segments @ ..] => {
+                for segment in segments {
+                    if segment.is_empty() {
+                        return Err(ModelError::InvalidAccountName(s.into()));
+                    }
+                    if segment.chars().any(|c| !c.is_alphanumeric()) {
+                        return Err(ModelError::InvalidAccountName(s.into()));
+                    }
+                }
+                Ok(Account {
+                    account_type: AccountType::try_from(at)?,
+                    name: s.to_string(),
+                })
+            }
+            _ => Err(ModelError::InvalidAccountName(s.into())),
+        }
+    }
+}
+
+impl Display for Account {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
