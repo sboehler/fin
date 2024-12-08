@@ -34,8 +34,15 @@ impl Command {
             partition.start_dates(),
             journal.registry.account_id("Equity:Equity").unwrap(),
         );
-        let mut t =
-            MultiperiodBalance::new(journal.registry.clone(), vec![Utc::now().date_naive()]);
+        let mut dates = partition
+            .end_dates()
+            .iter()
+            .rev()
+            .take(12)
+            .cloned()
+            .collect::<Vec<_>>();
+        dates.reverse();
+        let mut t = MultiperiodBalance::new(journal.registry.clone(), dates);
         journal
             .query()
             .flat_map(|b| closer.process(b))
