@@ -7,7 +7,7 @@ use std::{
 use chrono::NaiveDate;
 
 use crate::model::{
-    entities::{Amount, CommodityID, Positions, Vector},
+    entities::{AccountID, Amount, CommodityID, Positions, Vector},
     journal::Row,
     registry::Registry,
 };
@@ -20,6 +20,8 @@ use super::{
 pub struct MultiperiodBalance {
     dates: Vec<NaiveDate>,
     registry: Rc<Registry>,
+
+    balances: Positions<(AccountID, CommodityID), Vector<Amount>>,
 
     root: Node<AmountsByCommodity>,
 }
@@ -40,6 +42,7 @@ impl MultiperiodBalance {
         MultiperiodBalance {
             dates,
             registry,
+            balances: Default::default(),
             root: Default::default(),
         }
     }
@@ -54,17 +57,20 @@ impl MultiperiodBalance {
 
     pub fn register(&mut self, r: Row) {
         let Some(i) = self.align(r.date) else { return };
-        let name = self.registry.account_name(r.account);
-        let c = self
-            .root
-            .lookup_or_create_mut(&name.split(":").collect::<Vec<&str>>())
-            .amounts_by_commodity
-            .get_or_create(&r.commodity, || Vector::new(self.dates.len()));
-        c[i] += r.amount;
+        let v = self
+            .balances
+            .get_or_create((r.account, r.commodity), || Vector::new(self.dates.len()));
+        v[i] += r.amount;
     }
 
     pub fn print(&self) {
-        self.root.iter_pre().for_each(|(v, _)| println!("{:?}", v));
+        self.balances
+            .positions()
+            .for_each(|((account_id, commodity_id), amounts)| {
+                let account_name = self.registry.account_name(*account_id);
+                let commodity_name = self.registry.commodity_name(*commodity_id);
+                println!("{account_name} {commodity_name} {amounts:?} ")
+            });
     }
 
     pub fn render(&self) -> Table {

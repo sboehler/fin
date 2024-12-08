@@ -399,7 +399,7 @@ impl Sum for Amount {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Vector<T> {
     elements: Vec<T>,
 }
@@ -496,11 +496,11 @@ where
     K: Eq + std::hash::Hash + Clone,
     V: AddAssign<&'a V> + Clone + 'a,
 {
-    pub fn add(&mut self, header: &K, value: &'a V) {
-        if let Some(target) = self.positions.get_mut(header) {
+    pub fn add(&mut self, key: &K, value: &'a V) {
+        if let Some(target) = self.positions.get_mut(key) {
             *target += value
         } else {
-            self.positions.insert(header.clone(), value.clone());
+            self.positions.insert(key.clone(), value.clone());
         }
     }
 
@@ -512,11 +512,11 @@ where
         iter.for_each(|(k, v)| self.add(k, v));
     }
 
-    pub fn get_or_create<F>(&'a mut self, key: &'a K, default: F) -> &'a mut V
+    pub fn get_or_create<F>(&'a mut self, key: K, default: F) -> &'a mut V
     where
         F: Fn() -> V,
     {
-        self.positions.entry(key.clone()).or_insert_with(default)
+        self.positions.entry(key).or_insert_with(default)
     }
 
     pub fn get(&self, key: &K) -> V
