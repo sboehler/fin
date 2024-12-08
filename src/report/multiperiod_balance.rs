@@ -26,17 +26,6 @@ pub struct MultiperiodBalance {
     root: Node<AmountsByCommodity>,
 }
 
-#[derive(Default)]
-pub struct AmountsByCommodity {
-    amounts_by_commodity: Positions<CommodityID, Vector<Amount>>,
-}
-
-impl AmountsByCommodity {
-    pub fn sum(&self) -> Vector<Amount> {
-        self.amounts_by_commodity.positions().map(|(_, v)| v).sum()
-    }
-}
-
 impl MultiperiodBalance {
     pub fn new(registry: Rc<Registry>, dates: Vec<NaiveDate>) -> Self {
         MultiperiodBalance {
@@ -49,9 +38,8 @@ impl MultiperiodBalance {
 
     fn align(&self, date: NaiveDate) -> Option<usize> {
         match self.dates.binary_search(&date) {
-            Ok(i) => Some(i),
             Err(i) if i >= self.dates.len() => None,
-            Err(i) => Some(i),
+            Ok(i) | Err(i) => Some(i),
         }
     }
 
@@ -108,5 +96,16 @@ impl MultiperiodBalance {
             });
         });
         t
+    }
+}
+
+#[derive(Default)]
+pub struct AmountsByCommodity {
+    amounts_by_commodity: Positions<CommodityID, Vector<Amount>>,
+}
+
+impl AmountsByCommodity {
+    pub fn sum(&self) -> Vector<Amount> {
+        self.amounts_by_commodity.positions().map(|(_, v)| v).sum()
     }
 }

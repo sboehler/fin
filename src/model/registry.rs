@@ -48,13 +48,13 @@ impl Registry {
     }
 
     pub fn shorten(&self, account: AccountID, levels: usize) -> Option<AccountID> {
-        let segments = self
+        let name = self
             .account_name(account)
             .split(":")
             .take(levels)
             .collect::<Vec<_>>()
             .join(":");
-        self.account_id(&segments).ok()
+        self.account_id(&name).ok()
     }
 
     pub fn commodity_id(&self, s: &str) -> Result<CommodityID, ModelError> {
