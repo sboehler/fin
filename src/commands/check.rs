@@ -1,9 +1,12 @@
 use crate::model::entities::{Interval, Partition};
 use crate::model::{analyzer::analyze_files, journal::Closer};
 use crate::report::multiperiod_balance::MultiperiodBalance;
+use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::NaiveDate;
 use clap::Args;
+use std::borrow::BorrowMut;
+use std::io::{stdout, Write};
 use std::{error::Error, path::PathBuf};
 
 #[derive(Args)]
@@ -42,16 +45,22 @@ impl Command {
             .cloned()
             .collect::<Vec<_>>();
         dates.reverse();
-        let mut t = MultiperiodBalance::new(journal.registry.clone(), dates);
+        let mut t = MultiperiodBalance::new(journal.registry.clone(), dates.clone());
         journal
             .query()
             .flat_map(|b| closer.process(b))
             .for_each(|b| {
-                // println!("{}", b.account);
                 t.register(b);
             });
-        t.print();
-
+        let m = t.build_tree();
+        let table = m.render();
+        let renderer = TextRenderer {
+            table: table,
+            round: 2,
+        };
+        let mut lock = stdout().lock();
+        renderer.render(lock.borrow_mut()).unwrap();
+        lock.flush()?;
         Ok(())
     }
 }

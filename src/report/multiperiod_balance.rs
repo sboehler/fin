@@ -65,16 +65,6 @@ impl MultiperiodBalance {
             root,
         }
     }
-
-    pub fn print(&self) {
-        self.balances
-            .positions()
-            .for_each(|((account_id, commodity_id), amounts)| {
-                let account_name = self.registry.account_name(*account_id);
-                let commodity_name = self.registry.commodity_name(*commodity_id);
-                println!("{account_name} {commodity_name} {amounts:?} ")
-            });
-    }
 }
 
 pub struct MultiperiodTree {
@@ -86,7 +76,7 @@ pub struct MultiperiodTree {
 impl MultiperiodTree {
     pub fn render(&self) -> Table {
         let mut table = Table::new(
-            &iter::once(0)
+            iter::once(0)
                 .chain(iter::repeat(1).take(self.dates.len()))
                 .collect::<Vec<_>>(),
         );
@@ -102,21 +92,33 @@ impl MultiperiodTree {
         table.add_row(table::Row::Separator);
 
         self.root.iter_pre().for_each(|(v, k)| {
+            if v.len() == 0 {
+                return;
+            }
             let header_cell = table::Cell::Text {
-                indent: v.len() - 1,
-                text: v.join(":"),
+                indent: 2 * (v.len() - 1),
+                text: v.last().unwrap().to_string(),
                 align: Alignment::Left,
             };
-            let value_cells = k
-                .positions()
-                .map(|(_, v)| v)
-                .sum::<Vector<Amount>>()
-                .into_elements()
-                .map(|a| table::Cell::Decimal { value: a.value });
+
+            let value_cells = if k.len() == 0 {
+                self.dates
+                    .iter()
+                    .map(|_| table::Cell::Empty)
+                    .collect::<Vec<_>>()
+            } else {
+                k.positions()
+                    .map(|(_, v)| v)
+                    .sum::<Vector<Amount>>()
+                    .into_elements()
+                    .map(|a| table::Cell::Decimal { value: a.value })
+                    .collect::<Vec<_>>()
+            };
             table.add_row(table::Row::Row {
                 cells: iter::once(header_cell).chain(value_cells).collect(),
             });
         });
+        table.add_row(table::Row::Separator);
         table
     }
 }

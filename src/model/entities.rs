@@ -233,7 +233,7 @@ impl Partition {
     }
 
     pub fn end_dates(&self) -> Vec<NaiveDate> {
-        self.periods.iter().map(|p| p.0).collect()
+        self.periods.iter().map(|p| p.1).collect()
     }
 
     pub fn last_n(&self, n: usize) -> Partition {
@@ -502,6 +502,10 @@ where
         } else {
             self.positions.insert(key.clone(), value.clone());
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.positions.len()
     }
 
     pub fn add_all<I: Iterator<Item = (&'a K, &'a V)>>(&mut self, iter: I)
