@@ -1,8 +1,8 @@
 use std::{collections::HashMap, iter};
 
 pub struct Node<V> {
-    children: HashMap<String, Node<V>>,
-    value: V,
+    pub children: HashMap<String, Node<V>>,
+    pub value: V,
 }
 
 impl<V: Default> Default for Node<V> {
@@ -68,7 +68,7 @@ impl<V: Default> Node<V> {
         &mut self.lookup_or_create_mut_node(names).value
     }
 
-    fn lookup_or_create_mut_node(&mut self, names: &[&str]) -> &mut Node<V> {
+    pub fn lookup_or_create_mut_node(&mut self, names: &[&str]) -> &mut Node<V> {
         match *names {
             [first, ref rest @ ..] => self
                 .children

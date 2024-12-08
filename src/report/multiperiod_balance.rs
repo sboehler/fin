@@ -22,8 +22,6 @@ pub struct MultiperiodBalance {
     registry: Rc<Registry>,
 
     balances: Positions<(AccountID, CommodityID), Vector<Amount>>,
-
-    root: Node<AmountsByCommodity>,
 }
 
 impl MultiperiodBalance {
@@ -32,7 +30,6 @@ impl MultiperiodBalance {
             dates,
             registry,
             balances: Default::default(),
-            root: Default::default(),
         }
     }
 
@@ -47,8 +44,26 @@ impl MultiperiodBalance {
         let Some(i) = self.align(r.date) else { return };
         let v = self
             .balances
-            .get_or_create((r.account, r.commodity), || Vector::new(self.dates.len()));
+            .entry((r.account, r.commodity))
+            .or_insert_with(|| Vector::new(self.dates.len()));
         v[i] += r.amount;
+    }
+
+    pub fn build_tree(&mut self) -> MultiperiodTree {
+        let mut root = Node::<Positions<String, Vector<Amount>>>::default();
+        self.balances
+            .positions()
+            .for_each(|((account_id, commodity_id), amount)| {
+                let account_name = self.registry.account_name(*account_id);
+                let segments = account_name.split(":").collect::<Vec<_>>();
+                let node = root.lookup_or_create_mut_node(&segments);
+                let commodity_name = self.registry.commodity_name(*commodity_id);
+                node.value.add(&commodity_name, amount);
+            });
+        MultiperiodTree {
+            dates: self.dates.clone(),
+            root,
+        }
     }
 
     pub fn print(&self) {
@@ -60,14 +75,22 @@ impl MultiperiodBalance {
                 println!("{account_name} {commodity_name} {amounts:?} ")
             });
     }
+}
 
+pub struct MultiperiodTree {
+    dates: Vec<NaiveDate>,
+
+    root: Node<Positions<String, Vector<Amount>>>,
+}
+
+impl MultiperiodTree {
     pub fn render(&self) -> Table {
-        let mut t = Table::new(
+        let mut table = Table::new(
             &iter::once(0)
                 .chain(iter::repeat(1).take(self.dates.len()))
                 .collect::<Vec<_>>(),
         );
-        t.add_row(table::Row::Separator);
+        table.add_row(table::Row::Separator);
         let header = iter::once(table::Cell::Empty)
             .chain(self.dates.iter().map(|d| table::Cell::Text {
                 text: format!("{}", d.format("%Y-%m-%d")),
@@ -75,8 +98,8 @@ impl MultiperiodBalance {
                 indent: 0,
             }))
             .collect();
-        t.add_row(table::Row::Row { cells: header });
-        t.add_row(table::Row::Separator);
+        table.add_row(table::Row::Row { cells: header });
+        table.add_row(table::Row::Separator);
 
         self.root.iter_pre().for_each(|(v, k)| {
             let header_cell = table::Cell::Text {
@@ -85,27 +108,15 @@ impl MultiperiodBalance {
                 align: Alignment::Left,
             };
             let value_cells = k
-                .amounts_by_commodity
                 .positions()
                 .map(|(_, v)| v)
                 .sum::<Vector<Amount>>()
                 .into_elements()
                 .map(|a| table::Cell::Decimal { value: a.value });
-            t.add_row(table::Row::Row {
+            table.add_row(table::Row::Row {
                 cells: iter::once(header_cell).chain(value_cells).collect(),
             });
         });
-        t
-    }
-}
-
-#[derive(Default)]
-pub struct AmountsByCommodity {
-    amounts_by_commodity: Positions<CommodityID, Vector<Amount>>,
-}
-
-impl AmountsByCommodity {
-    pub fn sum(&self) -> Vector<Amount> {
-        self.amounts_by_commodity.positions().map(|(_, v)| v).sum()
+        table
     }
 }

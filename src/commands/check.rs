@@ -2,7 +2,7 @@ use crate::model::entities::{Interval, Partition};
 use crate::model::{analyzer::analyze_files, journal::Closer};
 use crate::report::multiperiod_balance::MultiperiodBalance;
 use crate::syntax::parse_files;
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use clap::Args;
 use std::{error::Error, path::PathBuf};
 

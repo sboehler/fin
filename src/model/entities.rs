@@ -512,11 +512,8 @@ where
         iter.for_each(|(k, v)| self.add(k, v));
     }
 
-    pub fn get_or_create<F>(&'a mut self, key: K, default: F) -> &'a mut V
-    where
-        F: Fn() -> V,
-    {
-        self.positions.entry(key).or_insert_with(default)
+    pub fn entry(&mut self, key: K) -> std::collections::hash_map::Entry<'_, K, V> {
+        self.positions.entry(key)
     }
 
     pub fn get(&self, key: &K) -> V
