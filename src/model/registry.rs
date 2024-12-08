@@ -33,13 +33,12 @@ impl Registry {
         if let Some(a) = self.accounts_by_name.borrow().get(s) {
             return Ok(*a);
         }
-        let a = Account::new(s)?;
-        let account_type = a.account_type;
-        self.accounts.borrow_mut().push(a);
+        let account = Account::new(s)?;
         let id = AccountID {
-            id: self.accounts.borrow().len() - 1,
-            account_type,
+            id: self.accounts.borrow().len(),
+            account_type: account.account_type,
         };
+        self.accounts.borrow_mut().push(account);
         self.accounts_by_name.borrow_mut().insert(s.to_string(), id);
         Ok(id)
     }
