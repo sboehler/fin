@@ -574,3 +574,16 @@ where
         res
     }
 }
+
+impl<'a, 'b, K, V> Extend<(K, &'a V)> for Positions<K, V>
+where
+    K: Eq + std::hash::Hash + Copy,
+    V: AddAssign<&'b V> + Clone + 'b,
+    'a: 'b,
+{
+    fn extend<T: IntoIterator<Item = (K, &'a V)>>(&mut self, iter: T) {
+        for (k, v) in iter {
+            self.add(&k, v)
+        }
+    }
+}
