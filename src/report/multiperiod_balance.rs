@@ -54,9 +54,7 @@ impl MultiperiodBalance {
         self.balances
             .positions()
             .for_each(|((account_id, commodity_id), amount)| {
-                let account_name = self.registry.account_name(*account_id);
-                let segments = account_name.split(":").collect::<Vec<_>>();
-                let node = root.lookup_or_create_mut_node(&segments);
+                let node = self.lookup(&mut root, &account_id);
                 let commodity_name = self.registry.commodity_name(*commodity_id);
                 node.value.add(&commodity_name, amount);
             });
@@ -65,6 +63,29 @@ impl MultiperiodBalance {
             root,
         }
     }
+
+    pub fn remap<F>(&self, f: F) -> Self
+    where
+        F: Fn((AccountID, CommodityID)) -> (AccountID, CommodityID),
+    {
+        let mut res = Self::new(self.registry.clone(), self.dates.clone());
+        res.balances = self.balances.map_keys(f);
+        res
+    }
+
+    fn lookup<'a>(
+        &self,
+        root: &'a mut Node<Positions<String, Vector<Amount>>>,
+        account_id: &AccountID,
+    ) -> &'a mut Node<Positions<String, Vector<Amount>>> {
+        let account_name = self.registry.account_name(*account_id);
+        let segments = account_name.split(":").collect::<Vec<_>>();
+        root.lookup_or_create_mut_node(&segments)
+    }
+}
+
+pub trait Converter {
+    fn convert(&self, key: (AccountID, CommodityID)) -> (Option<AccountID>, Option<CommodityID>);
 }
 
 pub struct MultiperiodTree {

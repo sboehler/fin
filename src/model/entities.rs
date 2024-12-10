@@ -437,6 +437,20 @@ where
     }
 }
 
+impl<T> AddAssign<Vector<T>> for Vector<T>
+where
+    T: AddAssign<T> + Default + Copy,
+{
+    fn add_assign(&mut self, rhs: Self) {
+        self.elements
+            .resize_with(rhs.elements.len(), Default::default);
+        self.elements
+            .iter_mut()
+            .zip(rhs.elements.iter())
+            .for_each(|(a, b)| *a += *b)
+    }
+}
+
 impl<T> SubAssign<&Vector<T>> for Vector<T>
 where
     T: SubAssign<T> + Default + Copy,
@@ -496,7 +510,11 @@ where
     K: Eq + std::hash::Hash + Clone,
     V: AddAssign<&'a V> + Clone + 'a,
 {
-    pub fn add(&mut self, key: &K, value: &'a V) {
+    pub fn add(&mut self, key: &K, value: &'a V)
+    where
+        K: Eq + std::hash::Hash + Clone,
+        V: Clone,
+    {
         if let Some(target) = self.positions.get_mut(key) {
             *target += value
         } else {
@@ -508,21 +526,17 @@ where
         self.positions.len()
     }
 
-    pub fn add_all<I: Iterator<Item = (&'a K, &'a V)>>(&mut self, iter: I)
+    pub fn entry(&mut self, key: K) -> std::collections::hash_map::Entry<'_, K, V>
     where
-        K: 'a,
-        V: 'a,
+        K: std::hash::Hash + Eq,
     {
-        iter.for_each(|(k, v)| self.add(k, v));
-    }
-
-    pub fn entry(&mut self, key: K) -> std::collections::hash_map::Entry<'_, K, V> {
         self.positions.entry(key)
     }
 
     pub fn get(&self, key: &K) -> V
     where
-        V: Default,
+        V: Default + Clone,
+        K: std::hash::Hash + Eq,
     {
         self.positions.get(key).cloned().unwrap_or_default()
     }
@@ -533,5 +547,26 @@ where
 
     pub fn clear(&mut self) {
         self.positions.clear();
+    }
+
+    pub fn map_keys<F>(&'a self, f: F) -> Self
+    where
+        F: Fn(K) -> K,
+        K: Copy + std::hash::Hash + Eq,
+    {
+        self.positions.iter().map(|(k, v)| (f(*k), v)).collect()
+    }
+}
+
+impl<'a, 'b, K, V> FromIterator<(K, &'a V)> for Positions<K, V>
+where
+    K: Eq + std::hash::Hash + Copy,
+    V: AddAssign<&'b V> + Clone + 'b,
+    'a: 'b,
+{
+    fn from_iter<T: IntoIterator<Item = (K, &'a V)>>(iter: T) -> Self {
+        let mut res: Positions<K, V> = Default::default();
+        iter.into_iter().for_each(|(k, v)| res.add(&k, v));
+        res
     }
 }
