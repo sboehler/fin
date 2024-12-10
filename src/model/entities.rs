@@ -526,6 +526,10 @@ where
         self.positions.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.positions.is_empty()
+    }
+
     pub fn entry(&mut self, key: K) -> std::collections::hash_map::Entry<'_, K, V>
     where
         K: std::hash::Hash + Eq,

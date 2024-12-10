@@ -75,7 +75,7 @@ impl TextRenderer {
         for width in column_widths {
             write!(w, "-{}-+", "-".repeat(*width))?;
         }
-        write!(w, "\n")?;
+        writeln!(w)?;
         Ok(())
     }
 
@@ -107,7 +107,7 @@ impl TextRenderer {
             }
             write!(w, "|")?
         }
-        write!(w, "\n")
+        writeln!(w)
     }
 
     fn compute_widths(&self) -> Vec<usize> {

@@ -54,7 +54,7 @@ impl MultiperiodBalance {
         self.balances
             .positions()
             .for_each(|((account_id, commodity_id), amount)| {
-                let node = self.lookup(&mut root, &account_id);
+                let node = self.lookup(&mut root, account_id);
                 let commodity_name = self.registry.commodity_name(*commodity_id);
                 node.value.add(&commodity_name, amount);
             });
@@ -113,7 +113,7 @@ impl MultiperiodTree {
         table.add_row(table::Row::Separator);
 
         self.root.iter_pre().for_each(|(v, k)| {
-            if v.len() == 0 {
+            if v.is_empty() {
                 return;
             }
             let header_cell = table::Cell::Text {

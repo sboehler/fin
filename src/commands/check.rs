@@ -55,7 +55,7 @@ impl Command {
         let m = t.build_tree();
         let table = m.render();
         let renderer = TextRenderer {
-            table: table,
+            table,
             round: 2,
         };
         let mut lock = stdout().lock();
