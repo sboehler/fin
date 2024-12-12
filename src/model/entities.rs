@@ -587,3 +587,29 @@ where
         }
     }
 }
+
+impl<'a, 'b, K, V> AddAssign<&'a Positions<K, V>> for Positions<K, V>
+where
+    K: Eq + std::hash::Hash + Copy,
+    V: AddAssign<&'b V> + Clone + 'b,
+    'a: 'b,
+{
+    fn add_assign(&mut self, rhs: &'a Positions<K, V>) {
+        for (k, v) in &rhs.positions {
+            self.add(k, v)
+        }
+    }
+}
+
+impl<'a, 'b, K, V> Sum<&'a Positions<K, V>> for Positions<K, V>
+where
+    K: Eq + std::hash::Hash + Copy,
+    V: Default + AddAssign<&'b V> + Copy,
+    'a: 'b,
+{
+    fn sum<I: Iterator<Item = &'a Positions<K, V>>>(iter: I) -> Self {
+        let mut res = Default::default();
+        iter.for_each(|v| res += v);
+        res
+    }
+}
