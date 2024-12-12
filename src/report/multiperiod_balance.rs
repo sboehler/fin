@@ -122,7 +122,7 @@ impl MultiperiodTree {
                 align: Alignment::Left,
             };
 
-            let value_cells = if k.len() == 0 {
+            let value_cells = if k.is_empty() {
                 self.dates
                     .iter()
                     .map(|_| table::Cell::Empty)
