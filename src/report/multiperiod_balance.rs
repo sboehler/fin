@@ -17,19 +17,19 @@ use super::{
     table::{self, Table},
 };
 
-pub struct MultiperiodBalance {
+pub struct MultiperiodPositions {
     dates: Vec<NaiveDate>,
     registry: Rc<Registry>,
 
-    balances: Positions<(AccountID, CommodityID), Vector<Amount>>,
+    positions: Positions<(AccountID, CommodityID), Vector<Amount>>,
 }
 
-impl MultiperiodBalance {
+impl MultiperiodPositions {
     pub fn new(registry: Rc<Registry>, dates: Vec<NaiveDate>) -> Self {
-        MultiperiodBalance {
+        MultiperiodPositions {
             dates,
             registry,
-            balances: Default::default(),
+            positions: Default::default(),
         }
     }
 
@@ -43,7 +43,7 @@ impl MultiperiodBalance {
     pub fn register(&mut self, r: Row) {
         let Some(i) = self.align(r.date) else { return };
         let v = self
-            .balances
+            .positions
             .entry((r.account, r.commodity))
             .or_insert_with(|| Vector::new(self.dates.len()));
         v[i] += r.amount;
@@ -51,7 +51,7 @@ impl MultiperiodBalance {
 
     pub fn build_tree(&mut self) -> MultiperiodTree {
         let mut root = Node::<Positions<String, Vector<Amount>>>::default();
-        self.balances
+        self.positions
             .positions()
             .for_each(|((account_id, commodity_id), amount)| {
                 let node = self.lookup(&mut root, account_id);
@@ -69,7 +69,7 @@ impl MultiperiodBalance {
         F: Fn((AccountID, CommodityID)) -> (AccountID, CommodityID),
     {
         let mut res = Self::new(self.registry.clone(), self.dates.clone());
-        res.balances = self.balances.map_keys(f);
+        res.positions = self.positions.map_keys(f);
         res
     }
 
