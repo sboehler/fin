@@ -49,21 +49,6 @@ impl MultiperiodPositions {
         v[i] += r.amount;
     }
 
-    pub fn build_tree(&mut self) -> MultiperiodTree {
-        let mut root = Node::<Positions<String, Vector<Amount>>>::default();
-        self.positions
-            .positions()
-            .for_each(|((account_id, commodity_id), amount)| {
-                let node = self.lookup(&mut root, account_id);
-                let commodity_name = self.registry.commodity_name(*commodity_id);
-                node.value.add(&commodity_name, amount);
-            });
-        MultiperiodTree {
-            dates: self.dates.clone(),
-            root,
-        }
-    }
-
     pub fn remap<F>(&self, f: F) -> Self
     where
         F: Fn((AccountID, CommodityID)) -> (AccountID, CommodityID),
@@ -71,16 +56,6 @@ impl MultiperiodPositions {
         let mut res = Self::new(self.registry.clone(), self.dates.clone());
         res.positions = self.positions.map_keys(f);
         res
-    }
-
-    fn lookup<'a>(
-        &self,
-        root: &'a mut Node<Positions<String, Vector<Amount>>>,
-        account_id: &AccountID,
-    ) -> &'a mut Node<Positions<String, Vector<Amount>>> {
-        let account_name = self.registry.account_name(*account_id);
-        let segments = account_name.split(":").collect::<Vec<_>>();
-        root.lookup_or_create_mut_node(&segments)
     }
 }
 
@@ -90,11 +65,40 @@ pub trait Converter {
 
 pub struct MultiperiodTree {
     dates: Vec<NaiveDate>,
+    registry: Rc<Registry>,
 
-    root: Node<Positions<String, Vector<Amount>>>,
+    root: Node<TreeNode>,
+}
+
+#[derive(Default)]
+pub struct TreeNode {
+    positions: Positions<String, Vector<Amount>>,
 }
 
 impl MultiperiodTree {
+    pub fn new(multiperiod_positions: MultiperiodPositions) -> MultiperiodTree {
+        let registry = multiperiod_positions.registry;
+        let mut res = Self {
+            dates: multiperiod_positions.dates.clone(),
+            registry: registry.clone(),
+            root: Node::<TreeNode>::default(),
+        };
+        multiperiod_positions.positions.positions().for_each(
+            |((account_id, commodity_id), amount)| {
+                let node = res.lookup(account_id);
+                let commodity_name = registry.commodity_name(*commodity_id);
+                node.value.positions.add(&commodity_name, amount);
+            },
+        );
+        res
+    }
+
+    fn lookup<'a>(&'a mut self, account_id: &AccountID) -> &'a mut Node<TreeNode> {
+        let account_name = self.registry.account_name(*account_id);
+        let segments = account_name.split(":").collect::<Vec<_>>();
+        self.root.lookup_or_create_mut_node(&segments)
+    }
+
     pub fn render(&self) -> Table {
         let mut table = Table::new(
             iter::once(0)
@@ -122,13 +126,14 @@ impl MultiperiodTree {
                 align: Alignment::Left,
             };
 
-            let value_cells = if k.is_empty() {
+            let value_cells = if k.positions.is_empty() {
                 self.dates
                     .iter()
                     .map(|_| table::Cell::Empty)
                     .collect::<Vec<_>>()
             } else {
-                k.positions()
+                k.positions
+                    .positions()
                     .map(|(_, v)| v)
                     .sum::<Vector<Amount>>()
                     .into_elements()

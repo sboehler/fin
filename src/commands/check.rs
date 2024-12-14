@@ -1,6 +1,6 @@
 use crate::model::entities::{Interval, Partition};
 use crate::model::{analyzer::analyze_files, journal::Closer};
-use crate::report::multiperiod_balance::MultiperiodPositions;
+use crate::report::multiperiod_balance::{MultiperiodPositions, MultiperiodTree};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::NaiveDate;
@@ -48,11 +48,9 @@ impl Command {
         let mut t = MultiperiodPositions::new(journal.registry.clone(), dates.clone());
         journal
             .query()
-            .flat_map(|b| closer.process(b))
-            .for_each(|b| {
-                t.register(b);
-            });
-        let m = t.build_tree();
+            .flat_map(|row| closer.process(row))
+            .for_each(|row| t.register(row));
+        let m = MultiperiodTree::new(t);
         let table = m.render();
         let renderer = TextRenderer { table, round: 2 };
         let mut lock = stdout().lock();
