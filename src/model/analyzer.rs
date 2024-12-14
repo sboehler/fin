@@ -100,7 +100,7 @@ impl Analyzer {
                     self.analyze_account(&a.debit)?,
                     self.analyze_decimal(&a.quantity)?,
                     self.analyze_commodity(&a.commodity)?,
-                    Decimal::ZERO,
+                    None,
                 ))
             })
             .collect::<Result<Vec<_>>>()?
@@ -242,21 +242,15 @@ impl Analyzer {
                     rng: t.rng.clone(),
                     date: t.date,
                     description: t.description.clone(),
-                    bookings: Booking::create(
-                        account,
-                        b.account,
-                        b.amount.quantity,
-                        b.commodity,
-                        Decimal::ZERO,
-                    ),
+                    bookings: Booking::create(account, b.account, b.quantity, b.commodity, None),
                     targets: t.targets.clone(),
                 });
             }
 
             if b.account.account_type.is_ie() {
                 let n = Decimal::from(p.periods.len());
-                let quantity = b.amount.quantity / n;
-                let rem = b.amount.quantity - quantity * n;
+                let quantity = b.quantity / n;
+                let rem = b.quantity - quantity * n;
                 for (i, dt) in p.periods.iter().enumerate() {
                     let a = match i {
                         0 => quantity + rem,
@@ -272,13 +266,7 @@ impl Analyzer {
                             p.periods.len()
                         )
                         .into(),
-                        bookings: Booking::create(
-                            account,
-                            b.account,
-                            a,
-                            b.commodity,
-                            Decimal::ZERO,
-                        ),
+                        bookings: Booking::create(account, b.account, a, b.commodity, None),
                         targets: t.targets.clone(),
                     });
                 }

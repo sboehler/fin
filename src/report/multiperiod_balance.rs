@@ -5,9 +5,10 @@ use std::{
 };
 
 use chrono::NaiveDate;
+use rust_decimal::Decimal;
 
 use crate::model::{
-    entities::{AccountID, Amount, CommodityID, Positions, Vector},
+    entities::{AccountID, CommodityID, Positions, Vector},
     journal::Row,
     registry::Registry,
 };
@@ -17,11 +18,17 @@ use super::{
     table::{self, Table},
 };
 
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub enum AmountType {
+    Value,
+    Quantity,
+}
+
 pub struct MultiperiodPositions {
     dates: Vec<NaiveDate>,
     registry: Rc<Registry>,
 
-    positions: Positions<(AccountID, CommodityID), Vector<Amount>>,
+    positions: Positions<(AccountID, CommodityID, AmountType), Vector<Decimal>>,
 }
 
 impl MultiperiodPositions {
@@ -42,25 +49,24 @@ impl MultiperiodPositions {
 
     pub fn register(&mut self, r: Row) {
         let Some(i) = self.align(r.date) else { return };
-        let v = self
-            .positions
-            .entry((r.account, r.commodity))
-            .or_insert_with(|| Vector::new(self.dates.len()));
-        v[i] += r.amount;
+        self.positions
+            .entry((r.account, r.commodity, AmountType::Quantity))
+            .or_insert_with(|| Vector::new(self.dates.len()))[i] += r.quantity;
+        r.value.map(|value| {
+            self.positions
+                .entry((r.account, r.commodity, AmountType::Value))
+                .or_insert_with(|| Vector::new(self.dates.len()))[i] += value;
+        });
     }
 
     pub fn remap<F>(&self, f: F) -> Self
     where
-        F: Fn((AccountID, CommodityID)) -> (AccountID, CommodityID),
+        F: Fn((AccountID, CommodityID, AmountType)) -> (AccountID, CommodityID, AmountType),
     {
         let mut res = Self::new(self.registry.clone(), self.dates.clone());
         res.positions = self.positions.map_keys(f);
         res
     }
-}
-
-pub trait Converter {
-    fn convert(&self, key: (AccountID, CommodityID)) -> (Option<AccountID>, Option<CommodityID>);
 }
 
 pub struct MultiperiodTree {
@@ -72,7 +78,8 @@ pub struct MultiperiodTree {
 
 #[derive(Default)]
 pub struct TreeNode {
-    positions: Positions<String, Vector<Amount>>,
+    quantities: Positions<CommodityID, Vector<Decimal>>,
+    values: Positions<CommodityID, Vector<Decimal>>,
 }
 
 impl MultiperiodTree {
@@ -84,10 +91,12 @@ impl MultiperiodTree {
             root: Node::<TreeNode>::default(),
         };
         multiperiod_positions.positions.positions().for_each(
-            |((account_id, commodity_id), amount)| {
+            |((account_id, commodity_id, amount_type), amount)| {
                 let node = res.lookup(account_id);
-                let commodity_name = registry.commodity_name(*commodity_id);
-                node.value.positions.add(&commodity_name, amount);
+                match amount_type {
+                    AmountType::Value => node.value.values.add(commodity_id, amount),
+                    AmountType::Quantity => node.value.quantities.add(commodity_id, amount),
+                }
             },
         );
         res
@@ -126,18 +135,18 @@ impl MultiperiodTree {
                 align: Alignment::Left,
             };
 
-            let value_cells = if k.positions.is_empty() {
+            let value_cells = if k.quantities.is_empty() {
                 self.dates
                     .iter()
                     .map(|_| table::Cell::Empty)
                     .collect::<Vec<_>>()
             } else {
-                k.positions
+                k.values
                     .positions()
                     .map(|(_, v)| v)
-                    .sum::<Vector<Amount>>()
+                    .sum::<Vector<Decimal>>()
                     .into_elements()
-                    .map(|a| table::Cell::Decimal { value: a.value })
+                    .map(|value| table::Cell::Decimal { value })
                     .collect::<Vec<_>>()
             };
             table.add_row(table::Row::Row {

@@ -73,11 +73,18 @@ pub struct Open {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Value {
+    target: CommodityID,
+    value: Decimal,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Booking {
     pub account: AccountID,
     pub other: AccountID,
     pub commodity: CommodityID,
-    pub amount: Amount,
+    pub quantity: Decimal,
+    pub value: Option<Decimal>,
 }
 
 impl Booking {
@@ -86,20 +93,22 @@ impl Booking {
         debit: AccountID,
         quantity: Decimal,
         commodity: CommodityID,
-        value: Decimal,
+        value: Option<Decimal>,
     ) -> Vec<Booking> {
         vec![
             Booking {
                 account: credit,
                 other: debit,
                 commodity,
-                amount: Amount::new(-quantity, -value),
+                quantity: -quantity,
+                value: value.map(|v| -v),
             },
             Booking {
                 account: debit,
                 other: credit,
                 commodity,
-                amount: Amount::new(quantity, value),
+                quantity,
+                value,
             },
         ]
     }
@@ -543,6 +552,14 @@ where
         K: std::hash::Hash + Eq,
     {
         self.positions.get(key).cloned().unwrap_or_default()
+    }
+
+    pub fn get_opt(&self, key: &K) -> Option<&V>
+    where
+        V: Default + Clone,
+        K: std::hash::Hash + Eq,
+    {
+        self.positions.get(key)
     }
 
     pub fn positions(&self) -> impl Iterator<Item = (&K, &V)> {

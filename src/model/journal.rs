@@ -5,8 +5,8 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    AccountID, Amount, Assertion, Booking, Close, CommodityID, Interval, Open, Period, Positions,
-    Price, Transaction,
+    AccountID, Assertion, Booking, Close, CommodityID, Interval, Open, Period, Positions, Price,
+    Transaction,
 };
 use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
@@ -104,7 +104,7 @@ impl Journal {
                             account_name: self.registry.account_name(b.account),
                         });
                     }
-                    quantities.add(&(b.account, b.commodity), &b.amount.quantity);
+                    quantities.add(&(b.account, b.commodity), &b.quantity);
                     Ok(())
                 })
             })?;
@@ -201,7 +201,7 @@ impl Journal {
         transactions
             .iter()
             .flat_map(|t| t.bookings.iter())
-            .for_each(|b| quantities.add(&(b.account, b.commodity), &b.amount.quantity));
+            .for_each(|b| quantities.add(&(b.account, b.commodity), &b.quantity));
     }
 
     fn valuate_transactions(
@@ -211,11 +211,10 @@ impl Journal {
     ) -> Result<(), ModelError> {
         for t in transactions {
             for b in &mut t.bookings {
-                b.amount.value = normalized_prices
+                b.value = normalized_prices
                     .as_ref()
-                    .map(|p| p.valuate(registry, &b.amount.quantity, &b.commodity))
-                    .transpose()?
-                    .unwrap_or(Decimal::ZERO);
+                    .map(|p| p.valuate(registry, &b.quantity, &b.commodity))
+                    .transpose()?;
             }
         }
         Ok(())
@@ -261,7 +260,7 @@ impl Journal {
                                 *account,
                                 Decimal::ZERO,
                                 *commodity,
-                                gain,
+                                Some(gain),
                             ),
                             targets: Some(vec![*commodity]),
                         }))
@@ -291,7 +290,8 @@ impl Journal {
                         other: b.other,
                         commodity: b.commodity,
                         valuation: self.valuation,
-                        amount: b.amount,
+                        quantity: b.quantity,
+                        value: b.value,
                     })
                 })
         });
@@ -306,13 +306,15 @@ pub struct Row {
     pub commodity: CommodityID,
     pub valuation: Option<CommodityID>,
     pub description: Rc<String>,
-    pub amount: Amount,
+    pub quantity: Decimal,
+    pub value: Option<Decimal>,
 }
 
 pub struct Closer {
     dates: Vec<NaiveDate>,
     current: usize,
-    quantities: Positions<(AccountID, CommodityID), Amount>,
+    quantities: Positions<(AccountID, CommodityID), Decimal>,
+    values: Positions<(AccountID, CommodityID), Decimal>,
 
     equity: AccountID,
 }
@@ -323,6 +325,7 @@ impl Closer {
             dates,
             equity,
             quantities: Default::default(),
+            values: Default::default(),
             current: 0,
         }
     }
@@ -332,38 +335,38 @@ impl Closer {
         if self.current < self.dates.len() {
             if r.date >= self.dates[self.current] {
                 let closing_date = self.dates[self.current];
-                res.extend(
-                    self.quantities
-                        .positions()
-                        .map(|((account, commodity), amount)| Row {
-                            date: closing_date,
-                            description: Rc::new("".into()),
-                            account: *account,
-                            other: self.equity,
-                            commodity: *commodity,
-                            amount: *amount,
-                            valuation: r.valuation,
-                        }),
-                );
-                res.extend(
-                    self.quantities
-                        .positions()
-                        .map(|((account, commodity), amount)| Row {
-                            date: closing_date,
-                            description: Rc::new("".into()),
-                            account: self.equity,
-                            other: *account,
-                            commodity: *commodity,
-                            amount: *amount,
-                            valuation: r.valuation,
-                        }),
-                );
+                res.extend(self.quantities.positions().map(
+                    |(k @ (account, commodity), quantity)| Row {
+                        date: closing_date,
+                        description: Rc::new("".into()),
+                        account: *account,
+                        other: self.equity,
+                        commodity: *commodity,
+                        quantity: *quantity,
+                        value: self.values.get_opt(k).copied(),
+                        valuation: r.valuation,
+                    },
+                ));
+                res.extend(self.quantities.positions().map(
+                    |(k @ (account, commodity), quantity)| Row {
+                        date: closing_date,
+                        description: Rc::new("".into()),
+                        account: self.equity,
+                        other: *account,
+                        commodity: *commodity,
+                        quantity: *quantity,
+                        value: self.values.get_opt(k).copied(),
+                        valuation: r.valuation,
+                    },
+                ));
 
                 self.current += 1;
                 self.quantities.clear();
             }
             if r.account.account_type.is_ie() {
-                self.quantities.add(&(r.account, r.commodity), &r.amount)
+                self.quantities.add(&(r.account, r.commodity), &r.quantity);
+                r.value
+                    .map(|v| self.values.add(&(r.account, r.commodity), &v));
             };
         }
         res.push(r);
