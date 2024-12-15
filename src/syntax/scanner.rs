@@ -17,7 +17,7 @@ struct Scope<'a, 'b> {
     start: usize,
 }
 
-impl<'a, 'b> Scope<'a, 'b> {
+impl Scope<'_, '_> {
     fn character_error(&self, want: &Character) -> SyntaxError {
         SyntaxError {
             rng: self.s.rng(self.start),

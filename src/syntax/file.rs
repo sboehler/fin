@@ -26,7 +26,7 @@ impl File {
     }
 
     pub fn position(&self, pos: usize) -> (usize, usize) {
-        let lines = self.text[..pos].split(|c| c == '\n').collect::<Vec<_>>();
+        let lines = self.text[..pos].split('\n').collect::<Vec<_>>();
         let line = lines.len();
         let col = lines.last().iter().flat_map(|s| s.chars()).count() + 1;
         (line, col)

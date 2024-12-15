@@ -281,7 +281,7 @@ impl Journal {
 
 impl Journal {
     pub fn query(&self) -> impl Iterator<Item = Row> + '_ {
-        return self.days.values().flat_map(|day| {
+        self.days.values().flat_map(|day| {
             day.transactions
                 .iter()
                 .chain(day.gains.iter())
@@ -297,7 +297,7 @@ impl Journal {
                         value: b.value,
                     })
                 })
-        });
+        })
     }
 }
 
