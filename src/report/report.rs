@@ -91,23 +91,24 @@ pub struct TreeNode {
 }
 
 impl MultiperiodTree {
-    pub fn new(multiperiod_positions: DatedPositions) -> MultiperiodTree {
-        let registry = multiperiod_positions.registry;
+    pub fn new(dated: DatedPositions) -> MultiperiodTree {
+        let registry = dated.registry;
         let mut res = Self {
-            dates: multiperiod_positions.dates.clone(),
+            dates: dated.dates.clone(),
             registry: registry.clone(),
             root: Node::<TreeNode>::default(),
         };
-        multiperiod_positions.positions.positions().for_each(
-            |((account_id, commodity_id, amount_type), amount)| {
+        dated
+            .positions
+            .iter()
+            .for_each(|((account_id, commodity_id, amount_type), amount)| {
                 let node = res.lookup(account_id);
                 match amount_type {
                     AmountType::Value => node.value.values.add(commodity_id, amount),
 
                     AmountType::Quantity => node.value.quantities.add(commodity_id, amount),
                 }
-            },
-        );
+            });
         res
     }
 
@@ -152,7 +153,7 @@ impl MultiperiodTree {
             } else {
                 let total = node
                     .values
-                    .positions()
+                    .iter()
                     .map(|(_, v)| v)
                     .sum::<Positions<NaiveDate, Decimal>>();
                 self.dates

@@ -130,7 +130,7 @@ impl Journal {
                 Ok(())
             })?;
             day.closings.iter().try_for_each(|c| {
-                for (pos, qty) in quantities.positions() {
+                for (pos, qty) in quantities.iter() {
                     if pos.0 == c.account && !qty.is_zero() {
                         return Err(JournalError::CloseNonzeroBalance {
                             close: Box::new(c.clone()),
@@ -235,7 +235,7 @@ impl Journal {
             .as_ref()
             .map(|np| {
                 Ok(quantities
-                    .positions()
+                    .iter()
                     .map(|((account, commodity), qty)| {
                         if qty.is_zero() || !account.account_type.is_al() {
                             return Ok(None);
@@ -338,30 +338,34 @@ impl Closer {
         if self.current < self.dates.len() {
             if r.date >= self.dates[self.current] {
                 let closing_date = self.dates[self.current];
-                res.extend(self.quantities.positions().map(
-                    |(k @ (account, commodity), quantity)| Row {
-                        date: closing_date,
-                        description: Rc::new("".into()),
-                        account: *account,
-                        other: self.equity,
-                        commodity: *commodity,
-                        quantity: *quantity,
-                        value: self.values.get(k).copied(),
-                        valuation: r.valuation,
-                    },
-                ));
-                res.extend(self.quantities.positions().map(
-                    |(k @ (account, commodity), quantity)| Row {
-                        date: closing_date,
-                        description: Rc::new("".into()),
-                        account: self.equity,
-                        other: *account,
-                        commodity: *commodity,
-                        quantity: *quantity,
-                        value: self.values.get(k).copied(),
-                        valuation: r.valuation,
-                    },
-                ));
+                res.extend(
+                    self.quantities
+                        .iter()
+                        .map(|(k @ (account, commodity), quantity)| Row {
+                            date: closing_date,
+                            description: Rc::new("".into()),
+                            account: *account,
+                            other: self.equity,
+                            commodity: *commodity,
+                            quantity: *quantity,
+                            value: self.values.get(k).copied(),
+                            valuation: r.valuation,
+                        }),
+                );
+                res.extend(
+                    self.quantities
+                        .iter()
+                        .map(|(k @ (account, commodity), quantity)| Row {
+                            date: closing_date,
+                            description: Rc::new("".into()),
+                            account: self.equity,
+                            other: *account,
+                            commodity: *commodity,
+                            quantity: *quantity,
+                            value: self.values.get(k).copied(),
+                            valuation: r.valuation,
+                        }),
+                );
 
                 self.current += 1;
                 self.quantities.clear();

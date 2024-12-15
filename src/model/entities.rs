@@ -2,7 +2,7 @@ use std::{
     cmp,
     collections::HashMap,
     iter::Sum,
-    ops::{Add, AddAssign, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Deref, DerefMut, Neg, Sub, SubAssign},
     rc::Rc,
 };
 
@@ -438,37 +438,6 @@ where
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.positions.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.positions.is_empty()
-    }
-
-    pub fn entry(&mut self, key: K) -> std::collections::hash_map::Entry<'_, K, V>
-    where
-        K: std::hash::Hash + Eq,
-    {
-        self.positions.entry(key)
-    }
-
-    pub fn get(&self, key: &K) -> Option<&V>
-    where
-        V: Default + Clone,
-        K: std::hash::Hash + Eq,
-    {
-        self.positions.get(key)
-    }
-
-    pub fn positions(&self) -> impl Iterator<Item = (&K, &V)> {
-        self.positions.iter()
-    }
-
-    pub fn clear(&mut self) {
-        self.positions.clear();
-    }
-
     pub fn map_keys<F>(&'a self, f: F) -> Self
     where
         F: Fn(K) -> K,
@@ -527,5 +496,19 @@ where
         let mut res = Default::default();
         iter.for_each(|v| res += v);
         res
+    }
+}
+
+impl<K, V> Deref for Positions<K, V> {
+    type Target = HashMap<K, V>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.positions
+    }
+}
+
+impl<K, V> DerefMut for Positions<K, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.positions
     }
 }
