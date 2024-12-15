@@ -1,6 +1,6 @@
 use crate::model::entities::{Interval, Partition};
 use crate::model::{analyzer::analyze_files, journal::Closer};
-use crate::report::multiperiod_balance::{MultiperiodPositions, MultiperiodTree};
+use crate::report::report::{DatedPositions, MultiperiodTree};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::NaiveDate;
@@ -45,7 +45,7 @@ impl Command {
             .cloned()
             .collect::<Vec<_>>();
         dates.reverse();
-        let mut t = MultiperiodPositions::new(journal.registry.clone(), dates.clone());
+        let mut t = DatedPositions::new(journal.registry.clone(), dates.clone());
         journal
             .query()
             .flat_map(|row| closer.process(row))

@@ -24,16 +24,16 @@ pub enum AmountType {
     Quantity,
 }
 
-pub struct MultiperiodPositions {
+pub struct DatedPositions {
     dates: Vec<NaiveDate>,
     registry: Rc<Registry>,
 
     positions: Positions<(AccountID, CommodityID, AmountType), Positions<NaiveDate, Decimal>>,
 }
 
-impl MultiperiodPositions {
+impl DatedPositions {
     pub fn new(registry: Rc<Registry>, dates: Vec<NaiveDate>) -> Self {
-        MultiperiodPositions {
+        DatedPositions {
             dates,
             registry,
             positions: Default::default(),
@@ -91,7 +91,7 @@ pub struct TreeNode {
 }
 
 impl MultiperiodTree {
-    pub fn new(multiperiod_positions: MultiperiodPositions) -> MultiperiodTree {
+    pub fn new(multiperiod_positions: DatedPositions) -> MultiperiodTree {
         let registry = multiperiod_positions.registry;
         let mut res = Self {
             dates: multiperiod_positions.dates.clone(),

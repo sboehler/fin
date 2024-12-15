@@ -79,10 +79,3 @@ impl<V: Default> Node<V> {
         }
     }
 }
-
-impl<V: Monoid> Node<V> {}
-
-pub trait Monoid {
-    fn new() -> Self;
-    fn combine(&self, other: &Self) -> Self;
-}
