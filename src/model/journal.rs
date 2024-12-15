@@ -115,7 +115,10 @@ impl Journal {
                         account_name: self.registry.account_name(a.account),
                     });
                 }
-                let balance = quantities.get(&(a.account, a.commodity));
+                let balance = quantities
+                    .get(&(a.account, a.commodity))
+                    .copied()
+                    .unwrap_or_default();
                 if balance != a.balance {
                     return Err(JournalError::AssertionIncorrectBalance {
                         assertion: Box::new(a.clone()),
@@ -343,7 +346,7 @@ impl Closer {
                         other: self.equity,
                         commodity: *commodity,
                         quantity: *quantity,
-                        value: self.values.get_opt(k).copied(),
+                        value: self.values.get(k).copied(),
                         valuation: r.valuation,
                     },
                 ));
@@ -355,7 +358,7 @@ impl Closer {
                         other: *account,
                         commodity: *commodity,
                         quantity: *quantity,
-                        value: self.values.get_opt(k).copied(),
+                        value: self.values.get(k).copied(),
                         valuation: r.valuation,
                     },
                 ));
@@ -365,8 +368,9 @@ impl Closer {
             }
             if r.account.account_type.is_ie() {
                 self.quantities.add(&(r.account, r.commodity), &r.quantity);
-                r.value
-                    .map(|v| self.values.add(&(r.account, r.commodity), &v));
+                if let Some(ref value) = r.value {
+                    self.values.add(&(r.account, r.commodity), value);
+                }
             };
         }
         res.push(r);

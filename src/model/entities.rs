@@ -2,7 +2,7 @@ use std::{
     cmp,
     collections::HashMap,
     iter::Sum,
-    ops::{Add, AddAssign, Index, IndexMut, Neg, Sub, SubAssign},
+    ops::{Add, AddAssign, Neg, Sub, SubAssign},
     rc::Rc,
 };
 
@@ -408,100 +408,7 @@ impl Sum for Amount {
     }
 }
 
-#[derive(Clone, Default, Debug)]
-pub struct Vector<T> {
-    elements: Vec<T>,
-}
-
-impl<T> Vector<T>
-where
-    T: Default + Clone,
-{
-    pub fn new(size: usize) -> Self {
-        Self {
-            elements: vec![Default::default(); size],
-        }
-    }
-
-    pub fn elements(&self) -> impl Iterator<Item = &T> {
-        self.elements.iter()
-    }
-
-    pub fn into_elements(self) -> impl Iterator<Item = T> {
-        self.elements.into_iter()
-    }
-}
-
-impl<T> AddAssign<&Vector<T>> for Vector<T>
-where
-    T: AddAssign<T> + Default + Copy,
-{
-    fn add_assign(&mut self, rhs: &Self) {
-        self.elements
-            .resize_with(rhs.elements.len(), Default::default);
-        self.elements
-            .iter_mut()
-            .zip(rhs.elements.iter())
-            .for_each(|(a, b)| *a += *b)
-    }
-}
-
-impl<T> AddAssign<Vector<T>> for Vector<T>
-where
-    T: AddAssign<T> + Default + Copy,
-{
-    fn add_assign(&mut self, rhs: Self) {
-        self.elements
-            .resize_with(rhs.elements.len(), Default::default);
-        self.elements
-            .iter_mut()
-            .zip(rhs.elements.iter())
-            .for_each(|(a, b)| *a += *b)
-    }
-}
-
-impl<T> SubAssign<&Vector<T>> for Vector<T>
-where
-    T: SubAssign<T> + Default + Copy,
-{
-    fn sub_assign(&mut self, rhs: &Self) {
-        if self.elements.len() < rhs.elements.len() {
-            self.elements
-                .resize_with(rhs.elements.len(), Default::default);
-        }
-        self.elements
-            .iter_mut()
-            .zip(rhs.elements.iter())
-            .for_each(|(a, b)| *a -= *b)
-    }
-}
-
-impl<'a, T> Sum<&'a Vector<T>> for Vector<T>
-where
-    T: Default + AddAssign<T> + Copy,
-{
-    fn sum<I: Iterator<Item = &'a Vector<T>>>(iter: I) -> Self {
-        let mut res = Default::default();
-        iter.for_each(|v| res += v);
-        res
-    }
-}
-
-impl<T> Index<usize> for Vector<T> {
-    type Output = T;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.elements[index]
-    }
-}
-
-impl<T> IndexMut<usize> for Vector<T> {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.elements[index]
-    }
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Positions<K, V> {
     positions: HashMap<K, V>,
 }
@@ -546,15 +453,7 @@ where
         self.positions.entry(key)
     }
 
-    pub fn get(&self, key: &K) -> V
-    where
-        V: Default + Clone,
-        K: std::hash::Hash + Eq,
-    {
-        self.positions.get(key).cloned().unwrap_or_default()
-    }
-
-    pub fn get_opt(&self, key: &K) -> Option<&V>
+    pub fn get(&self, key: &K) -> Option<&V>
     where
         V: Default + Clone,
         K: std::hash::Hash + Eq,

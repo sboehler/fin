@@ -8,7 +8,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use crate::model::{
-    entities::{AccountID, CommodityID, Positions, Vector},
+    entities::{AccountID, CommodityID, Positions},
     journal::Row,
     registry::Registry,
 };
@@ -28,7 +28,7 @@ pub struct MultiperiodPositions {
     dates: Vec<NaiveDate>,
     registry: Rc<Registry>,
 
-    positions: Positions<(AccountID, CommodityID, AmountType), Vector<Decimal>>,
+    positions: Positions<(AccountID, CommodityID, AmountType), Positions<NaiveDate, Decimal>>,
 }
 
 impl MultiperiodPositions {
@@ -40,23 +40,31 @@ impl MultiperiodPositions {
         }
     }
 
-    fn align(&self, date: NaiveDate) -> Option<usize> {
+    fn align(&self, date: NaiveDate) -> Option<NaiveDate> {
         match self.dates.binary_search(&date) {
             Err(i) if i >= self.dates.len() => None,
-            Ok(i) | Err(i) => Some(i),
+            Ok(i) | Err(i) => Some(self.dates[i]),
         }
     }
 
     pub fn register(&mut self, r: Row) {
-        let Some(i) = self.align(r.date) else { return };
+        let Some(date) = self.align(r.date) else {
+            return;
+        };
         self.positions
             .entry((r.account, r.commodity, AmountType::Quantity))
-            .or_insert_with(|| Vector::new(self.dates.len()))[i] += r.quantity;
-        r.value.map(|value| {
+            .or_default()
+            .entry(date)
+            .and_modify(|v| *v += r.quantity)
+            .or_insert(r.quantity);
+        if let Some(value) = r.value {
             self.positions
                 .entry((r.account, r.commodity, AmountType::Value))
-                .or_insert_with(|| Vector::new(self.dates.len()))[i] += value;
-        });
+                .or_default()
+                .entry(date)
+                .and_modify(|v| *v += value)
+                .or_insert(value);
+        };
     }
 
     pub fn remap<F>(&self, f: F) -> Self
@@ -78,8 +86,8 @@ pub struct MultiperiodTree {
 
 #[derive(Default)]
 pub struct TreeNode {
-    quantities: Positions<CommodityID, Vector<Decimal>>,
-    values: Positions<CommodityID, Vector<Decimal>>,
+    quantities: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
+    values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
 }
 
 impl MultiperiodTree {
@@ -95,6 +103,7 @@ impl MultiperiodTree {
                 let node = res.lookup(account_id);
                 match amount_type {
                     AmountType::Value => node.value.values.add(commodity_id, amount),
+
                     AmountType::Quantity => node.value.quantities.add(commodity_id, amount),
                 }
             },
@@ -125,7 +134,7 @@ impl MultiperiodTree {
         table.add_row(table::Row::Row { cells: header });
         table.add_row(table::Row::Separator);
 
-        self.root.iter_pre().for_each(|(v, k)| {
+        self.root.iter_pre().for_each(|(v, node)| {
             if v.is_empty() {
                 return;
             }
@@ -135,18 +144,25 @@ impl MultiperiodTree {
                 align: Alignment::Left,
             };
 
-            let value_cells = if k.quantities.is_empty() {
+            let value_cells = if node.values.is_empty() {
                 self.dates
                     .iter()
                     .map(|_| table::Cell::Empty)
                     .collect::<Vec<_>>()
             } else {
-                k.values
+                let total = node
+                    .values
                     .positions()
                     .map(|(_, v)| v)
-                    .sum::<Vector<Decimal>>()
-                    .into_elements()
-                    .map(|value| table::Cell::Decimal { value })
+                    .sum::<Positions<NaiveDate, Decimal>>();
+                self.dates
+                    .iter()
+                    .map(|date| {
+                        total
+                            .get(date)
+                            .map(|value| table::Cell::Decimal { value: *value })
+                            .unwrap_or(table::Cell::Empty)
+                    })
                     .collect::<Vec<_>>()
             };
             table.add_row(table::Row::Row {
