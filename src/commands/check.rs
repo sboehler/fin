@@ -1,6 +1,6 @@
 use crate::model::entities::{Interval, Partition};
 use crate::model::{analyzer::analyze_files, journal::Closer};
-use crate::report::report::{DatedPositions, MultiperiodTree};
+use crate::report::report::{Aligner, DatedPositions, MultiperiodTree, Shortener};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::NaiveDate;
@@ -33,10 +33,6 @@ impl Command {
         journal.process(val.as_ref(), None)?;
         let partition = Partition::from_interval(journal.period().unwrap(), Interval::Monthly);
 
-        let mut closer = Closer::new(
-            partition.start_dates(),
-            journal.registry.account_id("Equity:Equity").unwrap(),
-        );
         let mut dates = partition
             .end_dates()
             .iter()
@@ -45,13 +41,24 @@ impl Command {
             .cloned()
             .collect::<Vec<_>>();
         dates.reverse();
-        let mut t = DatedPositions::new(journal.registry.clone(), dates.clone());
-        journal
+
+        let mut closer = Closer::new(
+            partition.start_dates(),
+            journal.registry.account_id("Equity:Equity").unwrap(),
+        );
+        let aligner = Aligner::new(dates.clone());
+        let dated_positions = journal
             .query()
             .flat_map(|row| closer.process(row))
-            .for_each(|row| t.register(row));
-        let m = MultiperiodTree::new(t);
-        let table = m.render();
+            .flat_map(|row| aligner.align(row))
+            .sum::<DatedPositions>();
+        let shortener = Shortener::new(journal.registry.clone(), Vec::new());
+        let mut multiperiod_tree = MultiperiodTree::new(dates.clone(), journal.registry.clone());
+        let test = dated_positions
+            .iter()
+            .flat_map(|(k, v)| shortener.shorten(*k).map(|k| (k, v)));
+        multiperiod_tree.extend(test);
+        let table = multiperiod_tree.render();
         let renderer = TextRenderer { table, round: 2 };
         let mut lock = stdout().lock();
         renderer.render(lock.borrow_mut()).unwrap();

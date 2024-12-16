@@ -1,10 +1,12 @@
 use std::{
     fmt::Alignment,
-    iter::{self},
+    iter::{self, Sum},
+    ops::Deref,
     rc::Rc,
 };
 
 use chrono::NaiveDate;
+use regex::Regex;
 use rust_decimal::Decimal;
 
 use crate::model::{
@@ -18,61 +20,123 @@ use super::{
     table::{self, Table},
 };
 
+pub struct Aligner {
+    dates: Vec<NaiveDate>,
+}
+
+impl Aligner {
+    pub fn new(dates: Vec<NaiveDate>) -> Self {
+        Self { dates }
+    }
+}
+
+impl Aligner {
+    pub fn align(&self, row: Row) -> Option<Row> {
+        match self.dates.binary_search(&row.date) {
+            Err(i) if i >= self.dates.len() => None,
+            Ok(i) | Err(i) => {
+                let mut res = row.clone();
+                res.date = self.dates[i];
+                Some(res)
+            }
+        }
+    }
+}
+
+pub struct Shortener {
+    registry: Rc<Registry>,
+    patterns: Vec<(Regex, usize)>,
+}
+
+impl Shortener {
+    pub fn new(registry: Rc<Registry>, patterns: Vec<(Regex, usize)>) -> Self {
+        Shortener { registry, patterns }
+    }
+
+    pub fn shorten(&self, key: Key) -> Option<Key> {
+        let name = self.registry.account_name(key.account_id);
+        for (pattern, n) in &self.patterns {
+            if pattern.is_match(&name) {
+                return self
+                    .registry
+                    .shorten(key.account_id, *n)
+                    .map(|mapped_id| Key {
+                        account_id: mapped_id,
+                        commodity_id: key.commodity_id,
+                        value_type: key.value_type,
+                    });
+            }
+        }
+        Some(key)
+    }
+}
+
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub enum AmountType {
     Value,
     Quantity,
 }
 
-pub struct DatedPositions {
-    dates: Vec<NaiveDate>,
-    registry: Rc<Registry>,
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub struct Key {
+    pub account_id: AccountID,
+    pub commodity_id: CommodityID,
+    pub value_type: AmountType,
+}
 
-    positions: Positions<(AccountID, CommodityID, AmountType), Positions<NaiveDate, Decimal>>,
+impl Key {
+    fn new(account_id: AccountID, commodity_id: CommodityID, value_type: AmountType) -> Self {
+        Self {
+            account_id,
+            commodity_id,
+            value_type,
+        }
+    }
+}
+#[derive(Default)]
+pub struct DatedPositions {
+    positions: Positions<Key, Positions<NaiveDate, Decimal>>,
 }
 
 impl DatedPositions {
-    pub fn new(registry: Rc<Registry>, dates: Vec<NaiveDate>) -> Self {
-        DatedPositions {
-            dates,
-            registry,
-            positions: Default::default(),
-        }
-    }
-
-    fn align(&self, date: NaiveDate) -> Option<NaiveDate> {
-        match self.dates.binary_search(&date) {
-            Err(i) if i >= self.dates.len() => None,
-            Ok(i) | Err(i) => Some(self.dates[i]),
-        }
-    }
-
-    pub fn register(&mut self, r: Row) {
-        let Some(date) = self.align(r.date) else {
-            return;
-        };
+    fn add(&mut self, row: Row) {
         self.positions
-            .entry((r.account, r.commodity, AmountType::Quantity))
+            .entry(Key::new(row.account, row.commodity, AmountType::Quantity))
             .or_default()
-            .entry(date)
-            .and_modify(|v| *v += r.quantity)
-            .or_insert(r.quantity);
-        if let Some(value) = r.value {
+            .entry(row.date)
+            .and_modify(|v| *v += row.quantity)
+            .or_insert(row.quantity);
+        if let Some(value) = row.value {
             self.positions
-                .entry((r.account, r.commodity, AmountType::Value))
+                .entry(Key::new(row.account, row.commodity, AmountType::Value))
                 .or_default()
-                .entry(date)
+                .entry(row.date)
                 .and_modify(|v| *v += value)
                 .or_insert(value);
         };
     }
+}
 
-    pub fn remap<F>(&self, f: F) -> Self
-    where
-        F: Fn((AccountID, CommodityID, AmountType)) -> (AccountID, CommodityID, AmountType),
-    {
-        let mut res = Self::new(self.registry.clone(), self.dates.clone());
-        res.positions = self.positions.map_keys(f);
+impl Deref for DatedPositions {
+    type Target = Positions<Key, Positions<NaiveDate, Decimal>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.positions
+    }
+}
+
+impl Sum<Row> for DatedPositions {
+    fn sum<I: Iterator<Item = Row>>(iter: I) -> Self {
+        let mut res = Self::default();
+        iter.into_iter().for_each(|row| res.add(row));
+        res
+    }
+}
+
+impl FromIterator<Row> for DatedPositions {
+    fn from_iter<T: IntoIterator<Item = Row>>(iter: T) -> Self {
+        let mut res = Self::default();
+        iter.into_iter().for_each(|row| res.add(row));
         res
     }
 }
@@ -91,25 +155,20 @@ pub struct TreeNode {
 }
 
 impl MultiperiodTree {
-    pub fn new(dated: DatedPositions) -> MultiperiodTree {
-        let registry = dated.registry;
-        let mut res = Self {
-            dates: dated.dates.clone(),
-            registry: registry.clone(),
+    pub fn new(dates: Vec<NaiveDate>, registry: Rc<Registry>) -> MultiperiodTree {
+        Self {
+            dates,
+            registry,
             root: Node::<TreeNode>::default(),
-        };
-        dated
-            .positions
-            .iter()
-            .for_each(|((account_id, commodity_id, amount_type), amount)| {
-                let node = res.lookup(account_id);
-                match amount_type {
-                    AmountType::Value => node.value.values.add(commodity_id, amount),
+        }
+    }
 
-                    AmountType::Quantity => node.value.quantities.add(commodity_id, amount),
-                }
-            });
-        res
+    pub fn add(&mut self, key: Key, amount: &Positions<NaiveDate, Decimal>) {
+        let node = self.lookup(&key.account_id);
+        match &key.value_type {
+            AmountType::Value => node.value.values.add(&key.commodity_id, amount),
+            AmountType::Quantity => node.value.quantities.add(&key.commodity_id, amount),
+        }
     }
 
     fn lookup<'a>(&'a mut self, account_id: &AccountID) -> &'a mut Node<TreeNode> {
@@ -172,5 +231,15 @@ impl MultiperiodTree {
         });
         table.add_row(table::Row::Separator);
         table
+    }
+}
+
+impl<'a> Extend<(Key, &'a Positions<NaiveDate, Decimal>)> for MultiperiodTree {
+    fn extend<T: IntoIterator<Item = (Key, &'a Positions<NaiveDate, Decimal>)>>(
+        &mut self,
+        iter: T,
+    ) {
+        iter.into_iter()
+            .for_each(|(key, amount)| self.add(key, amount))
     }
 }
