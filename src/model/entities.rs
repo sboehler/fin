@@ -224,16 +224,12 @@ impl Partition {
             };
         }
         let mut periods = Vec::new();
-        let mut d = period.1;
-        while d >= period.0 {
-            let start = cmp::max(interval.start_of(d).unwrap(), period.0);
-            periods.push(Period(start, d));
-            d = interval
-                .start_of(d)
-                .and_then(|d| d.checked_sub_days(Days::new(1)))
-                .unwrap();
+        let mut d = period.0;
+        while d <= period.1 {
+            let end = cmp::min(interval.end_of(d).unwrap(), period.1);
+            periods.push(Period(d, end));
+            d = end.checked_add_days(Days::new(1)).unwrap();
         }
-        periods.reverse();
         Partition { periods }
     }
 
