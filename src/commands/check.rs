@@ -1,6 +1,6 @@
 use crate::model::entities::{Interval, Partition};
 use crate::model::{analyzer::analyze_files, journal::Closer};
-use crate::report::report::{Aligner, DatedPositions, MultiperiodTree, Shortener};
+use crate::report::balance::{Aligner, DatedPositions, MultiperiodTree, Shortener};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::NaiveDate;
