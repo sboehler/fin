@@ -10,6 +10,7 @@ use std::borrow::BorrowMut;
 use std::io::{stdout, Write};
 use std::num::ParseIntError;
 use std::str::FromStr;
+use std::usize;
 use std::{error::Error, path::PathBuf};
 
 #[derive(Args)]
@@ -50,7 +51,7 @@ impl Command {
             .end_dates()
             .iter()
             .rev()
-            .take(12)
+            .take(self.last.map(|v| v + 1).unwrap_or(usize::MAX))
             .cloned()
             .collect::<Vec<_>>();
         dates.reverse();
