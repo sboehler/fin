@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, iter};
 
 use super::{
     entities::{AccountID, AccountType, CommodityID},
@@ -74,6 +74,15 @@ impl Registry {
 
     pub fn commodity_name(&self, id: CommodityID) -> String {
         self.commodities.borrow()[id.id].name.clone()
+    }
+
+    pub fn valuation_account_for(&self, account: AccountID) -> AccountID {
+        let account_name = self.account_name(account);
+        let name = iter::once("Income")
+            .chain(account_name.split(":").skip(1))
+            .collect::<Vec<_>>()
+            .join(":");
+        self.account_id(&name).unwrap()
     }
 }
 

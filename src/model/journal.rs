@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::ops::Neg;
 use std::{collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
@@ -169,7 +170,6 @@ impl Journal {
                 day.prices.iter().for_each(|p| prices.insert(p));
 
                 let normalized_prices = valuation.map(|p| prices.normalize(p));
-                let credit = self.registry.account_id("Income:Valuation")?;
 
                 Self::valuate_transactions(
                     &self.registry,
@@ -183,7 +183,6 @@ impl Journal {
                     &quantities,
                     &prev_normalized_prices,
                     day.date,
-                    credit,
                 )?;
                 Self::update_quantities(&day.transactions, &mut quantities);
                 prev_normalized_prices = normalized_prices;
@@ -229,7 +228,6 @@ impl Journal {
         quantities: &Positions<(AccountID, CommodityID), Decimal>,
         prev_normalized_prices: &Option<NormalizedPrices>,
         date: NaiveDate,
-        credit: AccountID,
     ) -> Result<Vec<Transaction>, ModelError> {
         let gains = normalized_prices
             .as_ref()
@@ -259,7 +257,7 @@ impl Journal {
                             )
                             .into(),
                             bookings: Booking::create(
-                                credit,
+                                registry.valuation_account_for(*account),
                                 *account,
                                 Decimal::ZERO,
                                 *commodity,
@@ -361,8 +359,8 @@ impl Closer {
                             account: self.equity,
                             other: *account,
                             commodity: *commodity,
-                            quantity: *quantity,
-                            value: self.values.get(k).copied(),
+                            quantity: -*quantity,
+                            value: self.values.get(k).copied().map(Neg::neg),
                             valuation: r.valuation,
                         }),
                 );

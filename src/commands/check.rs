@@ -57,7 +57,7 @@ impl Command {
 
         let mut closer = Closer::new(
             partition.start_dates(),
-            journal.registry.account_id("Equity:EquityFoo").unwrap(),
+            journal.registry.account_id("Equity:Equity").unwrap(),
         );
         let aligner = Aligner::new(dates.clone());
         let dated_positions = journal
@@ -78,7 +78,7 @@ impl Command {
             .flat_map(|(k, v)| shortener.shorten(*k).map(|k| (k, v)));
         multiperiod_tree.extend(test);
         let table = multiperiod_tree.render();
-        let renderer = TextRenderer { table, round: 2 };
+        let renderer = TextRenderer { table, round: 0 };
         let mut lock = stdout().lock();
         renderer.render(lock.borrow_mut()).unwrap();
         lock.flush()?;
