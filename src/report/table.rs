@@ -25,6 +25,7 @@ impl Table {
 pub enum Row {
     Row { cells: Vec<Cell> },
     Separator,
+    Empty,
 }
 
 impl Row {
@@ -32,6 +33,7 @@ impl Row {
         match self {
             Self::Row { cells } => cells.push(cell),
             Self::Separator => (),
+            Self::Empty => (),
         }
     }
 }
@@ -61,6 +63,7 @@ impl TextRenderer {
             match row {
                 Row::Separator => self.print_separator_row(w, &column_widths)?,
                 Row::Row { cells } => self.print_regular_row(w, &column_widths, cells)?,
+                Row::Empty => self.print_empty_row(w, &column_widths)?,
             }
         }
         Ok(())
@@ -74,6 +77,15 @@ impl TextRenderer {
         write!(w, "+")?;
         for width in column_widths {
             write!(w, "-{}-+", "-".repeat(*width))?;
+        }
+        writeln!(w)?;
+        Ok(())
+    }
+
+    fn print_empty_row<W: Write>(&self, w: &mut W, column_widths: &[usize]) -> std::io::Result<()> {
+        write!(w, "|")?;
+        for width in column_widths {
+            write!(w, " {} |", " ".repeat(*width))?;
         }
         writeln!(w)?;
         Ok(())
@@ -124,6 +136,7 @@ impl TextRenderer {
                     .for_each(|(i, cell)| widths[i] = max(widths[i], self.min_length(cell)))
             }
             Row::Separator => (),
+            Row::Empty => (),
         });
         let mut groups = HashMap::<usize, usize>::new();
         widths.into_iter().enumerate().for_each(|(i, width)| {

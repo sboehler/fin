@@ -198,13 +198,56 @@ impl MultiperiodTree {
         table.add_row(table::Row::Row { cells: header });
         table.add_row(table::Row::Separator);
 
-        self.root.iter_pre().for_each(|(v, node)| {
-            if v.is_empty() {
-                return;
-            }
+        if let Some(assets) = self.root.children.get("Assets") {
+            self.render_subtree(&mut table, assets, "Assets");
+            table.add_row(table::Row::Empty);
+        }
+        if let Some(liabilities) = self.root.children.get("Liabilities") {
+            self.render_subtree(&mut table, liabilities, "Liabilities");
+            table.add_row(table::Row::Empty);
+        }
+        self.render_empty_row_with_header(&mut table, "Total (A+L)");
+        table.add_row(table::Row::Separator);
+        if let Some(equity) = self.root.children.get("Equity") {
+            self.render_subtree(&mut table, equity, "Equity");
+            table.add_row(table::Row::Empty);
+        }
+        if let Some(income) = self.root.children.get("Income") {
+            self.render_subtree(&mut table, income, "Income");
+            table.add_row(table::Row::Empty);
+        }
+        if let Some(expenses) = self.root.children.get("Expenses") {
+            self.render_subtree(&mut table, expenses, "Expenses");
+            table.add_row(table::Row::Empty);
+        }
+        self.render_empty_row_with_header(&mut table, "Total (E+I+E)");
+        table.add_row(table::Row::Separator);
+        self.render_empty_row_with_header(&mut table, "Delta");
+        table.add_row(table::Row::Separator);
+        table
+    }
+
+    fn render_empty_row_with_header(&self, table: &mut Table, header: &str) {
+        let header_cell = table::Cell::Text {
+            indent: 0,
+            text: header.to_string(),
+            align: Alignment::Left,
+        };
+        let value_cells = self
+            .dates
+            .iter()
+            .map(|_| table::Cell::Empty)
+            .collect::<Vec<_>>();
+        table.add_row(table::Row::Row {
+            cells: iter::once(header_cell).chain(value_cells).collect(),
+        });
+    }
+
+    fn render_subtree(&self, table: &mut Table, root: &Node<TreeNode>, header: &str) {
+        root.iter_pre().for_each(|(v, node)| {
             let header_cell = table::Cell::Text {
-                indent: 2 * (v.len() - 1),
-                text: v.last().unwrap().to_string(),
+                indent: 2 * (v.len()),
+                text: v.last().unwrap_or(&header).to_string(),
                 align: Alignment::Left,
             };
 
@@ -233,8 +276,6 @@ impl MultiperiodTree {
                 cells: iter::once(header_cell).chain(value_cells).collect(),
             });
         });
-        table.add_row(table::Row::Separator);
-        table
     }
 }
 
