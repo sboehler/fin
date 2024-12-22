@@ -1,9 +1,9 @@
-use crate::model::entities::{Interval, Partition};
+use crate::model::entities::{Interval, Partition, Period};
 use crate::model::{analyzer::analyze_files, journal::Closer};
 use crate::report::balance::{Aligner, DatedPositions, MultiperiodTree, Shortener};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
-use chrono::NaiveDate;
+use chrono::{Local, NaiveDate};
 use clap::Args;
 use regex::Regex;
 use std::borrow::BorrowMut;
@@ -30,7 +30,7 @@ pub struct Command {
     from_date: Option<NaiveDate>,
 
     #[command(flatten)]
-    period: Period,
+    period: PeriodArgs,
 }
 
 impl Command {
@@ -44,9 +44,13 @@ impl Command {
             .map(|s| journal.registry.commodity_id(s))
             .transpose()?;
         journal.process(val.as_ref(), None)?;
-        let partition =
-            Partition::from_interval(journal.period().unwrap(), self.period.to_interval());
-
+        let partition = Partition::from_interval(
+            Period(
+                journal.min_transaction_date().unwrap(),
+                self.from_date.unwrap_or_else(|| Local::now().date_naive()),
+            ),
+            self.period.to_interval(),
+        );
         let mut dates = partition
             .end_dates()
             .iter()
@@ -63,7 +67,7 @@ impl Command {
         let aligner = Aligner::new(dates.clone());
         let dated_positions = journal
             .query()
-            .flat_map(|row| closer.process(row))
+            // .flat_map(|row| closer.process(row))
             .flat_map(|row| aligner.align(row))
             .sum::<DatedPositions>();
         let shortener = Shortener::new(
@@ -89,7 +93,7 @@ impl Command {
 
 #[derive(Args)]
 #[group(multiple = false)]
-struct Period {
+struct PeriodArgs {
     #[arg(long)]
     days: bool,
     #[arg(long)]
@@ -102,7 +106,7 @@ struct Period {
     years: bool,
 }
 
-impl Period {
+impl PeriodArgs {
     fn to_interval(&self) -> Interval {
         if self.days {
             Interval::Daily

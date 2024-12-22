@@ -62,21 +62,21 @@ impl Journal {
         }
     }
 
-    pub fn min_date(&self) -> Option<NaiveDate> {
+    pub fn min_transaction_date(&self) -> Option<NaiveDate> {
         self.days
             .values()
             .find(|d| !d.transactions.is_empty())
             .map(|d| d.date)
     }
 
-    pub fn max_date(&self) -> Option<NaiveDate> {
+    pub fn max_transaction_date(&self) -> Option<NaiveDate> {
         self.days
             .values()
             .rfind(|d| !d.transactions.is_empty())
             .map(|d| d.date)
     }
 
-    pub fn period(&self) -> Option<Period> {
+    pub fn entire_period(&self) -> Option<Period> {
         self.days
             .keys()
             .next()
@@ -160,7 +160,7 @@ impl Journal {
         self.valuation = valuation.cloned();
         self.closing = close;
 
-        for date in self.period().expect("journal is empty").dates() {
+        for date in self.entire_period().expect("journal is empty").dates() {
             let closings = close
                 .filter(|&interval| date == interval.start_of(date).unwrap())
                 .map(|_| Vec::new())
