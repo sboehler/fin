@@ -114,7 +114,7 @@ impl Analyzer {
             bookings,
             targets: None,
         };
-        let mut ts = match &t.addon {
+        let ts = match &t.addon {
             Some(cst::Addon::Performance { commodities, .. }) => {
                 trx.targets = Some(
                     commodities
@@ -139,9 +139,9 @@ impl Analyzer {
             }
             None => vec![trx],
         };
-
-        self.day(date).transactions.append(&mut ts);
-        Ok(())
+        Ok(for t in ts {
+            self.day(t.date).transactions.push(t);
+        })
     }
 
     fn analyze_assertion(&mut self, a: &cst::Assertion) -> Result<()> {
@@ -249,7 +249,8 @@ impl Analyzer {
 
             if b.account.account_type.is_ie() {
                 let n = Decimal::from(p.periods.len());
-                let quantity = b.quantity / n;
+                let quantity = (b.quantity / n)
+                    .round_dp_with_strategy(2, rust_decimal::RoundingStrategy::ToZero);
                 let rem = b.quantity - quantity * n;
                 for (i, dt) in p.periods.iter().enumerate() {
                     let a = match i {
