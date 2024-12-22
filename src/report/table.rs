@@ -67,6 +67,7 @@ impl TextRenderer {
                 Row::Empty => self.print_empty_row(w, &column_widths)?,
             }
         }
+        writeln!(w)?;
         Ok(())
     }
 
