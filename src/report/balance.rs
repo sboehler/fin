@@ -17,7 +17,7 @@ use crate::model::{
 
 use super::{
     segment_tree::Node,
-    table::{self, Table},
+    table::{self, Cell, Table},
 };
 
 pub struct Aligner {
@@ -184,12 +184,12 @@ impl MultiperiodTree {
                 .collect::<Vec<_>>(),
         );
         table.add_row(table::Row::Separator);
-        let header = iter::once(table::Cell::Text {
+        let header = iter::once(Cell::Text {
             text: "Account".to_string(),
             align: Alignment::Center,
             indent: 0,
         })
-        .chain(self.dates.iter().map(|d| table::Cell::Text {
+        .chain(self.dates.iter().map(|d| Cell::Text {
             text: format!("{}", d.format("%Y-%m-%d")),
             align: std::fmt::Alignment::Center,
             indent: 0,
@@ -228,16 +228,12 @@ impl MultiperiodTree {
     }
 
     fn render_empty_row_with_header(&self, table: &mut Table, header: &str) {
-        let header_cell = table::Cell::Text {
+        let header_cell = Cell::Text {
             indent: 0,
             text: header.to_string(),
             align: Alignment::Left,
         };
-        let value_cells = self
-            .dates
-            .iter()
-            .map(|_| table::Cell::Empty)
-            .collect::<Vec<_>>();
+        let value_cells = self.dates.iter().map(|_| Cell::Empty).collect::<Vec<_>>();
         table.add_row(table::Row::Row {
             cells: iter::once(header_cell).chain(value_cells).collect(),
         });
@@ -245,37 +241,26 @@ impl MultiperiodTree {
 
     fn render_subtree(&self, table: &mut Table, root: &Node<TreeNode>, header: &str, neg: bool) {
         root.iter_pre().for_each(|(v, node)| {
-            let header_cell = table::Cell::Text {
-                indent: 2 * (v.len()),
-                text: v.last().unwrap_or(&header).to_string(),
+            let text = v.last().unwrap_or(&header).to_string();
+            let indent = 2 * v.len();
+            let header_cell = Cell::Text {
+                indent,
+                text,
                 align: Alignment::Left,
             };
-
-            let value_cells = if node.values.is_empty() {
-                self.dates
-                    .iter()
-                    .map(|_| table::Cell::Empty)
-                    .collect::<Vec<_>>()
-            } else {
-                let total = node
-                    .values
-                    .iter()
-                    .map(|(_, v)| v)
-                    .sum::<Positions<NaiveDate, Decimal>>();
-                self.dates
-                    .iter()
-                    .map(|date| {
-                        total
+            let total_value = node.values.values().sum::<Positions<NaiveDate, Decimal>>();
+            let row = table::Row::Row {
+                cells: iter::once(header_cell)
+                    .chain(self.dates.iter().map(|date| {
+                        total_value
                             .get(date)
                             .map(|v| if neg { -*v } else { *v })
-                            .map(|value| table::Cell::Decimal { value })
-                            .unwrap_or(table::Cell::Empty)
-                    })
-                    .collect::<Vec<_>>()
+                            .map(|value| Cell::Decimal { value })
+                            .unwrap_or(Cell::Empty)
+                    }))
+                    .collect(),
             };
-            table.add_row(table::Row::Row {
-                cells: iter::once(header_cell).chain(value_cells).collect(),
-            });
+            table.add_row(row);
         });
     }
 }

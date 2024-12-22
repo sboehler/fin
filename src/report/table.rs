@@ -39,7 +39,7 @@ impl Row {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Cell {
     Empty,
     Decimal {
