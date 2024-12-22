@@ -145,17 +145,17 @@ pub struct MultiperiodTree {
     dates: Vec<NaiveDate>,
     registry: Rc<Registry>,
 
-    root: Node<TreeNode>,
+    root: Node<Position>,
 }
 
 #[derive(Default)]
-pub struct TreeNode {
+pub struct Position {
     quantities: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
     values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
 }
 
-impl AddAssign<&TreeNode> for TreeNode {
-    fn add_assign(&mut self, rhs: &TreeNode) {
+impl AddAssign<&Position> for Position {
+    fn add_assign(&mut self, rhs: &Position) {
         self.quantities += &rhs.quantities;
         self.values += &rhs.values;
     }
@@ -168,7 +168,7 @@ impl MultiperiodTree {
         Self {
             dates,
             registry,
-            root: Node::<TreeNode>::default(),
+            root: Node::<Position>::default(),
         }
     }
 
@@ -180,7 +180,7 @@ impl MultiperiodTree {
         }
     }
 
-    fn lookup<'a>(&'a mut self, account_id: &AccountID) -> &'a mut Node<TreeNode> {
+    fn lookup<'a>(&'a mut self, account_id: &AccountID) -> &'a mut Node<Position> {
         let account_name = self.registry.account_name(*account_id);
         let segments = account_name.split(":").collect::<Vec<_>>();
         self.root.lookup_or_create_mut_node(&segments)
@@ -207,7 +207,7 @@ impl MultiperiodTree {
         table.add_row(Row::Row { cells: header });
         table.add_row(Row::Separator);
 
-        let mut total_al = TreeNode::default();
+        let mut total_al = Position::default();
         [Assets, Liabilities].iter().for_each(|&account_type| {
             if let Some(node) = self.root.children.get(account_type.to_string().as_str()) {
                 node.iter_post().for_each(|(_, node)| total_al += node);
@@ -219,7 +219,7 @@ impl MultiperiodTree {
 
         table.add_row(Row::Separator);
 
-        let mut total_eie = TreeNode::default();
+        let mut total_eie = Position::default();
         [Equity, Income, Expenses].iter().for_each(|&account_type| {
             if let Some(node) = self.root.children.get(account_type.to_string().as_str()) {
                 node.iter_post().for_each(|(_, node)| total_eie += node);
@@ -238,7 +238,7 @@ impl MultiperiodTree {
         table
     }
 
-    fn render_summary(&self, table: &mut Table, header: &str, node: &TreeNode, neg: bool) {
+    fn render_summary(&self, table: &mut Table, header: &str, node: &Position, neg: bool) {
         let header_cell = Cell::Text {
             text: header.to_string(),
             indent: 0,
@@ -259,7 +259,7 @@ impl MultiperiodTree {
         table.add_row(row);
     }
 
-    fn render_subtree(&self, table: &mut Table, root: &Node<TreeNode>, account_type: AccountType) {
+    fn render_subtree(&self, table: &mut Table, root: &Node<Position>, account_type: AccountType) {
         root.iter_pre().for_each(|(v, node)| {
             let text = v
                 .last()
