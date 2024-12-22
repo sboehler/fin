@@ -175,8 +175,8 @@ impl MultiperiodTree {
     pub fn add(&mut self, key: Key, amount: &Positions<NaiveDate, Decimal>) {
         let node = self.lookup(&key.account_id);
         match &key.value_type {
-            AmountType::Value => node.value.values.add(&key.commodity_id, amount),
-            AmountType::Quantity => node.value.quantities.add(&key.commodity_id, amount),
+            AmountType::Value => node.values.add(&key.commodity_id, amount),
+            AmountType::Quantity => node.quantities.add(&key.commodity_id, amount),
         }
     }
 

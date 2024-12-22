@@ -1,4 +1,8 @@
-use std::{collections::HashMap, iter};
+use std::{
+    collections::HashMap,
+    iter,
+    ops::{Deref, DerefMut},
+};
 
 pub struct Node<V> {
     pub children: HashMap<String, Node<V>>,
@@ -77,5 +81,19 @@ impl<V: Default> Node<V> {
                 .lookup_or_create_mut_node(rest),
             [] => self,
         }
+    }
+}
+
+impl<V> Deref for Node<V> {
+    type Target = V;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<V> DerefMut for Node<V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
