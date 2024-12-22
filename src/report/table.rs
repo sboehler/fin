@@ -1,5 +1,6 @@
 use std::{cmp::max, collections::HashMap, fmt::Alignment, io::Write};
 
+use colored::Colorize;
 use rust_decimal::Decimal;
 
 #[derive(Debug)]
@@ -102,8 +103,14 @@ impl TextRenderer {
             match cell {
                 Cell::Empty => write!(w, "{}", " ".repeat(column_widths[i] + 2))?,
                 Cell::Decimal { value } => {
-                    let value = self.format_number(value);
-                    write!(w, " {:>1$} ", value, column_widths[i])?
+                    let formatted = self
+                        .format_number(value)
+                        .color(if value.is_sign_negative() {
+                            "red"
+                        } else {
+                            "green"
+                        });
+                    write!(w, " {:>1$} ", formatted, column_widths[i])?
                 }
                 Cell::Text {
                     text,
