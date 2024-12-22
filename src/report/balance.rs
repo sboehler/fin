@@ -11,7 +11,7 @@ use rust_decimal::Decimal;
 
 use crate::model::{
     entities::{AccountID, CommodityID, Positions},
-    journal::Row,
+    journal::Entry,
     registry::Registry,
 };
 
@@ -31,7 +31,7 @@ impl Aligner {
 }
 
 impl Aligner {
-    pub fn align(&self, row: Row) -> Option<Row> {
+    pub fn align(&self, row: Entry) -> Option<Entry> {
         match self.dates.binary_search(&row.date) {
             Err(i) if i >= self.dates.len() => None,
             Ok(i) | Err(i) => {
@@ -99,7 +99,7 @@ pub struct DatedPositions {
 }
 
 impl DatedPositions {
-    fn add(&mut self, row: Row) {
+    fn add(&mut self, row: Entry) {
         self.positions
             .entry(Key::new(row.account, row.commodity, AmountType::Quantity))
             .or_default()
@@ -125,16 +125,16 @@ impl Deref for DatedPositions {
     }
 }
 
-impl Sum<Row> for DatedPositions {
-    fn sum<I: Iterator<Item = Row>>(iter: I) -> Self {
+impl Sum<Entry> for DatedPositions {
+    fn sum<I: Iterator<Item = Entry>>(iter: I) -> Self {
         let mut res = Self::default();
         iter.into_iter().for_each(|row| res.add(row));
         res
     }
 }
 
-impl FromIterator<Row> for DatedPositions {
-    fn from_iter<T: IntoIterator<Item = Row>>(iter: T) -> Self {
+impl FromIterator<Entry> for DatedPositions {
+    fn from_iter<T: IntoIterator<Item = Entry>>(iter: T) -> Self {
         let mut res = Self::default();
         iter.into_iter().for_each(|row| res.add(row));
         res

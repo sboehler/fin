@@ -278,13 +278,13 @@ impl Journal {
 }
 
 impl Journal {
-    pub fn query(&self) -> impl Iterator<Item = Row> + '_ {
+    pub fn query(&self) -> impl Iterator<Item = Entry> + '_ {
         self.days.values().flat_map(|day| {
             day.transactions
                 .iter()
                 .chain(day.gains.iter())
                 .flat_map(|t| {
-                    t.bookings.iter().map(|b| Row {
+                    t.bookings.iter().map(|b| Entry {
                         date: t.date,
                         description: t.description.clone(),
                         account: b.account,
@@ -300,7 +300,7 @@ impl Journal {
 }
 
 #[derive(Debug, Clone)]
-pub struct Row {
+pub struct Entry {
     pub date: NaiveDate,
     pub account: AccountID,
     pub other: AccountID,
@@ -331,7 +331,7 @@ impl Closer {
         }
     }
 
-    pub fn process(&mut self, r: Row) -> Vec<Row> {
+    pub fn process(&mut self, r: Entry) -> Vec<Entry> {
         let mut res = Vec::new();
         if self.current < self.dates.len() {
             if r.date >= self.dates[self.current] {
@@ -339,7 +339,7 @@ impl Closer {
                 res.extend(
                     self.quantities
                         .iter()
-                        .map(|(k @ (account, commodity), quantity)| Row {
+                        .map(|(k @ (account, commodity), quantity)| Entry {
                             date: closing_date,
                             description: Rc::new("".into()),
                             account: *account,
@@ -353,7 +353,7 @@ impl Closer {
                 res.extend(
                     self.quantities
                         .iter()
-                        .map(|(k @ (account, commodity), quantity)| Row {
+                        .map(|(k @ (account, commodity), quantity)| Entry {
                             date: closing_date,
                             description: Rc::new("".into()),
                             account: self.equity,
