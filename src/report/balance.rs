@@ -184,13 +184,17 @@ impl MultiperiodTree {
                 .collect::<Vec<_>>(),
         );
         table.add_row(table::Row::Separator);
-        let header = iter::once(table::Cell::Empty)
-            .chain(self.dates.iter().map(|d| table::Cell::Text {
-                text: format!("{}", d.format("%Y-%m-%d")),
-                align: std::fmt::Alignment::Center,
-                indent: 0,
-            }))
-            .collect();
+        let header = iter::once(table::Cell::Text {
+            text: "Account".to_string(),
+            align: Alignment::Center,
+            indent: 0,
+        })
+        .chain(self.dates.iter().map(|d| table::Cell::Text {
+            text: format!("{}", d.format("%Y-%m-%d")),
+            align: std::fmt::Alignment::Center,
+            indent: 0,
+        }))
+        .collect();
         table.add_row(table::Row::Row { cells: header });
         table.add_row(table::Row::Separator);
 
