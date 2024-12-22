@@ -204,7 +204,7 @@ impl MultiperiodTree {
             indent: 0,
         }))
         .collect();
-        table.add_row(Row::Row { cells: header });
+        table.add_row(Row::Row(header));
         table.add_row(Row::Separator);
 
         let mut total_al = Position::default();
@@ -245,8 +245,8 @@ impl MultiperiodTree {
             align: Alignment::Left,
         };
         let total_value = node.values.values().sum::<Positions<NaiveDate, Decimal>>();
-        let row = Row::Row {
-            cells: iter::once(header_cell)
+        let row = Row::Row(
+            iter::once(header_cell)
                 .chain(self.dates.iter().map(|date| {
                     total_value
                         .get(date)
@@ -255,7 +255,7 @@ impl MultiperiodTree {
                         .unwrap_or(Cell::Empty)
                 }))
                 .collect(),
-        };
+        );
         table.add_row(row);
     }
 
@@ -271,8 +271,8 @@ impl MultiperiodTree {
                 align: Alignment::Left,
             };
             let total_value = node.values.values().sum::<Positions<NaiveDate, Decimal>>();
-            let row = Row::Row {
-                cells: iter::once(header_cell)
+            let row = Row::Row(
+                iter::once(header_cell)
                     .chain(self.dates.iter().map(|date| {
                         total_value
                             .get(date)
@@ -284,7 +284,7 @@ impl MultiperiodTree {
                             .unwrap_or(Cell::Empty)
                     }))
                     .collect(),
-            };
+            );
             table.add_row(row);
         });
     }

@@ -24,7 +24,7 @@ impl Table {
 
 #[derive(Debug)]
 pub enum Row {
-    Row { cells: Vec<Cell> },
+    Row(Vec<Cell>),
     Separator,
     Empty,
 }
@@ -32,7 +32,7 @@ pub enum Row {
 impl Row {
     pub fn add_cell(&mut self, cell: Cell) {
         match self {
-            Self::Row { cells } => cells.push(cell),
+            Self::Row(cells) => cells.push(cell),
             Self::Separator => (),
             Self::Empty => (),
         }
@@ -63,7 +63,7 @@ impl TextRenderer {
         for row in &self.table.rows {
             match row {
                 Row::Separator => self.print_separator_row(w, &column_widths)?,
-                Row::Row { cells } => self.print_regular_row(w, &column_widths, cells)?,
+                Row::Row(cells) => self.print_regular_row(w, &column_widths, cells)?,
                 Row::Empty => self.print_empty_row(w, &column_widths)?,
             }
         }
@@ -133,7 +133,7 @@ impl TextRenderer {
     fn compute_widths(&self) -> Vec<usize> {
         let mut widths = Vec::new();
         self.table.rows.iter().for_each(|row| match row {
-            Row::Row { cells } => {
+            Row::Row(cells) => {
                 if cells.len() > widths.len() {
                     widths.resize(cells.len(), 0)
                 }
