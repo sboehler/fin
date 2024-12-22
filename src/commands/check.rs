@@ -1,5 +1,5 @@
+use crate::model::analyzer::analyze_files;
 use crate::model::entities::{Interval, Partition, Period};
-use crate::model::{analyzer::analyze_files, journal::Closer};
 use crate::report::balance::{Aligner, DatedPositions, MultiperiodTree, Shortener};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
@@ -59,14 +59,14 @@ impl Command {
             .collect::<Vec<_>>();
         dates.reverse();
 
-        let mut closer = Closer::new(
-            partition.start_dates(),
-            journal.registry.account_id("Equity:Equity").unwrap(),
-        );
+        // let mut closer = Closer::new(
+        //     partition.start_dates(),
+        //     journal.registry.account_id("Equity:Equity").unwrap(),
+        // );
         let aligner = Aligner::new(dates.clone());
         let dated_positions = journal
             .query()
-            .flat_map(|row| closer.process(row))
+            // .flat_map(|row| closer.process(row))
             .flat_map(|row| aligner.align(row))
             .sum::<DatedPositions>();
         let shortener = Shortener::new(

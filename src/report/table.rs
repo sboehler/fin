@@ -90,7 +90,8 @@ impl TextRenderer {
             match cell {
                 Cell::Empty => write!(w, "{}", " ".repeat(column_widths[i] + 2))?,
                 Cell::Decimal { value } => {
-                    write!(w, " {:>1$.2$} ", value, column_widths[i], self.round)?
+                    let value = self.format_number(value);
+                    write!(w, " {:>1$} ", value, column_widths[i])?
                 }
                 Cell::Text {
                     text,
@@ -142,8 +143,33 @@ impl TextRenderer {
     fn min_length(&self, c: &Cell) -> usize {
         match c {
             Cell::Empty => 0,
-            Cell::Decimal { value } => format!("{value:.0$}", self.round).len(),
+            Cell::Decimal { value } => self.format_number(value).len(),
             Cell::Text { text, indent, .. } => text.len() + indent,
         }
+    }
+
+    fn format_number(&self, value: &Decimal) -> String {
+        let value = value.round_dp_with_strategy(
+            u32::try_from(self.round).unwrap(),
+            rust_decimal::RoundingStrategy::AwayFromZero,
+        );
+        let text = format!("{value:.0$}", self.round);
+        let index = text.find('.').unwrap_or(text.len());
+        let mut res = String::new();
+        let mut ok = false;
+        for (i, ch) in text.chars().enumerate() {
+            if i >= index && ch != '-' {
+                res.push_str(&text[i..]);
+                break;
+            }
+            if (index - i) % 3 == 0 && ok {
+                res.push(',');
+            }
+            res.push(ch);
+            if ch.is_ascii_digit() {
+                ok = true;
+            }
+        }
+        res
     }
 }
