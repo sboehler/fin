@@ -139,9 +139,10 @@ impl Analyzer {
             }
             None => vec![trx],
         };
-        Ok(for t in ts {
+        for t in ts {
             self.day(t.date).transactions.push(t);
-        })
+        }
+        Ok(())
     }
 
     fn analyze_assertion(&mut self, a: &cst::Assertion) -> Result<()> {

@@ -10,7 +10,6 @@ use std::borrow::BorrowMut;
 use std::io::{stdout, Write};
 use std::num::ParseIntError;
 use std::str::FromStr;
-use std::usize;
 use std::{error::Error, path::PathBuf};
 
 #[derive(Args)]
