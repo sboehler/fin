@@ -86,7 +86,7 @@ impl NormalizedPrices {
         commodity: &CommodityID,
     ) -> Result<Decimal> {
         if let Some(p) = self.prices.get(commodity) {
-            return Ok(quantity * p);
+            return Ok((quantity * p).round_dp(8));
         }
         Err(ModelError::NoPriceFound {
             date: self.date,

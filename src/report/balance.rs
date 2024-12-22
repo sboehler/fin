@@ -1,7 +1,7 @@
 use std::{
     fmt::Alignment,
     iter::{self, Sum},
-    ops::Deref,
+    ops::{AddAssign, Deref},
     rc::Rc,
 };
 
@@ -154,6 +154,13 @@ pub struct TreeNode {
     values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
 }
 
+impl AddAssign<&TreeNode> for TreeNode {
+    fn add_assign(&mut self, rhs: &TreeNode) {
+        self.quantities += &rhs.quantities;
+        self.values += &rhs.values;
+    }
+}
+
 use AccountType::*;
 
 impl MultiperiodTree {
@@ -200,45 +207,56 @@ impl MultiperiodTree {
         table.add_row(Row::Row { cells: header });
         table.add_row(Row::Separator);
 
-        if let Some(assets) = self.root.children.get("Assets") {
-            self.render_subtree(&mut table, assets, Assets);
-            table.add_row(Row::Empty);
-        }
-        if let Some(liabilities) = self.root.children.get("Liabilities") {
-            self.render_subtree(&mut table, liabilities, Liabilities);
-            table.add_row(Row::Empty);
-        }
-        self.render_empty_row_with_header(&mut table, "Total (A+L)");
+        let mut total_al = TreeNode::default();
+        [Assets, Liabilities].iter().for_each(|&account_type| {
+            if let Some(node) = self.root.children.get(account_type.to_string().as_str()) {
+                node.iter_post().for_each(|(_, node)| total_al += node);
+                self.render_subtree(&mut table, node, account_type);
+                table.add_row(Row::Empty);
+            }
+        });
+        self.render_summary(&mut table, "Total (A+L)", &total_al, false);
+
         table.add_row(Row::Separator);
-        if let Some(equity) = self.root.children.get("Equity") {
-            self.render_subtree(&mut table, equity, Equity);
-            table.add_row(Row::Empty);
-        }
-        if let Some(income) = self.root.children.get("Income") {
-            self.render_subtree(&mut table, income, Income);
-            table.add_row(Row::Empty);
-        }
-        if let Some(expenses) = self.root.children.get("Expenses") {
-            self.render_subtree(&mut table, expenses, Expenses);
-            table.add_row(Row::Empty);
-        }
-        self.render_empty_row_with_header(&mut table, "Total (E+I+E)");
+
+        let mut total_eie = TreeNode::default();
+        [Equity, Income, Expenses].iter().for_each(|&account_type| {
+            if let Some(node) = self.root.children.get(account_type.to_string().as_str()) {
+                node.iter_post().for_each(|(_, node)| total_eie += node);
+                self.render_subtree(&mut table, node, account_type);
+                table.add_row(Row::Empty);
+            }
+        });
+        self.render_summary(&mut table, "Total (E+I+E)", &total_eie, true);
+
         table.add_row(Row::Separator);
-        self.render_empty_row_with_header(&mut table, "Delta");
+
+        let mut delta = total_al;
+        delta += &total_eie;
+        self.render_summary(&mut table, "Delta", &delta, false);
         table.add_row(Row::Separator);
         table
     }
 
-    fn render_empty_row_with_header(&self, table: &mut Table, header: &str) {
+    fn render_summary(&self, table: &mut Table, header: &str, node: &TreeNode, neg: bool) {
         let header_cell = Cell::Text {
-            indent: 0,
             text: header.to_string(),
+            indent: 0,
             align: Alignment::Left,
         };
-        let value_cells = self.dates.iter().map(|_| Cell::Empty).collect::<Vec<_>>();
-        table.add_row(Row::Row {
-            cells: iter::once(header_cell).chain(value_cells).collect(),
-        });
+        let total_value = node.values.values().sum::<Positions<NaiveDate, Decimal>>();
+        let row = Row::Row {
+            cells: iter::once(header_cell)
+                .chain(self.dates.iter().map(|date| {
+                    total_value
+                        .get(date)
+                        .map(|v| if neg { -*v } else { *v })
+                        .map(|value| Cell::Decimal { value })
+                        .unwrap_or(Cell::Empty)
+                }))
+                .collect(),
+        };
+        table.add_row(row);
     }
 
     fn render_subtree(&self, table: &mut Table, root: &Node<TreeNode>, account_type: AccountType) {
