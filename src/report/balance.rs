@@ -17,7 +17,7 @@ use crate::model::{
 
 use super::{
     segment_tree::Node,
-    table::{self, Cell, Table},
+    table::{Cell, Row, Table},
 };
 
 pub struct Aligner {
@@ -183,7 +183,7 @@ impl MultiperiodTree {
                 .chain(iter::repeat(1).take(self.dates.len()))
                 .collect::<Vec<_>>(),
         );
-        table.add_row(table::Row::Separator);
+        table.add_row(Row::Separator);
         let header = iter::once(Cell::Text {
             text: "Account".to_string(),
             align: Alignment::Center,
@@ -195,35 +195,35 @@ impl MultiperiodTree {
             indent: 0,
         }))
         .collect();
-        table.add_row(table::Row::Row { cells: header });
-        table.add_row(table::Row::Separator);
+        table.add_row(Row::Row { cells: header });
+        table.add_row(Row::Separator);
 
         if let Some(assets) = self.root.children.get("Assets") {
             self.render_subtree(&mut table, assets, "Assets", false);
-            table.add_row(table::Row::Empty);
+            table.add_row(Row::Empty);
         }
         if let Some(liabilities) = self.root.children.get("Liabilities") {
             self.render_subtree(&mut table, liabilities, "Liabilities", false);
-            table.add_row(table::Row::Empty);
+            table.add_row(Row::Empty);
         }
         self.render_empty_row_with_header(&mut table, "Total (A+L)");
-        table.add_row(table::Row::Separator);
+        table.add_row(Row::Separator);
         if let Some(equity) = self.root.children.get("Equity") {
             self.render_subtree(&mut table, equity, "Equity", true);
-            table.add_row(table::Row::Empty);
+            table.add_row(Row::Empty);
         }
         if let Some(income) = self.root.children.get("Income") {
             self.render_subtree(&mut table, income, "Income", true);
-            table.add_row(table::Row::Empty);
+            table.add_row(Row::Empty);
         }
         if let Some(expenses) = self.root.children.get("Expenses") {
             self.render_subtree(&mut table, expenses, "Expenses", true);
-            table.add_row(table::Row::Empty);
+            table.add_row(Row::Empty);
         }
         self.render_empty_row_with_header(&mut table, "Total (E+I+E)");
-        table.add_row(table::Row::Separator);
+        table.add_row(Row::Separator);
         self.render_empty_row_with_header(&mut table, "Delta");
-        table.add_row(table::Row::Separator);
+        table.add_row(Row::Separator);
         table
     }
 
@@ -234,7 +234,7 @@ impl MultiperiodTree {
             align: Alignment::Left,
         };
         let value_cells = self.dates.iter().map(|_| Cell::Empty).collect::<Vec<_>>();
-        table.add_row(table::Row::Row {
+        table.add_row(Row::Row {
             cells: iter::once(header_cell).chain(value_cells).collect(),
         });
     }
@@ -249,7 +249,7 @@ impl MultiperiodTree {
                 align: Alignment::Left,
             };
             let total_value = node.values.values().sum::<Positions<NaiveDate, Decimal>>();
-            let row = table::Row::Row {
+            let row = Row::Row {
                 cells: iter::once(header_cell)
                     .chain(self.dates.iter().map(|date| {
                         total_value

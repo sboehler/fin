@@ -103,13 +103,11 @@ impl TextRenderer {
             match cell {
                 Cell::Empty => write!(w, "{}", " ".repeat(column_widths[i] + 2))?,
                 Cell::Decimal { value } => {
-                    let formatted = self
-                        .format_number(value)
-                        .color(if value.is_sign_negative() {
-                            "red"
-                        } else {
-                            "green"
-                        });
+                    let color = match value.is_sign_negative() {
+                        true => "red",
+                        false => "green",
+                    };
+                    let formatted = self.format_number(value).color(color);
                     write!(w, " {:>1$} ", formatted, column_widths[i])?
                 }
                 Cell::Text {
@@ -118,10 +116,11 @@ impl TextRenderer {
                     indent,
                 } => {
                     write!(w, " {}", " ".repeat(*indent))?;
+                    let width = column_widths[i] - indent;
                     match align {
-                        Alignment::Left => write!(w, "{:<1$} ", text, column_widths[i] - indent)?,
-                        Alignment::Right => write!(w, "{:>1$} ", text, column_widths[i] - indent)?,
-                        Alignment::Center => write!(w, "{:^1$} ", text, column_widths[i] - indent)?,
+                        Alignment::Left => write!(w, "{:<1$} ", text, width)?,
+                        Alignment::Right => write!(w, "{:>1$} ", text, width)?,
+                        Alignment::Center => write!(w, "{:^1$} ", text, width)?,
                     }
                 }
             }
@@ -142,14 +141,12 @@ impl TextRenderer {
                     .enumerate()
                     .for_each(|(i, cell)| widths[i] = max(widths[i], self.min_length(cell)))
             }
-            Row::Separator => (),
-            Row::Empty => (),
+            Row::Separator | Row::Empty => (),
         });
         let mut groups = HashMap::<usize, usize>::new();
         widths.into_iter().enumerate().for_each(|(i, width)| {
-            let group_id = self.table.columns[i];
             groups
-                .entry(group_id)
+                .entry(self.table.columns[i])
                 .and_modify(|group_width| *group_width = max(*group_width, width))
                 .or_insert(width);
         });
@@ -163,7 +160,7 @@ impl TextRenderer {
     fn min_length(&self, c: &Cell) -> usize {
         match c {
             Cell::Empty => 0,
-            Cell::Decimal { value } => self.format_number(value).len(),
+            Cell::Decimal { value } => self.format_number(value).chars().count(),
             Cell::Text { text, indent, .. } => text.len() + indent,
         }
     }
@@ -171,7 +168,7 @@ impl TextRenderer {
     fn format_number(&self, value: &Decimal) -> String {
         let value = value.round_dp_with_strategy(
             u32::try_from(self.round).unwrap(),
-            rust_decimal::RoundingStrategy::AwayFromZero,
+            rust_decimal::RoundingStrategy::ToPositiveInfinity,
         );
         let text = format!("{value:.0$}", self.round);
         let index = text.find('.').unwrap_or(text.len());

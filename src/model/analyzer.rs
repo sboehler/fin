@@ -251,7 +251,7 @@ impl Analyzer {
             if b.account.account_type.is_ie() {
                 let n = Decimal::from(p.periods.len());
                 let quantity = (b.quantity / n)
-                    .round_dp_with_strategy(2, rust_decimal::RoundingStrategy::ToZero);
+                    .round_dp_with_strategy(2, rust_decimal::RoundingStrategy::ToPositiveInfinity);
                 let rem = b.quantity - quantity * n;
                 for (i, dt) in p.periods.iter().enumerate() {
                     let a = match i {
