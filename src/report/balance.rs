@@ -200,7 +200,7 @@ impl MultiperiodTree {
         })
         .chain(self.dates.iter().map(|d| Cell::Text {
             text: format!("{}", d.format("%Y-%m-%d")),
-            align: std::fmt::Alignment::Center,
+            align: Alignment::Center,
             indent: 0,
         }))
         .collect();
