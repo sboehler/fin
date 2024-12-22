@@ -68,10 +68,6 @@ impl<V> Node<V> {
 }
 
 impl<V: Default> Node<V> {
-    pub fn lookup_or_create_mut(&mut self, names: &[&str]) -> &mut V {
-        &mut self.lookup_or_create_mut_node(names).value
-    }
-
     pub fn lookup_or_create_mut_node(&mut self, names: &[&str]) -> &mut Node<V> {
         match *names {
             [first, ref rest @ ..] => self
