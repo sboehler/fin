@@ -30,6 +30,9 @@ pub struct Command {
 
     #[command(flatten)]
     period: PeriodArgs,
+
+    #[arg(long)]
+    round: Option<usize>,
 }
 
 impl Command {
@@ -82,7 +85,10 @@ impl Command {
             .flat_map(|(k, v)| shortener.shorten(*k).map(|k| (k, v)));
         multiperiod_tree.extend(test);
         let table = multiperiod_tree.render();
-        let renderer = TextRenderer { table, round: 0 };
+        let renderer = TextRenderer {
+            table,
+            round: self.round.unwrap_or(0),
+        };
         let mut lock = stdout().lock();
         renderer.render(lock.borrow_mut()).unwrap();
         lock.flush()?;
