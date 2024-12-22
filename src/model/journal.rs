@@ -345,8 +345,8 @@ impl Closer {
                             account: *account,
                             other: self.equity,
                             commodity: *commodity,
-                            quantity: *quantity,
-                            value: self.values.get(k).copied(),
+                            quantity: -*quantity,
+                            value: self.values.get(k).copied().map(Neg::neg),
                             valuation: r.valuation,
                         }),
                 );
@@ -359,18 +359,19 @@ impl Closer {
                             account: self.equity,
                             other: *account,
                             commodity: *commodity,
-                            quantity: -*quantity,
-                            value: self.values.get(k).copied().map(Neg::neg),
+                            quantity: *quantity,
+                            value: self.values.get(k).copied(),
                             valuation: r.valuation,
                         }),
                 );
 
                 self.current += 1;
                 self.quantities.clear();
+                self.values.clear();
             }
             if r.account.account_type.is_ie() {
                 self.quantities.add(&(r.account, r.commodity), &r.quantity);
-                if let Some(ref value) = r.value {
+                if let Some(value) = &r.value {
                     self.values.add(&(r.account, r.commodity), value);
                 }
             };

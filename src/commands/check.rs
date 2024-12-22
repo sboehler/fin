@@ -66,7 +66,7 @@ impl Command {
         let aligner = Aligner::new(dates.clone());
         let dated_positions = journal
             .query()
-            // .flat_map(|row| closer.process(row))
+            .flat_map(|row| closer.process(row))
             .flat_map(|row| aligner.align(row))
             .sum::<DatedPositions>();
         let shortener = Shortener::new(
