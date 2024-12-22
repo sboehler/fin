@@ -10,7 +10,7 @@ use regex::Regex;
 use rust_decimal::Decimal;
 
 use crate::model::{
-    entities::{AccountID, CommodityID, Positions},
+    entities::{AccountID, AccountType, CommodityID, Positions},
     journal::Entry,
     registry::Registry,
 };
@@ -154,6 +154,8 @@ pub struct TreeNode {
     values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
 }
 
+use AccountType::*;
+
 impl MultiperiodTree {
     pub fn new(dates: Vec<NaiveDate>, registry: Rc<Registry>) -> MultiperiodTree {
         Self {
@@ -199,25 +201,25 @@ impl MultiperiodTree {
         table.add_row(Row::Separator);
 
         if let Some(assets) = self.root.children.get("Assets") {
-            self.render_subtree(&mut table, assets, "Assets", false);
+            self.render_subtree(&mut table, assets, Assets);
             table.add_row(Row::Empty);
         }
         if let Some(liabilities) = self.root.children.get("Liabilities") {
-            self.render_subtree(&mut table, liabilities, "Liabilities", false);
+            self.render_subtree(&mut table, liabilities, Liabilities);
             table.add_row(Row::Empty);
         }
         self.render_empty_row_with_header(&mut table, "Total (A+L)");
         table.add_row(Row::Separator);
         if let Some(equity) = self.root.children.get("Equity") {
-            self.render_subtree(&mut table, equity, "Equity", true);
+            self.render_subtree(&mut table, equity, Equity);
             table.add_row(Row::Empty);
         }
         if let Some(income) = self.root.children.get("Income") {
-            self.render_subtree(&mut table, income, "Income", true);
+            self.render_subtree(&mut table, income, Income);
             table.add_row(Row::Empty);
         }
         if let Some(expenses) = self.root.children.get("Expenses") {
-            self.render_subtree(&mut table, expenses, "Expenses", true);
+            self.render_subtree(&mut table, expenses, Expenses);
             table.add_row(Row::Empty);
         }
         self.render_empty_row_with_header(&mut table, "Total (E+I+E)");
@@ -239,13 +241,15 @@ impl MultiperiodTree {
         });
     }
 
-    fn render_subtree(&self, table: &mut Table, root: &Node<TreeNode>, header: &str, neg: bool) {
+    fn render_subtree(&self, table: &mut Table, root: &Node<TreeNode>, account_type: AccountType) {
         root.iter_pre().for_each(|(v, node)| {
-            let text = v.last().unwrap_or(&header).to_string();
-            let indent = 2 * v.len();
+            let text = v
+                .last()
+                .map(|s| s.to_string())
+                .unwrap_or(format!("{}", account_type));
             let header_cell = Cell::Text {
-                indent,
                 text,
+                indent: 2 * v.len(),
                 align: Alignment::Left,
             };
             let total_value = node.values.values().sum::<Positions<NaiveDate, Decimal>>();
@@ -254,7 +258,10 @@ impl MultiperiodTree {
                     .chain(self.dates.iter().map(|date| {
                         total_value
                             .get(date)
-                            .map(|v| if neg { -*v } else { *v })
+                            .map(|v| match account_type {
+                                Assets | Liabilities => *v,
+                                Equity | Income | Expenses => -*v,
+                            })
                             .map(|value| Cell::Decimal { value })
                             .unwrap_or(Cell::Empty)
                     }))

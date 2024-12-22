@@ -1,6 +1,7 @@
 use std::{
     cmp,
     collections::HashMap,
+    fmt::Display,
     iter::Sum,
     ops::{AddAssign, Deref, DerefMut},
     rc::Rc,
@@ -18,6 +19,18 @@ pub enum AccountType {
     Equity,
     Income,
     Expenses,
+}
+
+impl Display for AccountType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AccountType::Assets => write!(f, "Assets"),
+            AccountType::Liabilities => write!(f, "Liabilities"),
+            AccountType::Equity => write!(f, "Equity"),
+            AccountType::Income => write!(f, "Income"),
+            AccountType::Expenses => write!(f, "Expenses"),
+        }
+    }
 }
 
 impl AccountType {
