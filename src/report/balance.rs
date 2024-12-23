@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     fmt::Alignment,
     iter::{self, Sum},
     ops::{AddAssign, Deref},
@@ -152,6 +153,9 @@ pub struct MultiperiodTree {
 pub struct Position {
     quantities: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
     values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
+
+    total_quantities: RefCell<Positions<CommodityID, Positions<NaiveDate, Decimal>>>,
+    total_values: RefCell<Positions<CommodityID, Positions<NaiveDate, Decimal>>>,
 }
 
 impl AddAssign<&Position> for Position {
@@ -187,6 +191,7 @@ impl MultiperiodTree {
     }
 
     pub fn render(&self) -> Table {
+        self.update_totals();
         let mut table = Table::new(
             iter::once(0)
                 .chain(iter::repeat(1).take(self.dates.len()))
@@ -236,6 +241,19 @@ impl MultiperiodTree {
         self.render_summary(&mut table, "Delta", &delta, false);
         table.add_row(Row::Separator);
         table
+    }
+
+    pub fn update_totals(&self) {
+        self.root.iter_post().for_each(|(_, node)| {
+            *node.total_quantities.borrow_mut() = node.quantities.clone();
+            *node.total_values.borrow_mut() = node.values.clone();
+        });
+        self.root.iter_post().for_each(|(_, node)| {
+            for child in node.children.values() {
+                *node.total_quantities.borrow_mut() += &*child.total_quantities.borrow();
+                *node.total_values.borrow_mut() += &*child.total_values.borrow();
+            }
+        });
     }
 
     fn render_summary(&self, table: &mut Table, header: &str, node: &Position, neg: bool) {
