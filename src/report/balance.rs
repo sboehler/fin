@@ -11,10 +11,10 @@ use regex::Regex;
 use rust_decimal::Decimal;
 
 use crate::model::{
-    entities::{AccountID, AccountType, CommodityID, Positions},
-    journal::Entry,
-    registry::Registry,
-};
+        entities::{AccountID, AccountType, CommodityID, Positions},
+        journal::Entry,
+        registry::Registry,
+    };
 
 use super::{
     segment_tree::Node,
@@ -54,21 +54,14 @@ impl Shortener {
         Shortener { registry, patterns }
     }
 
-    pub fn shorten(&self, key: Key) -> Option<Key> {
-        let name = self.registry.account_name(key.account_id);
+    pub fn shorten(&self, account: AccountID) -> Option<AccountID> {
+        let name = self.registry.account_name(account);
         for (pattern, n) in &self.patterns {
             if pattern.is_match(&name) {
-                return self
-                    .registry
-                    .shorten(key.account_id, *n)
-                    .map(|mapped_id| Key {
-                        account_id: mapped_id,
-                        commodity_id: key.commodity_id,
-                        value_type: key.value_type,
-                    });
+                return self.registry.shorten(account, *n);
             }
         }
-        Some(key)
+        Some(account)
     }
 }
 
@@ -142,6 +135,63 @@ impl FromIterator<Entry> for DatedPositions {
     }
 }
 
+#[derive(Default)]
+pub struct DatedPositions2 {
+    positions: Positions<AccountID, Position>,
+}
+
+impl DatedPositions2 {
+    pub fn add(&mut self, row: Entry) {
+        let pos = self.positions.entry(row.account).or_default();
+        pos.quantities
+            .entry(row.commodity)
+            .or_default()
+            .add(&row.date, &row.quantity);
+        if let Some(value) = row.value {
+            pos.values
+                .entry(row.commodity)
+                .or_default()
+                .add(&row.date, &value);
+        }
+    }
+}
+
+impl Deref for DatedPositions2 {
+    type Target = Positions<AccountID, Position>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.positions
+    }
+}
+
+impl Sum<Entry> for DatedPositions2 {
+    fn sum<I: Iterator<Item = Entry>>(iter: I) -> Self {
+        let mut res = Self::default();
+        iter.into_iter().for_each(|row| res.add(row));
+        res
+    }
+}
+
+impl FromIterator<Entry> for DatedPositions2 {
+    fn from_iter<T: IntoIterator<Item = Entry>>(iter: T) -> Self {
+        let mut res = Self::default();
+        iter.into_iter().for_each(|row| res.add(row));
+        res
+    }
+}
+
+impl<'a> FromIterator<(AccountID, &'a Position)> for DatedPositions2 {
+    fn from_iter<T: IntoIterator<Item = (AccountID, &'a Position)>>(iter: T) -> Self {
+        let mut res = Self::default();
+        iter.into_iter().for_each(|(account, position)| {
+            let pos = res.positions.entry(account).or_default();
+            pos.quantities += &position.quantities;
+            pos.values += &position.values;
+        });
+        res
+    }
+}
+
 pub struct MultiperiodTree {
     dates: Vec<NaiveDate>,
     registry: Rc<Registry>,
@@ -149,7 +199,7 @@ pub struct MultiperiodTree {
     root: Node<Position>,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Position {
     quantities: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
     values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
@@ -174,6 +224,24 @@ impl MultiperiodTree {
             registry,
             root: Node::<Position>::default(),
         }
+    }
+
+    pub fn create(
+        dates: Vec<NaiveDate>,
+        registry: Rc<Registry>,
+        dated_positions: &DatedPositions2,
+    ) -> Self {
+        let mut res = Self {
+            dates: dates.clone(),
+            registry: registry.clone(),
+            root: Node::<Position>::default(),
+        };
+        dated_positions.iter().for_each(|(account, position)| {
+            let node = res.lookup(account);
+            node.quantities += &position.quantities;
+            node.values += &position.values;
+        });
+        res
     }
 
     pub fn add(&mut self, key: Key, amount: &Positions<NaiveDate, Decimal>) {
@@ -305,15 +373,5 @@ impl MultiperiodTree {
             );
             table.add_row(row);
         });
-    }
-}
-
-impl<'a> Extend<(Key, &'a Positions<NaiveDate, Decimal>)> for MultiperiodTree {
-    fn extend<T: IntoIterator<Item = (Key, &'a Positions<NaiveDate, Decimal>)>>(
-        &mut self,
-        iter: T,
-    ) {
-        iter.into_iter()
-            .for_each(|(key, amount)| self.add(key, amount))
     }
 }

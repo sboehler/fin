@@ -1,6 +1,8 @@
 use crate::model::analyzer::analyze_files;
 use crate::model::entities::{Interval, Partition, Period};
-use crate::report::balance::{Aligner, DatedPositions, MultiperiodTree, Shortener};
+use crate::report::balance::{
+    Aligner, DatedPositions2, MultiperiodTree, Shortener,
+};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::{Local, NaiveDate};
@@ -71,7 +73,7 @@ impl Command {
             .query()
             // .flat_map(|row| closer.process(row))
             .flat_map(|row| aligner.align(row))
-            .sum::<DatedPositions>();
+            .sum::<DatedPositions2>();
         let shortener = Shortener::new(
             journal.registry.clone(),
             self.mapping
@@ -79,11 +81,12 @@ impl Command {
                 .map(|m| (m.regex.clone(), m.level))
                 .collect(),
         );
-        let mut multiperiod_tree = MultiperiodTree::new(dates.clone(), journal.registry.clone());
-        let test = dated_positions
+        let dated_positions = dated_positions
             .iter()
-            .flat_map(|(k, v)| shortener.shorten(*k).map(|k| (k, v)));
-        multiperiod_tree.extend(test);
+            .flat_map(|(k, v)| shortener.shorten(*k).map(|k| (k, v)))
+            .collect::<DatedPositions2>();
+        let multiperiod_tree =
+            MultiperiodTree::create(dates.clone(), journal.registry.clone(), &dated_positions);
         let table = multiperiod_tree.render();
         let renderer = TextRenderer {
             table,
