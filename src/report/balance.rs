@@ -90,6 +90,15 @@ impl DatedPositions {
                 .add(&row.date, &value);
         }
     }
+
+    pub fn map_account<F>(&self, f: F) -> Self
+    where
+        F: Fn(AccountID) -> Option<AccountID>,
+    {
+        Self {
+            positions: self.positions.map_keys(f),
+        }
+    }
 }
 
 impl Deref for DatedPositions {

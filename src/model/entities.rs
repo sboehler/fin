@@ -349,10 +349,13 @@ where
 
     pub fn map_keys<F>(&'a self, f: F) -> Self
     where
-        F: Fn(K) -> K,
+        F: Fn(K) -> Option<K>,
         K: Copy + std::hash::Hash + Eq,
     {
-        self.positions.iter().map(|(k, v)| (f(*k), v)).collect()
+        self.positions
+            .iter()
+            .filter_map(|(k, v)| f(*k).map(|k| (k, v)))
+            .collect()
     }
 }
 

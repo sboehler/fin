@@ -79,10 +79,7 @@ impl Command {
                 .map(|m| (m.regex.clone(), m.level))
                 .collect(),
         );
-        let dated_positions = dated_positions
-            .iter()
-            .filter_map(|(k, v)| shortener.shorten(*k).map(|k| (k, v)))
-            .collect::<DatedPositions>();
+        let dated_positions = dated_positions.map_account(|account| shortener.shorten(account));
         let multiperiod_tree =
             MultiperiodTree::create(dates.clone(), journal.registry.clone(), &dated_positions);
         let table = multiperiod_tree.render();
