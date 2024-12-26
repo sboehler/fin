@@ -325,7 +325,7 @@ mod test_period {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Positions<K, V> {
     positions: HashMap<K, V>,
 }
@@ -341,18 +341,10 @@ impl<K, V> Default for Positions<K, V> {
 impl<'a, K, V> Positions<K, V>
 where
     K: Eq + std::hash::Hash + Clone,
-    V: AddAssign<&'a V> + Clone + 'a,
+    V: AddAssign<&'a V> + 'a + Default,
 {
-    pub fn add(&mut self, key: &K, value: &'a V)
-    where
-        K: Eq + std::hash::Hash + Clone,
-        V: Clone,
-    {
-        if let Some(target) = self.positions.get_mut(key) {
-            *target += value
-        } else {
-            self.positions.insert(key.clone(), value.clone());
-        }
+    pub fn add(&mut self, key: &K, value: &'a V) {
+        *self.entry(key.clone()).or_default() += value;
     }
 
     pub fn map_keys<F>(&'a self, f: F) -> Self
@@ -367,7 +359,7 @@ where
 impl<'a, 'b, K, V> FromIterator<(K, &'a V)> for Positions<K, V>
 where
     K: Eq + std::hash::Hash + Copy,
-    V: AddAssign<&'b V> + Clone + 'b,
+    V: AddAssign<&'b V> + Default + 'b,
     'a: 'b,
 {
     fn from_iter<T: IntoIterator<Item = (K, &'a V)>>(iter: T) -> Self {
@@ -380,7 +372,7 @@ where
 impl<'a, 'b, K, V> Extend<(K, &'a V)> for Positions<K, V>
 where
     K: Eq + std::hash::Hash + Copy,
-    V: AddAssign<&'b V> + Clone + 'b,
+    V: AddAssign<&'b V> + Default + 'b,
     'a: 'b,
 {
     fn extend<T: IntoIterator<Item = (K, &'a V)>>(&mut self, iter: T) {
@@ -393,7 +385,7 @@ where
 impl<'a, 'b, K, V> AddAssign<&'a Positions<K, V>> for Positions<K, V>
 where
     K: Eq + std::hash::Hash + Copy,
-    V: AddAssign<&'b V> + Clone + 'b,
+    V: AddAssign<&'b V> + Default + 'b,
     'a: 'b,
 {
     fn add_assign(&mut self, rhs: &'a Positions<K, V>) {

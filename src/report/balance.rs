@@ -135,7 +135,7 @@ pub struct MultiperiodTree {
     root: Node<Position>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct Position {
     quantities: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
     values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
@@ -241,8 +241,8 @@ impl MultiperiodTree {
 
     pub fn update_totals(&self) {
         self.root.iter_post().for_each(|(_, node)| {
-            *node.total_quantities.borrow_mut() = node.quantities.clone();
-            *node.total_values.borrow_mut() = node.values.clone();
+            *node.total_quantities.borrow_mut() += &node.quantities;
+            *node.total_values.borrow_mut() += &node.values;
         });
         self.root.iter_post().for_each(|(_, node)| {
             for child in node.children.values() {
