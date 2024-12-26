@@ -81,7 +81,7 @@ impl Command {
         );
         let dated_positions = dated_positions
             .iter()
-            .flat_map(|(k, v)| shortener.shorten(*k).map(|k| (k, v)))
+            .filter_map(|(k, v)| shortener.shorten(*k).map(|k| (k, v)))
             .collect::<DatedPositions>();
         let multiperiod_tree =
             MultiperiodTree::create(dates.clone(), journal.registry.clone(), &dated_positions);
