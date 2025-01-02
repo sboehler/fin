@@ -6,8 +6,8 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    AccountID, Assertion, Booking, Close, CommodityID, Interval, Open, Period, Positions, Price,
-    Transaction,
+    AccountID, Assertion, Booking, Close, CommodityID, Interval, Open, Partition, Period,
+    Positions, Price, Transaction,
 };
 use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
@@ -278,24 +278,27 @@ impl Journal {
 }
 
 impl Journal {
-    pub fn query(&self) -> impl Iterator<Item = Entry> + '_ {
-        self.days.values().flat_map(|day| {
-            day.transactions
-                .iter()
-                .chain(day.gains.iter())
-                .flat_map(|t| {
-                    t.bookings.iter().map(|b| Entry {
-                        date: t.date,
-                        description: t.description.clone(),
-                        account: b.account,
-                        other: b.other,
-                        commodity: b.commodity,
-                        valuation: self.valuation,
-                        quantity: b.quantity,
-                        value: b.value,
+    pub fn query<'a>(&'a self, part: &'a Partition) -> impl Iterator<Item = Entry> + 'a {
+        self.days
+            .values()
+            .filter(|d| part.contains(d.date.clone()))
+            .flat_map(|day| {
+                day.transactions
+                    .iter()
+                    .chain(day.gains.iter())
+                    .flat_map(|t| {
+                        t.bookings.iter().map(|b| Entry {
+                            date: t.date,
+                            description: t.description.clone(),
+                            account: b.account,
+                            other: b.other,
+                            commodity: b.commodity,
+                            valuation: self.valuation,
+                            quantity: b.quantity,
+                            value: b.value,
+                        })
                     })
-                })
-        })
+            })
     }
 }
 

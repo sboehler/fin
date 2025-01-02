@@ -230,6 +230,10 @@ impl Partition {
         }
     }
 
+    pub fn contains(&self, d: NaiveDate) -> bool {
+        self.cover().map(|p| p.contains(d)).unwrap_or(false)
+    }
+
     pub fn from_interval(period: Period, interval: Interval) -> Partition {
         if interval == Interval::Single {
             return Partition {

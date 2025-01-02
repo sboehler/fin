@@ -28,6 +28,9 @@ pub struct Command {
     #[arg(short, long)]
     from_date: Option<NaiveDate>,
 
+    #[arg(short, long)]
+    to_date: Option<NaiveDate>,
+
     #[command(flatten)]
     period: PeriodArgs,
 
@@ -48,8 +51,9 @@ impl Command {
         journal.process(val.as_ref(), None)?;
         let partition = Partition::from_interval(
             Period(
-                journal.min_transaction_date().unwrap(),
-                self.from_date.unwrap_or_else(|| Local::now().date_naive()),
+                self.from_date
+                    .unwrap_or_else(|| journal.min_transaction_date().unwrap()),
+                self.to_date.unwrap_or_else(|| Local::now().date_naive()),
             ),
             self.period.to_interval(),
         );
@@ -68,7 +72,7 @@ impl Command {
         // );
         let aligner = Aligner::new(dates.clone());
         let dated_positions = journal
-            .query()
+            .query(&partition)
             // .flat_map(|row| closer.process(row))
             .flat_map(|row| aligner.align(row))
             .sum::<DatedPositions>();

@@ -1,5 +1,4 @@
 use std::{
-    cell::RefCell,
     fmt::Alignment,
     iter::{self, Sum},
     ops::{AddAssign, Deref},
