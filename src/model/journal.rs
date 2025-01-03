@@ -281,23 +281,19 @@ impl Journal {
     pub fn query<'a>(&'a self, part: &'a Partition) -> impl Iterator<Item = Entry> + 'a {
         self.days
             .values()
-            .filter(|d| part.contains(d.date))
-            .flat_map(|day| {
-                day.transactions
-                    .iter()
-                    .chain(day.gains.iter())
-                    .flat_map(|t| {
-                        t.bookings.iter().map(|b| Entry {
-                            date: t.date,
-                            description: t.description.clone(),
-                            account: b.account,
-                            other: b.other,
-                            commodity: b.commodity,
-                            valuation: self.valuation,
-                            quantity: b.quantity,
-                            value: b.value,
-                        })
-                    })
+            .filter(|day| part.contains(day.date))
+            .flat_map(|day| day.transactions.iter().chain(day.gains.iter()))
+            .flat_map(|t| {
+                t.bookings.iter().map(|b| Entry {
+                    date: t.date,
+                    description: t.description.clone(),
+                    account: b.account,
+                    other: b.other,
+                    commodity: b.commodity,
+                    valuation: self.valuation,
+                    quantity: b.quantity,
+                    value: b.value,
+                })
             })
     }
 }
