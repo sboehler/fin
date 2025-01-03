@@ -51,8 +51,7 @@ impl Command {
         journal.process(val.as_ref(), None)?;
         let partition = Partition::from_interval(
             Period(
-                self.from_date
-                    .unwrap_or_else(|| journal.min_transaction_date().unwrap()),
+                self.from_date.or(journal.min_transaction_date()).unwrap(),
                 self.to_date.unwrap_or_else(|| Local::now().date_naive()),
             ),
             self.period.to_interval(),
