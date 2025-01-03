@@ -281,7 +281,7 @@ impl Journal {
     pub fn query<'a>(&'a self, part: &'a Partition) -> impl Iterator<Item = Entry> + 'a {
         self.days
             .values()
-            .filter(|d| part.contains(d.date.clone()))
+            .filter(|d| part.contains(d.date))
             .flat_map(|day| {
                 day.transactions
                     .iter()
