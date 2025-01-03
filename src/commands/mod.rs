@@ -1,6 +1,6 @@
 use clap::Subcommand;
 
-mod check;
+mod balance;
 mod format;
 mod parse;
 
@@ -8,5 +8,5 @@ mod parse;
 pub enum Commands {
     Parse(parse::Command),
     Format(format::Command),
-    Check(check::Command),
+    Balance(balance::Command),
 }
