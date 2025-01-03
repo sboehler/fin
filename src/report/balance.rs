@@ -140,6 +140,8 @@ pub struct MultiperiodTree {
     dates: Vec<NaiveDate>,
     registry: Rc<Registry>,
 
+    cumulative: bool,
+
     root: Node<Position>,
 }
 
@@ -162,11 +164,13 @@ impl MultiperiodTree {
     pub fn create(
         dates: Vec<NaiveDate>,
         registry: Rc<Registry>,
+        cumulative: bool,
         dated_positions: &DatedPositions,
     ) -> Self {
         let mut res = Self {
             dates: dates.clone(),
             registry: registry.clone(),
+            cumulative,
             root: Node::<Position>::default(),
         };
         dated_positions.iter().for_each(|(account, position)| {
@@ -205,84 +209,93 @@ impl MultiperiodTree {
         table.add_row(Row::Separator);
 
         let mut total_al = Position::default();
-        [Assets, Liabilities].iter().for_each(|&account_type| {
-            if let Some(node) = self.root.children.get(account_type.to_string().as_str()) {
+        for account_type in [Assets, Liabilities] {
+            let header = account_type.to_string();
+            if let Some(node) = self.root.children.get(&header) {
                 node.iter_post().for_each(|(_, node)| total_al += node);
-                self.render_subtree(&mut table, node, account_type);
+                self.render_subtree(&mut table, node, header, false);
                 table.add_row(Row::Empty);
             }
-        });
-        self.render_summary(&mut table, "Total (A+L)", &total_al, false);
+        }
+        self.render_summary(&mut table, "Total (A+L)".into(), &total_al, false);
 
         table.add_row(Row::Separator);
 
         let mut total_eie = Position::default();
-        [Equity, Income, Expenses].iter().for_each(|&account_type| {
-            if let Some(node) = self.root.children.get(account_type.to_string().as_str()) {
+        for account_type in [Equity, Income, Expenses] {
+            let header = account_type.to_string();
+            if let Some(node) = self.root.children.get(&header) {
                 node.iter_post().for_each(|(_, node)| total_eie += node);
-                self.render_subtree(&mut table, node, account_type);
+                self.render_subtree(&mut table, node, header, true);
                 table.add_row(Row::Empty);
             }
-        });
-        self.render_summary(&mut table, "Total (E+I+E)", &total_eie, true);
+        }
+        self.render_summary(&mut table, "Total (E+I+E)".into(), &total_eie, true);
 
         table.add_row(Row::Separator);
 
         let mut delta = total_al;
         delta += &total_eie;
-        self.render_summary(&mut table, "Delta", &delta, false);
+        self.render_summary(&mut table, "Delta".into(), &delta, false);
         table.add_row(Row::Separator);
         table
     }
 
-    fn render_summary(&self, table: &mut Table, header: &str, node: &Position, neg: bool) {
-        let header_cell = Cell::Text {
-            text: header.to_string(),
-            indent: 0,
-            align: Alignment::Left,
-        };
-        let total_value = node.values.values().sum::<Positions<NaiveDate, Decimal>>();
-        let row = Row::Row(
-            iter::once(header_cell)
-                .chain(self.dates.iter().map(|date| {
-                    total_value
-                        .get(date)
-                        .map(|v| if neg { -*v } else { *v })
-                        .map(|value| Cell::Decimal { value })
-                        .unwrap_or(Cell::Empty)
-                }))
-                .collect(),
-        );
-        table.add_row(row);
+    fn render_summary(&self, table: &mut Table, header: String, node: &Position, neg: bool) {
+        self.render_node(table, header, 0, &node.values, neg);
     }
 
-    fn render_subtree(&self, table: &mut Table, root: &Node<Position>, account_type: AccountType) {
-        root.iter_pre().for_each(|(v, node)| {
-            let text = v
-                .last()
-                .map(|s| s.to_string())
-                .unwrap_or(format!("{}", account_type));
-            let header_cell = Cell::Text {
-                text,
-                indent: 2 * v.len(),
-                align: Alignment::Left,
+    fn render_subtree(&self, table: &mut Table, root: &Node<Position>, header: String, neg: bool) {
+        root.iter_pre().for_each(|(path, node)| {
+            let header = match path.last() {
+                None => header.clone(),
+                Some(segment) => segment.to_string(),
             };
-            let total_value = node.values.values().sum::<Positions<NaiveDate, Decimal>>();
-            let row = Row::Row(
-                iter::once(header_cell)
-                    .chain(self.dates.iter().map(|date| {
-                        total_value
-                            .get(date)
-                            .map(|v| match account_type {
-                                Assets | Liabilities => *v,
-                                Equity | Income | Expenses => -*v,
-                            })
-                            .map(|value| Cell::Decimal { value })
-                            .unwrap_or(Cell::Empty)
-                    }))
-                    .collect(),
-            );
-            table.add_row(row);
+            let indent = 2 * path.len();
+            self.render_node(table, header, indent, &node.values, neg);
         });
+    }
+
+    fn render_node(
+        &self,
+        table: &mut Table,
+        header: String,
+        indent: usize,
+        positions: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
+        neg: bool,
+    ) {
+        let mut cells = Vec::new();
+        cells.push(Cell::Text {
+            text: header,
+            indent,
+            align: Alignment::Left,
+        });
+        let total_value = positions.values().sum::<Positions<NaiveDate, Decimal>>();
+        for value in self.cumulative_sum(total_value) {
+            if value.is_zero() {
+                cells.push(Cell::Empty);
+            } else {
+                cells.push(Cell::Decimal {
+                    value: if neg { -value } else { value },
+                });
+            }
+        }
+        table.add_row(Row::Row(cells));
+    }
+
+    fn cumulative_sum(&self, positions: Positions<NaiveDate, Decimal>) -> Vec<Decimal> {
+        let mut sum = Decimal::ZERO;
+        self.dates
+            .iter()
+            .map(|date| match (positions.get(date), self.cumulative) {
+                (None, true) => sum,
+                (None, false) => Decimal::ZERO,
+                (Some(value), true) => {
+                    sum += value;
+                    sum
+                }
+                (Some(value), false) => *value,
+            })
+            .collect()
     }
 }

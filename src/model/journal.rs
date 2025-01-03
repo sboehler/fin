@@ -312,6 +312,7 @@ pub struct Entry {
 
 pub struct Closer {
     dates: Vec<NaiveDate>,
+    close: bool,
     current: usize,
     quantities: Positions<(AccountID, CommodityID), Decimal>,
     values: Positions<(AccountID, CommodityID), Decimal>,
@@ -320,9 +321,10 @@ pub struct Closer {
 }
 
 impl Closer {
-    pub fn new(dates: Vec<NaiveDate>, equity: AccountID) -> Self {
+    pub fn new(dates: Vec<NaiveDate>, equity: AccountID, close: bool) -> Self {
         Closer {
             dates,
+            close,
             equity,
             quantities: Default::default(),
             values: Default::default(),
@@ -331,6 +333,9 @@ impl Closer {
     }
 
     pub fn process(&mut self, r: Entry) -> Vec<Entry> {
+        if !self.close {
+            return vec![r];
+        }
         let mut res = Vec::new();
         if self.current < self.dates.len() {
             if r.date >= self.dates[self.current] {

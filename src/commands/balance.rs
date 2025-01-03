@@ -1,5 +1,6 @@
 use crate::model::analyzer::analyze_files;
 use crate::model::entities::{Interval, Partition, Period};
+use crate::model::journal::Closer;
 use crate::report::balance::{Aligner, DatedPositions, MultiperiodTree, Shortener};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
@@ -24,6 +25,12 @@ pub struct Command {
 
     #[arg(long)]
     last: Option<usize>,
+
+    #[arg(long)]
+    cumulative: bool,
+
+    #[arg(long)]
+    close: bool,
 
     #[arg(short, long)]
     from_date: Option<NaiveDate>,
@@ -65,14 +72,15 @@ impl Command {
             .collect::<Vec<_>>();
         dates.reverse();
 
-        // let mut closer = Closer::new(
-        //     partition.start_dates(),
-        //     journal.registry.account_id("Equity:Equity").unwrap(),
-        // );
+        let mut closer = Closer::new(
+            partition.start_dates(),
+            journal.registry.account_id("Equity:Equity").unwrap(),
+            self.close,
+        );
         let aligner = Aligner::new(dates.clone());
         let dated_positions = journal
             .query(&partition)
-            // .flat_map(|row| closer.process(row))
+            .flat_map(|row| closer.process(row))
             .flat_map(|row| aligner.align(row))
             .sum::<DatedPositions>();
         let shortener = Shortener::new(
@@ -83,8 +91,12 @@ impl Command {
                 .collect(),
         );
         let dated_positions = dated_positions.map_account(|account| shortener.shorten(account));
-        let multiperiod_tree =
-            MultiperiodTree::create(dates.clone(), journal.registry.clone(), &dated_positions);
+        let multiperiod_tree = MultiperiodTree::create(
+            dates.clone(),
+            journal.registry.clone(),
+            self.cumulative,
+            &dated_positions,
+        );
         let table = multiperiod_tree.render();
         let renderer = TextRenderer {
             table,
