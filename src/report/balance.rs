@@ -194,28 +194,18 @@ impl MultiperiodTree {
                 .collect::<Vec<_>>(),
         );
         table.add_row(Row::Separator);
-        let header = iter::once(Cell::Text {
-            text: "Account".to_string(),
-            align: Alignment::Center,
-            indent: 0,
-        })
-        .chain(self.dates.iter().map(|d| Cell::Text {
-            text: format!("{}", d.format("%Y-%m-%d")),
-            align: Alignment::Center,
-            indent: 0,
-        }))
-        .collect();
-        table.add_row(Row::Row(header));
+        self.render_header(&mut table);
         table.add_row(Row::Separator);
 
         let mut total_al = Position::default();
         for account_type in [Assets, Liabilities] {
             let header = account_type.to_string();
-            if let Some(node) = self.root.children.get(&header) {
-                node.iter_post().for_each(|(_, node)| total_al += node);
-                self.render_subtree(&mut table, node, header, false);
-                table.add_row(Row::Empty);
-            }
+            let Some(node) = self.root.children.get(&header) else {
+                continue;
+            };
+            node.iter_post().for_each(|(_, node)| total_al += node);
+            self.render_subtree(&mut table, node, header, false);
+            table.add_row(Row::Empty);
         }
         self.render_summary(&mut table, "Total (A+L)".into(), &total_al, false);
 
@@ -224,11 +214,12 @@ impl MultiperiodTree {
         let mut total_eie = Position::default();
         for account_type in [Equity, Income, Expenses] {
             let header = account_type.to_string();
-            if let Some(node) = self.root.children.get(&header) {
-                node.iter_post().for_each(|(_, node)| total_eie += node);
-                self.render_subtree(&mut table, node, header, true);
-                table.add_row(Row::Empty);
-            }
+            let Some(node) = self.root.children.get(&header) else {
+                continue;
+            };
+            node.iter_post().for_each(|(_, node)| total_eie += node);
+            self.render_subtree(&mut table, node, header, true);
+            table.add_row(Row::Empty);
         }
         self.render_summary(&mut table, "Total (E+I+E)".into(), &total_eie, true);
 
@@ -239,6 +230,23 @@ impl MultiperiodTree {
         self.render_summary(&mut table, "Delta".into(), &delta, false);
         table.add_row(Row::Separator);
         table
+    }
+
+    fn render_header(&self, table: &mut Table) {
+        let mut cells = Vec::new();
+        cells.push(Cell::Text {
+            text: "Account".to_string(),
+            align: Alignment::Center,
+            indent: 0,
+        });
+        for date in &self.dates {
+            cells.push(Cell::Text {
+                text: format!("{}", date.format("%Y-%m-%d")),
+                align: Alignment::Center,
+                indent: 0,
+            });
+        }
+        table.add_row(Row::Row(cells));
     }
 
     fn render_summary(&self, table: &mut Table, header: String, node: &Position, neg: bool) {
