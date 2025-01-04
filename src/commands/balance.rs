@@ -1,7 +1,7 @@
 use crate::model::analyzer::analyze_files;
 use crate::model::entities::{Interval, Partition, Period};
 use crate::model::journal::Closer;
-use crate::report::balance::{Aligner, DatedPositions, MultiperiodTree, Shortener};
+use crate::report::balance::{Aligner, DatedPositions, ReportBuilder, Shortener};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::{Local, NaiveDate};
@@ -91,15 +91,15 @@ impl Command {
                 .collect(),
         );
         let dated_positions = dated_positions.map_account(|account| shortener.shorten(account));
-        let multiperiod_tree = MultiperiodTree::create(
-            dates.clone(),
-            journal.registry.clone(),
-            self.cumulative,
-            Vec::new(),
-            true,
-            &dated_positions,
-        );
-        let table = multiperiod_tree.render();
+        let builder = ReportBuilder {
+            registry: journal.registry.clone(),
+            dates: dates.clone(),
+            cumulative: self.cumulative,
+            value: true,
+            show_commodities: Vec::new(),
+        };
+        let report = builder.build(&dated_positions);
+        let table = report.render();
         let renderer = TextRenderer {
             table,
             round: self.round.unwrap_or(0),
