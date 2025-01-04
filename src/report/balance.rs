@@ -143,6 +143,17 @@ pub struct Position {
     values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
 }
 
+impl Position {
+    pub fn negate(&mut self) {
+        self.quantities.values_mut().for_each(|positions| {
+            positions.values_mut().for_each(|value| *value = -*value);
+        });
+        self.values.values_mut().for_each(|positions| {
+            positions.values_mut().for_each(|value| *value = -*value);
+        });
+    }
+}
+
 impl AddAssign<&Position> for Position {
     fn add_assign(&mut self, rhs: &Position) {
         self.quantities += &rhs.quantities;
@@ -209,37 +220,31 @@ impl Report {
         self.render_header(&mut table);
         table.add_row(Row::Separator);
 
-        // let mut total_al = Position::default();
         for account_type in [Assets, Liabilities] {
             let header = account_type.to_string();
             let Some(node) = self.root.children.get(&header) else {
                 continue;
             };
-            // node.iter_post().for_each(|(_, node)| total_al += node);
             self.render_subtree(&mut table, node, header);
             table.add_row(Row::Empty);
         }
-        // self.render_summary(&mut table, "Total (A+L)".into(), &total_al, false);
+        self.render_summary(&mut table, "Total (A+L)".into(), &self.total_al);
 
         table.add_row(Row::Separator);
 
-        // let mut total_eie = Position::default();
         for account_type in [Equity, Income, Expenses] {
             let header = account_type.to_string();
             let Some(node) = self.root.children.get(&header) else {
                 continue;
             };
-            // node.iter_post().for_each(|(_, node)| total_eie += node);
             self.render_subtree(&mut table, node, header);
             table.add_row(Row::Empty);
         }
-        // self.render_summary(&mut table, "Total (E+I+E)".into(), &total_eie, true);
+        self.render_summary(&mut table, "Total (E+I+E)".into(), &self.total_eie);
 
         table.add_row(Row::Separator);
 
-        // let mut delta = total_al;
-        // delta += &total_eie;
-        // self.render_summary(&mut table, "Delta".into(), &delta, false);
+        self.render_summary(&mut table, "Delta".into(), &self.delta);
         table.add_row(Row::Separator);
         table
     }
@@ -261,15 +266,9 @@ impl Report {
         table.add_row(Row::Row(cells));
     }
 
-    // fn render_summary(
-    //     &self,
-    //     table: &mut Table,
-    //     header: String,
-    //     node: &RenderedPosition,
-    //     neg: bool,
-    // ) {
-    //     self.render_node(table, header, 0, node, neg);
-    // }
+    fn render_summary(&self, table: &mut Table, header: String, node: &Amount) {
+        self.render_line(table, header, 0, node);
+    }
 
     fn render_subtree(&self, table: &mut Table, root: &Node<Amount>, header: String) {
         root.iter_pre().for_each(|(path, node)| {
@@ -278,18 +277,18 @@ impl Report {
                 Some(segment) => segment.to_string(),
             };
             let indent = 2 * path.len();
-            self.render_node(table, header, indent, node);
+            self.render_line(table, header, indent, node);
         });
     }
 
-    fn render_node(&self, table: &mut Table, header: String, indent: usize, node: &Amount) {
+    fn render_line(&self, table: &mut Table, header: String, indent: usize, amount: &Amount) {
         let mut cells = Vec::with_capacity(1 + self.dates.len());
         cells.push(Cell::Text {
             text: header,
             indent,
             align: Alignment::Left,
         });
-        match node {
+        match amount {
             Amount::Empty => {
                 for _ in &self.dates {
                     cells.push(Cell::Empty);
@@ -351,22 +350,9 @@ impl ReportBuilder {
 
         dated_positions.iter().for_each(|(account, position)| {
             let account_name = self.registry.account_name(*account);
-            let segments = self.to_segments(&account_name);
-            let mut value = match self.amount_type {
-                ReportAmount::Value if self.show_commodities(account) => {
-                    let value_by_commodity = self.by_commodity_name(&position.values);
-                    Amount::ValueByCommodity(value_by_commodity)
-                }
-                ReportAmount::Value => {
-                    let aggregate_positions = Self::aggregate_values(position);
-                    let aggregate_value = self.to_vector(&aggregate_positions);
-                    Amount::AggregateValue(aggregate_value)
-                }
-                ReportAmount::Quantity => {
-                    let quantity_by_commodity = self.by_commodity_name(&position.quantities);
-                    Amount::QuantityByCommodity(quantity_by_commodity)
-                }
-            };
+            let segments = account_name.split(":").collect::<Vec<_>>();
+            let show_commodities = self.show_commodities(account);
+            let mut value = self.to_amount(position, show_commodities);
             if !account.account_type.is_al() {
                 value.negate();
             }
@@ -378,17 +364,40 @@ impl ReportBuilder {
             }
         });
 
+        let mut delta = Position::default();
+        delta += &total_al;
+        delta += &total_eie;
+        total_eie.negate();
+
+        let total_al = self.to_amount(&total_al, false);
+        let total_eie = self.to_amount(&total_eie, false);
+        let delta = self.to_amount(&delta, false);
+
         Report {
             dates: self.dates.clone(),
             root,
-            total_al: Amount::Empty,
-            total_eie: Amount::Empty,
-            delta: Amount::Empty,
+            total_al,
+            total_eie,
+            delta,
         }
     }
 
-    fn to_segments<'a>(&self, account_name: &'a str) -> Vec<&'a str> {
-        account_name.split(":").collect::<Vec<_>>()
+    fn to_amount(&self, position: &Position, show_commodities: bool) -> Amount {
+        match self.amount_type {
+            ReportAmount::Value if show_commodities => {
+                let value_by_commodity = self.by_commodity_name(&position.values);
+                Amount::ValueByCommodity(value_by_commodity)
+            }
+            ReportAmount::Value => {
+                let aggregate_positions = Self::aggregate_values(position);
+                let aggregate_value = self.to_vector(&aggregate_positions);
+                Amount::AggregateValue(aggregate_value)
+            }
+            ReportAmount::Quantity => {
+                let quantity_by_commodity = self.by_commodity_name(&position.quantities);
+                Amount::QuantityByCommodity(quantity_by_commodity)
+            }
+        }
     }
 
     fn by_commodity_name(
