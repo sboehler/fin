@@ -233,7 +233,7 @@ impl MultiperiodTree {
     }
 
     fn render_header(&self, table: &mut Table) {
-        let mut cells = Vec::new();
+        let mut cells = Vec::with_capacity(1 + self.dates.len());
         cells.push(Cell::Text {
             text: "Account".to_string(),
             align: Alignment::Center,
@@ -272,7 +272,7 @@ impl MultiperiodTree {
         positions: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
         neg: bool,
     ) {
-        let mut cells = Vec::new();
+        let mut cells = Vec::with_capacity(1 + self.dates.len());
         cells.push(Cell::Text {
             text: header,
             indent,
