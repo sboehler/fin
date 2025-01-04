@@ -4,6 +4,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+
 pub struct Node<V> {
     pub children: HashMap<String, Node<V>>,
     pub value: V,
@@ -76,6 +77,17 @@ impl<V: Default> Node<V> {
                 .or_default()
                 .lookup_or_create_mut_node(rest),
             [] => self,
+        }
+    }
+
+    pub fn insert(&mut self, names: &[&str], value: V) {
+        match *names {
+            [first, ref rest @ ..] => self
+                .children
+                .entry(first.into())
+                .or_default()
+                .insert(rest, value),
+            [] => self.value = value,
         }
     }
 }

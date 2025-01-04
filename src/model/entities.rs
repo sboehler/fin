@@ -376,6 +376,19 @@ where
     }
 }
 
+impl<K, V> FromIterator<(K, V)> for Positions<K, V>
+where
+    K: Eq + std::hash::Hash + Copy,
+{
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        let mut res: Positions<K, V> = Default::default();
+        iter.into_iter().for_each(|(k, v)| {
+            res.insert(k, v);
+        });
+        res
+    }
+}
+
 impl<'a, 'b, K, V> Extend<(K, &'a V)> for Positions<K, V>
 where
     K: Eq + std::hash::Hash + Copy,

@@ -95,6 +95,8 @@ impl Command {
             dates.clone(),
             journal.registry.clone(),
             self.cumulative,
+            Vec::new(),
+            true,
             &dated_positions,
         );
         let table = multiperiod_tree.render();

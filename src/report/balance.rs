@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fmt::Alignment,
     iter::{self, Sum},
     ops::{AddAssign, Deref},
@@ -136,15 +137,6 @@ impl<'a> FromIterator<(AccountID, &'a Position)> for DatedPositions {
     }
 }
 
-pub struct MultiperiodTree {
-    dates: Vec<NaiveDate>,
-    registry: Rc<Registry>,
-
-    cumulative: bool,
-
-    root: Node<Position>,
-}
-
 #[derive(Default)]
 pub struct Position {
     quantities: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
@@ -157,6 +149,20 @@ impl AddAssign<&Position> for Position {
         self.values += &rhs.values;
     }
 }
+pub struct MultiperiodTree {
+    dates: Vec<NaiveDate>,
+
+    root: Node<RenderedPosition>,
+}
+
+#[derive(Default)]
+enum RenderedPosition {
+    #[default]
+    Empty,
+    Value(Vec<Decimal>),
+    ValueByCommodity(HashMap<String, Vec<Decimal>>),
+    QuantityByCommodity(HashMap<String, Vec<Decimal>>),
+}
 
 use AccountType::*;
 
@@ -165,26 +171,49 @@ impl MultiperiodTree {
         dates: Vec<NaiveDate>,
         registry: Rc<Registry>,
         cumulative: bool,
+        show_commodities: Vec<Regex>,
+        value: bool,
         dated_positions: &DatedPositions,
     ) -> Self {
         let mut res = Self {
             dates: dates.clone(),
-            registry: registry.clone(),
-            cumulative,
-            root: Node::<Position>::default(),
+            root: Node::<RenderedPosition>::default(),
         };
         dated_positions.iter().for_each(|(account, position)| {
-            let node = res.lookup(account);
-            node.quantities += &position.quantities;
-            node.values += &position.values;
+            let account_name = registry.account_name(*account);
+            let segments = account_name.split(":").collect::<Vec<_>>();
+            let show = show_commodities.iter().any(|re| re.is_match(&account_name));
+            if !value || show {
+                let positions = match value {
+                    true => &position.values,
+                    false => &position.quantities,
+                };
+                let values = positions
+                    .iter()
+                    .map(|(commodity, positions)| {
+                        let name = registry.commodity_name(*commodity);
+                        let values = res.to_vector(positions, cumulative);
+                        (name, values)
+                    })
+                    .collect::<HashMap<_, _>>();
+
+                res.root.insert(
+                    &segments,
+                    match value {
+                        true => RenderedPosition::ValueByCommodity(values),
+                        false => RenderedPosition::QuantityByCommodity(values),
+                    },
+                );
+            } else {
+                let aggregate_positions = position
+                    .values
+                    .values()
+                    .sum::<Positions<NaiveDate, Decimal>>();
+                let values = res.to_vector(&aggregate_positions, cumulative);
+                res.root.insert(&segments, RenderedPosition::Value(values));
+            }
         });
         res
-    }
-
-    fn lookup<'a>(&'a mut self, account_id: &AccountID) -> &'a mut Node<Position> {
-        let account_name = self.registry.account_name(*account_id);
-        let segments = account_name.split(":").collect::<Vec<_>>();
-        self.root.lookup_or_create_mut_node(&segments)
     }
 
     pub fn render(&self) -> Table {
@@ -197,37 +226,37 @@ impl MultiperiodTree {
         self.render_header(&mut table);
         table.add_row(Row::Separator);
 
-        let mut total_al = Position::default();
+        // let mut total_al = Position::default();
         for account_type in [Assets, Liabilities] {
             let header = account_type.to_string();
             let Some(node) = self.root.children.get(&header) else {
                 continue;
             };
-            node.iter_post().for_each(|(_, node)| total_al += node);
+            // node.iter_post().for_each(|(_, node)| total_al += node);
             self.render_subtree(&mut table, node, header, false);
             table.add_row(Row::Empty);
         }
-        self.render_summary(&mut table, "Total (A+L)".into(), &total_al, false);
+        // self.render_summary(&mut table, "Total (A+L)".into(), &total_al, false);
 
         table.add_row(Row::Separator);
 
-        let mut total_eie = Position::default();
+        // let mut total_eie = Position::default();
         for account_type in [Equity, Income, Expenses] {
             let header = account_type.to_string();
             let Some(node) = self.root.children.get(&header) else {
                 continue;
             };
-            node.iter_post().for_each(|(_, node)| total_eie += node);
+            // node.iter_post().for_each(|(_, node)| total_eie += node);
             self.render_subtree(&mut table, node, header, true);
             table.add_row(Row::Empty);
         }
-        self.render_summary(&mut table, "Total (E+I+E)".into(), &total_eie, true);
+        // self.render_summary(&mut table, "Total (E+I+E)".into(), &total_eie, true);
 
         table.add_row(Row::Separator);
 
-        let mut delta = total_al;
-        delta += &total_eie;
-        self.render_summary(&mut table, "Delta".into(), &delta, false);
+        // let mut delta = total_al;
+        // delta += &total_eie;
+        // self.render_summary(&mut table, "Delta".into(), &delta, false);
         table.add_row(Row::Separator);
         table
     }
@@ -249,18 +278,30 @@ impl MultiperiodTree {
         table.add_row(Row::Row(cells));
     }
 
-    fn render_summary(&self, table: &mut Table, header: String, node: &Position, neg: bool) {
-        self.render_node(table, header, 0, &node.values, neg);
-    }
+    // fn render_summary(
+    //     &self,
+    //     table: &mut Table,
+    //     header: String,
+    //     node: &RenderedPosition,
+    //     neg: bool,
+    // ) {
+    //     self.render_node(table, header, 0, node, neg);
+    // }
 
-    fn render_subtree(&self, table: &mut Table, root: &Node<Position>, header: String, neg: bool) {
+    fn render_subtree(
+        &self,
+        table: &mut Table,
+        root: &Node<RenderedPosition>,
+        header: String,
+        neg: bool,
+    ) {
         root.iter_pre().for_each(|(path, node)| {
             let header = match path.last() {
                 None => header.clone(),
                 Some(segment) => segment.to_string(),
             };
             let indent = 2 * path.len();
-            self.render_node(table, header, indent, &node.values, neg);
+            self.render_node(table, header, indent, node, neg);
         });
     }
 
@@ -269,7 +310,7 @@ impl MultiperiodTree {
         table: &mut Table,
         header: String,
         indent: usize,
-        positions: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
+        node: &RenderedPosition,
         neg: bool,
     ) {
         let mut cells = Vec::with_capacity(1 + self.dates.len());
@@ -278,32 +319,70 @@ impl MultiperiodTree {
             indent,
             align: Alignment::Left,
         });
-        let total_value = positions.values().sum::<Positions<NaiveDate, Decimal>>();
-        for value in self.cumulative_sum(total_value) {
-            if value.is_zero() {
-                cells.push(Cell::Empty);
-            } else {
-                cells.push(Cell::Decimal {
-                    value: if neg { -value } else { value },
-                });
+        match node {
+            RenderedPosition::Empty => {
+                for _ in &self.dates {
+                    cells.push(Cell::Empty);
+                }
+                table.add_row(Row::Row(cells));
             }
+            RenderedPosition::Value(values) => {
+                for value in values {
+                    if value.is_zero() {
+                        cells.push(Cell::Empty);
+                    } else {
+                        cells.push(Cell::Decimal {
+                            value: if neg { -value } else { *value },
+                        });
+                    }
+                }
+                table.add_row(Row::Row(cells));
+            }
+            RenderedPosition::ValueByCommodity(values) => {
+                for _ in &self.dates {
+                    cells.push(Cell::Empty);
+                }
+                table.add_row(Row::Row(cells));
+                for (commodity, values) in values.iter() {
+                    let mut cells = Vec::with_capacity(1 + self.dates.len());
+                    cells.push(Cell::Text {
+                        text: commodity.clone(),
+                        indent: indent + 2,
+                        align: Alignment::Left,
+                    });
+                    for value in values {
+                        cells.push(Cell::Decimal {
+                            value: if neg { -value } else { *value },
+                        });
+                    }
+                    table.add_row(Row::Row(cells))
+                }
+            }
+            RenderedPosition::QuantityByCommodity(_) => todo!(),
         }
-        table.add_row(Row::Row(cells));
     }
 
-    fn cumulative_sum(&self, positions: Positions<NaiveDate, Decimal>) -> Vec<Decimal> {
+    fn to_vector(
+        &self,
+        positions: &Positions<NaiveDate, Decimal>,
+        cumulative: bool,
+    ) -> Vec<Decimal> {
         let mut sum = Decimal::ZERO;
         self.dates
             .iter()
-            .map(|date| match (positions.get(date), self.cumulative) {
-                (None, true) => sum,
-                (None, false) => Decimal::ZERO,
-                (Some(value), true) => {
+            .map(|date| positions.get(date).cloned().unwrap_or_default())
+            .map(|value| {
+                if cumulative {
                     sum += value;
                     sum
+                } else {
+                    value
                 }
-                (Some(value), false) => *value,
             })
             .collect()
     }
+}
+
+pub enum TreeMode {
+    Value,
 }
