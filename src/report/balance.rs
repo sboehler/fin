@@ -154,7 +154,7 @@ impl AddAssign<&Position> for Position {
 pub enum Amount {
     #[default]
     Empty,
-    Value(Vec<Decimal>),
+    AggregateValue(Vec<Decimal>),
     ValueByCommodity(HashMap<String, Vec<Decimal>>),
     QuantityByCommodity(HashMap<String, Vec<Decimal>>),
 }
@@ -276,7 +276,7 @@ impl Report {
                 }
                 table.add_row(Row::Row(cells));
             }
-            Amount::Value(values) => {
+            Amount::AggregateValue(values) => {
                 for value in values {
                     if value.is_zero() {
                         cells.push(Cell::Empty);
@@ -317,8 +317,13 @@ pub struct ReportBuilder {
     pub dates: Vec<NaiveDate>,
     pub registry: Rc<Registry>,
     pub cumulative: bool,
+    pub amount_type: ReportAmount,
     pub show_commodities: Vec<Regex>,
-    pub value: bool,
+}
+
+pub enum ReportAmount {
+    Value,
+    Quantity,
 }
 
 impl ReportBuilder {
@@ -327,21 +332,23 @@ impl ReportBuilder {
 
         dated_positions.iter().for_each(|(account, position)| {
             let account_name = self.registry.account_name(*account);
-            let segments = account_name.split(":").collect::<Vec<_>>();
-            let show = self.show_commodities(&account_name);
-            if self.value {
-                if show {
-                    let values = self.by_commodity_name(&position.values);
-                    root.insert(&segments, Amount::ValueByCommodity(values));
-                } else {
-                    let aggregate_positions = Self::aggregate_values(position);
-                    let values = self.to_vector(&aggregate_positions);
-                    root.insert(&segments, Amount::Value(values));
+            let segments = self.to_segments(&account_name);
+            let value = match self.amount_type {
+                ReportAmount::Value if self.show_commodities(account) => {
+                    let value_by_commodity = self.by_commodity_name(&position.values);
+                    Amount::ValueByCommodity(value_by_commodity)
                 }
-            } else {
-                let values = self.by_commodity_name(&position.quantities);
-                root.insert(&segments, Amount::QuantityByCommodity(values));
-            }
+                ReportAmount::Value => {
+                    let aggregate_positions = Self::aggregate_values(position);
+                    let aggregate_value = self.to_vector(&aggregate_positions);
+                    Amount::AggregateValue(aggregate_value)
+                }
+                ReportAmount::Quantity => {
+                    let quantity_by_commodity = self.by_commodity_name(&position.quantities);
+                    Amount::QuantityByCommodity(quantity_by_commodity)
+                }
+            };
+            root.insert(&segments, value);
         });
         Report {
             dates: self.dates.clone(),
@@ -350,6 +357,10 @@ impl ReportBuilder {
             total_eie: Amount::Empty,
             delta: Amount::Empty,
         }
+    }
+
+    fn to_segments<'a>(&self, account_name: &'a str) -> Vec<&'a str> {
+        account_name.split(":").collect::<Vec<_>>()
     }
 
     fn by_commodity_name(
@@ -367,11 +378,9 @@ impl ReportBuilder {
         values
     }
 
-    fn show_commodities(&self, account_name: &str) -> bool {
-        let show = self
-            .show_commodities
-            .iter()
-            .any(|re| re.is_match(account_name));
+    fn show_commodities(&self, account: &AccountID) -> bool {
+        let name = self.registry.account_name(*account);
+        let show = self.show_commodities.iter().any(|re| re.is_match(&name));
         show
     }
 

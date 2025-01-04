@@ -1,7 +1,7 @@
 use crate::model::analyzer::analyze_files;
 use crate::model::entities::{Interval, Partition, Period};
 use crate::model::journal::Closer;
-use crate::report::balance::{Aligner, DatedPositions, ReportBuilder, Shortener};
+use crate::report::balance::{Aligner, DatedPositions, ReportAmount, ReportBuilder, Shortener};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::{Local, NaiveDate};
@@ -95,8 +95,8 @@ impl Command {
             registry: journal.registry.clone(),
             dates: dates.clone(),
             cumulative: self.cumulative,
-            value: true,
             show_commodities: Vec::new(),
+            amount_type: ReportAmount::Value,
         };
         let report = builder.build(&dated_positions);
         let table = report.render();
