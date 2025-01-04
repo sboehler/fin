@@ -159,6 +159,33 @@ pub enum Amount {
     QuantityByCommodity(HashMap<String, Vec<Decimal>>),
 }
 
+impl Amount {
+    pub fn negate(&mut self) {
+        match self {
+            Amount::Empty => {}
+            Amount::AggregateValue(values) => {
+                for value in values {
+                    *value = -*value;
+                }
+            }
+            Amount::ValueByCommodity(values) => {
+                for (_, values) in values.iter_mut() {
+                    for value in values {
+                        *value = -*value;
+                    }
+                }
+            }
+            Amount::QuantityByCommodity(values) => {
+                for (_, values) in values.iter_mut() {
+                    for value in values {
+                        *value = -*value;
+                    }
+                }
+            }
+        }
+    }
+}
+
 use AccountType::*;
 
 pub struct Report {
@@ -189,7 +216,7 @@ impl Report {
                 continue;
             };
             // node.iter_post().for_each(|(_, node)| total_al += node);
-            self.render_subtree(&mut table, node, header, false);
+            self.render_subtree(&mut table, node, header);
             table.add_row(Row::Empty);
         }
         // self.render_summary(&mut table, "Total (A+L)".into(), &total_al, false);
@@ -203,7 +230,7 @@ impl Report {
                 continue;
             };
             // node.iter_post().for_each(|(_, node)| total_eie += node);
-            self.render_subtree(&mut table, node, header, true);
+            self.render_subtree(&mut table, node, header);
             table.add_row(Row::Empty);
         }
         // self.render_summary(&mut table, "Total (E+I+E)".into(), &total_eie, true);
@@ -244,25 +271,18 @@ impl Report {
     //     self.render_node(table, header, 0, node, neg);
     // }
 
-    fn render_subtree(&self, table: &mut Table, root: &Node<Amount>, header: String, neg: bool) {
+    fn render_subtree(&self, table: &mut Table, root: &Node<Amount>, header: String) {
         root.iter_pre().for_each(|(path, node)| {
             let header = match path.last() {
                 None => header.clone(),
                 Some(segment) => segment.to_string(),
             };
             let indent = 2 * path.len();
-            self.render_node(table, header, indent, node, neg);
+            self.render_node(table, header, indent, node);
         });
     }
 
-    fn render_node(
-        &self,
-        table: &mut Table,
-        header: String,
-        indent: usize,
-        node: &Amount,
-        neg: bool,
-    ) {
+    fn render_node(&self, table: &mut Table, header: String, indent: usize, node: &Amount) {
         let mut cells = Vec::with_capacity(1 + self.dates.len());
         cells.push(Cell::Text {
             text: header,
@@ -281,9 +301,7 @@ impl Report {
                     if value.is_zero() {
                         cells.push(Cell::Empty);
                     } else {
-                        cells.push(Cell::Decimal {
-                            value: if neg { -value } else { *value },
-                        });
+                        cells.push(Cell::Decimal { value: *value });
                     }
                 }
                 table.add_row(Row::Row(cells));
@@ -301,9 +319,7 @@ impl Report {
                         align: Alignment::Left,
                     });
                     for value in values {
-                        cells.push(Cell::Decimal {
-                            value: if neg { -value } else { *value },
-                        });
+                        cells.push(Cell::Decimal { value: *value });
                     }
                     table.add_row(Row::Row(cells))
                 }
@@ -330,10 +346,13 @@ impl ReportBuilder {
     pub fn build(&self, dated_positions: &DatedPositions) -> Report {
         let mut root: Node<Amount> = Default::default();
 
+        let mut total_al = Position::default();
+        let mut total_eie = Position::default();
+
         dated_positions.iter().for_each(|(account, position)| {
             let account_name = self.registry.account_name(*account);
             let segments = self.to_segments(&account_name);
-            let value = match self.amount_type {
+            let mut value = match self.amount_type {
                 ReportAmount::Value if self.show_commodities(account) => {
                     let value_by_commodity = self.by_commodity_name(&position.values);
                     Amount::ValueByCommodity(value_by_commodity)
@@ -348,8 +367,17 @@ impl ReportBuilder {
                     Amount::QuantityByCommodity(quantity_by_commodity)
                 }
             };
+            if !account.account_type.is_al() {
+                value.negate();
+            }
             root.insert(&segments, value);
+
+            match account.account_type {
+                Assets | Liabilities => total_al += position,
+                Expenses | Income | Equity => total_eie += position,
+            }
         });
+
         Report {
             dates: self.dates.clone(),
             root,
@@ -367,21 +395,19 @@ impl ReportBuilder {
         &self,
         positions: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
     ) -> HashMap<String, Vec<Decimal>> {
-        let values = positions
+        positions
             .iter()
             .map(|(commodity, positions)| {
                 let name = self.registry.commodity_name(*commodity);
                 let values = self.to_vector(positions);
                 (name, values)
             })
-            .collect::<HashMap<_, _>>();
-        values
+            .collect::<HashMap<_, _>>()
     }
 
     fn show_commodities(&self, account: &AccountID) -> bool {
         let name = self.registry.account_name(*account);
-        let show = self.show_commodities.iter().any(|re| re.is_match(&name));
-        show
+        self.show_commodities.iter().any(|re| re.is_match(&name))
     }
 
     fn to_vector(&self, positions: &Positions<NaiveDate, Decimal>) -> Vec<Decimal> {
