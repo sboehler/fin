@@ -27,10 +27,7 @@ pub struct Command {
     last: Option<usize>,
 
     #[arg(long)]
-    cumulative: bool,
-
-    #[arg(long)]
-    close: bool,
+    diff: bool,
 
     #[arg(short, long)]
     from_date: Option<NaiveDate>,
@@ -75,7 +72,7 @@ impl Command {
         let mut closer = Closer::new(
             partition.start_dates(),
             journal.registry.account_id("Equity:Equity").unwrap(),
-            self.close,
+            !self.diff,
         );
         let aligner = Aligner::new(dates.clone());
         let dated_positions = journal
@@ -94,14 +91,13 @@ impl Command {
         let builder = ReportBuilder {
             registry: journal.registry.clone(),
             dates: dates.clone(),
-            cumulative: self.cumulative,
+            cumulative: !self.diff,
             show_commodities: Vec::new(),
             amount_type: ReportAmount::Value,
         };
         let report = builder.build(&dated_positions);
-        let table = report.render();
         let renderer = TextRenderer {
-            table,
+            table: report.render(),
             round: self.round.unwrap_or(0),
         };
         let mut lock = stdout().lock();
