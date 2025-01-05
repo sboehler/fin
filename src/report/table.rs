@@ -102,14 +102,16 @@ impl TextRenderer {
         write!(w, "|")?;
         for (i, cell) in cells.iter().enumerate() {
             match cell {
-                Cell::Empty => write!(w, "{}", " ".repeat(column_widths[i] + 2))?,
-                Cell::Decimal { value } => {
+                Cell::Decimal { value } if !value.is_zero() => {
                     let color = match value.is_sign_negative() {
                         true => "red",
                         false => "green",
                     };
                     let formatted = self.format_number(value).color(color);
                     write!(w, " {:>1$} ", formatted, column_widths[i])?
+                }
+                Cell::Empty | Cell::Decimal { .. } => {
+                    write!(w, "{}", " ".repeat(column_widths[i] + 2))?
                 }
                 Cell::Text {
                     text,

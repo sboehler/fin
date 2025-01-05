@@ -23,6 +23,9 @@ pub struct Command {
     #[arg(short, long)]
     mapping: Vec<Mapping>,
 
+    #[arg(short, long)]
+    show_commodities: Vec<Regex>,
+
     #[arg(long)]
     last: Option<usize>,
 
@@ -92,7 +95,7 @@ impl Command {
             registry: journal.registry.clone(),
             dates: dates.clone(),
             cumulative: !self.diff,
-            show_commodities: Vec::new(),
+            show_commodities: self.show_commodities.clone(),
             amount_type: ReportAmount::Value,
         };
         let report = builder.build(&dated_positions);

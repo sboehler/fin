@@ -297,11 +297,7 @@ impl Report {
             }
             Amount::AggregateValue(values) => {
                 for value in values {
-                    if value.is_zero() {
-                        cells.push(Cell::Empty);
-                    } else {
-                        cells.push(Cell::Decimal { value: *value });
-                    }
+                    cells.push(Cell::Decimal { value: *value })
                 }
                 table.add_row(Row::Row(cells));
             }
