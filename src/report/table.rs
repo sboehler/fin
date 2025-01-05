@@ -171,7 +171,7 @@ impl TextRenderer {
     fn format_number(&self, value: &Decimal) -> String {
         let value = value.round_dp_with_strategy(
             u32::try_from(self.round).unwrap(),
-            rust_decimal::RoundingStrategy::ToPositiveInfinity,
+            rust_decimal::RoundingStrategy::MidpointAwayFromZero,
         );
         let text = format!("{value:.0$}", self.round);
         let index = text.find('.').unwrap_or(text.len());

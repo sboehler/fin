@@ -85,8 +85,9 @@ impl NormalizedPrices {
         quantity: &Decimal,
         commodity: &CommodityID,
     ) -> Result<Decimal> {
-        if let Some(p) = self.prices.get(commodity) {
-            return Ok((quantity * p).round_dp(8));
+        if let Some(price) = self.prices.get(commodity) {
+            return Ok((quantity * price)
+                .round_dp_with_strategy(8, rust_decimal::RoundingStrategy::MidpointAwayFromZero));
         }
         Err(ModelError::NoPriceFound {
             date: self.date,

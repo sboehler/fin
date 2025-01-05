@@ -155,7 +155,7 @@ impl Journal {
     ) -> Result<(), ModelError> {
         let mut prices = Prices::default();
         let mut quantities = Positions::default();
-        let mut prev_normalized_prices = None;
+        let mut values = Positions::default();
 
         self.valuation = valuation.cloned();
         self.closing = close;
@@ -181,11 +181,12 @@ impl Journal {
                     self.registry.clone(),
                     &normalized_prices,
                     &quantities,
-                    &prev_normalized_prices,
+                    &values,
                     day.date,
                 )?;
                 Self::update_quantities(&day.transactions, &mut quantities);
-                prev_normalized_prices = normalized_prices;
+                Self::update_values(&day.transactions, &mut values);
+                Self::update_values(&day.gains, &mut values);
                 day.closings = closings
             } else {
                 let mut day = Day::new(date);
@@ -204,6 +205,16 @@ impl Journal {
             .iter()
             .flat_map(|t| t.bookings.iter())
             .for_each(|b| quantities.add(&(b.account, b.commodity), &b.quantity));
+    }
+
+    fn update_values(
+        transactions: &[Transaction],
+        values: &mut Positions<(AccountID, CommodityID), Decimal>,
+    ) {
+        transactions
+            .iter()
+            .flat_map(|t| t.bookings.iter())
+            .for_each(|b| values.add(&(b.account, b.commodity), &b.value.unwrap_or_default()));
     }
 
     fn valuate_transactions(
@@ -226,53 +237,53 @@ impl Journal {
         registry: Rc<Registry>,
         normalized_prices: &Option<NormalizedPrices>,
         quantities: &Positions<(AccountID, CommodityID), Decimal>,
-        prev_normalized_prices: &Option<NormalizedPrices>,
+        values: &Positions<(AccountID, CommodityID), Decimal>,
         date: NaiveDate,
     ) -> Result<Vec<Transaction>, ModelError> {
-        let gains = normalized_prices
-            .as_ref()
-            .map(|np| {
-                Ok(quantities
-                    .iter()
-                    .map(|((account, commodity), qty)| {
-                        if qty.is_zero() || !account.account_type.is_al() {
-                            return Ok(None);
-                        }
-                        let v_prev = prev_normalized_prices
-                            .as_ref()
-                            .unwrap()
-                            .valuate(&registry, qty, commodity)?;
-                        let v_cur = np.valuate(&registry, qty, commodity)?;
-                        let gain = v_cur - v_prev;
-                        if gain.is_zero() {
-                            return Ok(None);
-                        }
-                        Ok(Some(Transaction {
-                            date,
-                            rng: None,
-                            description: format!(
-                                "Adjust value of {} in account {}",
-                                registry.commodity_name(*commodity),
-                                registry.account_name(*account)
-                            )
-                            .into(),
-                            bookings: Booking::create(
-                                registry.valuation_account_for(*account),
-                                *account,
-                                Decimal::ZERO,
-                                *commodity,
-                                Some(gain),
-                            ),
-                            targets: Some(vec![*commodity]),
-                        }))
-                    })
-                    .collect::<Result<Vec<Option<Transaction>>, ModelError>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect::<Vec<_>>())
-            })
-            .transpose()?
-            .unwrap_or_default();
+        let Some(normalized_prices) = normalized_prices.as_ref() else {
+            return Ok(Vec::new());
+        };
+        let mut gains = Vec::new();
+
+        for ((account, commodity), qty) in quantities.iter() {
+            if qty.is_zero()
+                && values
+                    .get(&(*account, *commodity))
+                    .map_or(true, |v| v.is_zero())
+            {
+                continue;
+            }
+            if !account.account_type.is_al() {
+                continue;
+            }
+            let v_prev = values
+                .get(&(*account, *commodity))
+                .copied()
+                .unwrap_or_default();
+            let v_cur = normalized_prices.valuate(&registry, qty, commodity)?;
+            let gain = v_cur - v_prev;
+            if gain.is_zero() {
+                continue;
+            }
+            gains.push(Transaction {
+                date,
+                rng: None,
+                description: format!(
+                    "Adjust value of {} in account {}",
+                    registry.commodity_name(*commodity),
+                    registry.account_name(*account)
+                )
+                .into(),
+                bookings: Booking::create(
+                    registry.valuation_account_for(*account),
+                    *account,
+                    Decimal::ZERO,
+                    *commodity,
+                    Some(gain),
+                ),
+                targets: Some(vec![*commodity]),
+            });
+        }
         Ok(gains)
     }
 }
