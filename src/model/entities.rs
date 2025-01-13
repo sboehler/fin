@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     iter::Sum,
-    ops::{AddAssign, Deref, DerefMut},
+    ops::{Add, AddAssign, Deref, DerefMut},
     rc::Rc,
 };
 
@@ -347,7 +347,7 @@ where
     K: Eq + std::hash::Hash + Clone,
     V: AddAssign<&'a V> + 'a + Default,
 {
-    pub fn add(&mut self, key: &K, value: &'a V) {
+    pub fn insert_or_add(&mut self, key: &K, value: &'a V) {
         *self.entry(key.clone()).or_default() += value;
     }
 
@@ -371,20 +371,7 @@ where
 {
     fn from_iter<T: IntoIterator<Item = (K, &'a V)>>(iter: T) -> Self {
         let mut res: Positions<K, V> = Default::default();
-        iter.into_iter().for_each(|(k, v)| res.add(&k, v));
-        res
-    }
-}
-
-impl<K, V> FromIterator<(K, V)> for Positions<K, V>
-where
-    K: Eq + std::hash::Hash + Copy,
-{
-    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
-        let mut res: Positions<K, V> = Default::default();
-        iter.into_iter().for_each(|(k, v)| {
-            res.insert(k, v);
-        });
+        iter.into_iter().for_each(|(k, v)| res.insert_or_add(&k, v));
         res
     }
 }
@@ -397,7 +384,7 @@ where
 {
     fn extend<T: IntoIterator<Item = (K, &'a V)>>(&mut self, iter: T) {
         for (k, v) in iter {
-            self.add(&k, v)
+            self.insert_or_add(&k, v)
         }
     }
 }
@@ -410,8 +397,24 @@ where
 {
     fn add_assign(&mut self, rhs: &'a Positions<K, V>) {
         for (k, v) in &rhs.positions {
-            self.add(k, v)
+            self.insert_or_add(k, v)
         }
+    }
+}
+
+impl<'a, 'b, K, V> Add<&'a Positions<K, V>> for &'b Positions<K, V>
+where
+    K: Eq + std::hash::Hash + Copy,
+    V: Default + AddAssign<&'b V>,
+    'a: 'b,
+{
+    type Output = Positions<K, V>;
+
+    fn add(self, rhs: &'a Positions<K, V>) -> Self::Output {
+        let mut res = Positions::default();
+        res += self;
+        res += rhs;
+        res
     }
 }
 

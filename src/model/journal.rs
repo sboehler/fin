@@ -105,7 +105,7 @@ impl Journal {
                             account_name: self.registry.account_name(b.account),
                         });
                     }
-                    quantities.add(&(b.account, b.commodity), &b.quantity);
+                    quantities.insert_or_add(&(b.account, b.commodity), &b.quantity);
                     Ok(())
                 })
             })?;
@@ -204,7 +204,7 @@ impl Journal {
         transactions
             .iter()
             .flat_map(|t| t.bookings.iter())
-            .for_each(|b| quantities.add(&(b.account, b.commodity), &b.quantity));
+            .for_each(|b| quantities.insert_or_add(&(b.account, b.commodity), &b.quantity));
     }
 
     fn update_values(
@@ -214,7 +214,9 @@ impl Journal {
         transactions
             .iter()
             .flat_map(|t| t.bookings.iter())
-            .for_each(|b| values.add(&(b.account, b.commodity), &b.value.unwrap_or_default()));
+            .for_each(|b| {
+                values.insert_or_add(&(b.account, b.commodity), &b.value.unwrap_or_default())
+            });
     }
 
     fn valuate_transactions(
@@ -385,9 +387,10 @@ impl Closer {
                 self.values.clear();
             }
             if r.account.account_type.is_ie() {
-                self.quantities.add(&(r.account, r.commodity), &r.quantity);
+                self.quantities
+                    .insert_or_add(&(r.account, r.commodity), &r.quantity);
                 if let Some(value) = &r.value {
-                    self.values.add(&(r.account, r.commodity), value);
+                    self.values.insert_or_add(&(r.account, r.commodity), value);
                 }
             };
         }

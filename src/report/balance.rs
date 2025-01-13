@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fmt::Alignment,
     iter::{self, Sum},
-    ops::{AddAssign, Deref},
+    ops::{Add, AddAssign, Deref},
     rc::Rc,
 };
 
@@ -29,9 +29,7 @@ impl Aligner {
     pub fn new(dates: Vec<NaiveDate>) -> Self {
         Self { dates }
     }
-}
 
-impl Aligner {
     pub fn align(&self, row: Entry) -> Option<Entry> {
         match self.dates.binary_search(&row.date) {
             Err(i) if i >= self.dates.len() => None,
@@ -82,12 +80,12 @@ impl DatedPositions {
         pos.quantities
             .entry(row.commodity)
             .or_default()
-            .add(&row.date, &row.quantity);
+            .insert_or_add(&row.date, &row.quantity);
         if let Some(value) = row.value {
             pos.values
                 .entry(row.commodity)
                 .or_default()
-                .add(&row.date, &value);
+                .insert_or_add(&row.date, &value);
         }
     }
 
@@ -161,6 +159,17 @@ impl AddAssign<&Position> for Position {
     }
 }
 
+impl Add<&Position> for &Position {
+    type Output = Position;
+
+    fn add(self, rhs: &Position) -> Position {
+        Position {
+            quantities: &self.quantities + &rhs.quantities,
+            values: &self.values + &rhs.values,
+        }
+    }
+}
+
 #[derive(Default)]
 pub enum Amount {
     #[default]
@@ -195,6 +204,18 @@ impl Amount {
             }
         }
     }
+
+    pub fn weight(&self) -> Decimal {
+        match self {
+            Amount::Empty => Decimal::ZERO,
+            Amount::AggregateValue(values) => values.iter().map(|d| d * d).sum::<Decimal>(),
+            Amount::ValueByCommodity(values) | Amount::QuantityByCommodity(values) => {
+                values.values().fold(Decimal::ZERO, |acc, values| {
+                    acc + values.iter().map(|d| d * d).sum::<Decimal>()
+                })
+            }
+        }
+    }
 }
 
 use AccountType::*;
@@ -225,7 +246,7 @@ impl Report {
             let Some(node) = self.root.children.get(&header) else {
                 continue;
             };
-            self.render_subtree(&mut table, node, header);
+            self.render_subtree(&mut table, node, header, 0);
             table.add_row(Row::Empty);
         }
         self.render_summary(&mut table, "Total (A+L)".into(), &self.total_al);
@@ -237,7 +258,7 @@ impl Report {
             let Some(node) = self.root.children.get(&header) else {
                 continue;
             };
-            self.render_subtree(&mut table, node, header);
+            self.render_subtree(&mut table, node, header, 0);
             table.add_row(Row::Empty);
         }
         self.render_summary(&mut table, "Total (E+I+E)".into(), &self.total_eie);
@@ -270,15 +291,20 @@ impl Report {
         self.render_line(table, header, 0, node);
     }
 
-    fn render_subtree(&self, table: &mut Table, root: &Node<Amount>, header: String) {
-        root.iter_pre().for_each(|(path, node)| {
-            let header = match path.last() {
-                None => header.clone(),
-                Some(segment) => segment.to_string(),
-            };
-            let indent = 2 * path.len();
-            self.render_line(table, header, indent, node);
-        });
+    fn render_subtree(
+        &self,
+        table: &mut Table,
+        root: &Node<Amount>,
+        header: String,
+        indent: usize,
+    ) {
+        let mut children = root.children.iter().collect::<Vec<_>>();
+        children.sort_by(|a, b| a.1.weight().cmp(&b.1.weight()).reverse());
+
+        self.render_line(table, header, indent, root);
+        for (segment, child) in children {
+            self.render_subtree(table, child, segment.clone(), indent + 2);
+        }
     }
 
     fn render_line(&self, table: &mut Table, header: String, indent: usize, amount: &Amount) {
