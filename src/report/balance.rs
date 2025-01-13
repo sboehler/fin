@@ -209,11 +209,11 @@ impl Amount {
         match self {
             Amount::Empty => Decimal::ZERO,
             Amount::AggregateValue(values) => values.iter().map(|d| d * d).sum::<Decimal>(),
-            Amount::ValueByCommodity(values) | Amount::QuantityByCommodity(values) => {
-                values.values().fold(Decimal::ZERO, |acc, values| {
-                    acc + values.iter().map(|d| d * d).sum::<Decimal>()
-                })
-            }
+            Amount::ValueByCommodity(values) | Amount::QuantityByCommodity(values) => values
+                .values()
+                .flat_map(|vs| vs.iter())
+                .map(|d| d * d)
+                .sum::<Decimal>(),
         }
     }
 }
