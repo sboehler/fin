@@ -191,20 +191,16 @@ impl Node {
         for child in self.children.values() {
             child.update_weights();
         }
-        let local_weight = match &self.amount {
+        let local_weight: Decimal = match &self.amount {
             Amount::Empty => Decimal::ZERO,
-            Amount::AggregateValue(values) => values.iter().map(|d| d * d).sum::<Decimal>(),
+            Amount::AggregateValue(values) => values.iter().map(|d| d * d).sum(),
             Amount::ValueByCommodity(values) | Amount::QuantityByCommodity(values) => values
                 .values()
                 .flat_map(|vs| vs.iter())
                 .map(|d| d * d)
-                .sum::<Decimal>(),
+                .sum(),
         };
-        let subtree_weight = self
-            .children
-            .values()
-            .map(|c| *c.weight.borrow())
-            .sum::<Decimal>();
+        let subtree_weight: Decimal = self.children.values().map(|c| *c.weight.borrow()).sum();
         self.weight.replace(local_weight + subtree_weight);
     }
 }
