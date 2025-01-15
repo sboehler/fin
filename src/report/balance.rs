@@ -203,7 +203,7 @@ impl Node {
         let subtree_weight = self
             .children
             .values()
-            .map(|c| c.weight.borrow().clone())
+            .map(|c| *c.weight.borrow())
             .sum::<Decimal>();
         self.weight.replace(local_weight + subtree_weight);
     }

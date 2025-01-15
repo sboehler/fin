@@ -39,7 +39,7 @@ impl Prices {
         self.normalize_rec(target, Decimal::ONE, &mut prices);
         NormalizedPrices {
             date: self.date,
-            target: target,
+            target,
             prices,
         }
     }
