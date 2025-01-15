@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fmt::Alignment,
     iter::{self, Sum},
@@ -171,6 +172,7 @@ impl Add<&Position> for &Position {
 struct Node {
     children: HashMap<String, Node>,
     amount: Amount,
+    weight: RefCell<Decimal>,
 }
 
 impl Node {
@@ -183,6 +185,27 @@ impl Node {
                 .insert(rest, amount),
             [] => self.amount = amount,
         }
+    }
+
+    pub fn update_weights(&self) {
+        for child in self.children.values() {
+            child.update_weights();
+        }
+        let local_weight = match &self.amount {
+            Amount::Empty => Decimal::ZERO,
+            Amount::AggregateValue(values) => values.iter().map(|d| d * d).sum::<Decimal>(),
+            Amount::ValueByCommodity(values) | Amount::QuantityByCommodity(values) => values
+                .values()
+                .flat_map(|vs| vs.iter())
+                .map(|d| d * d)
+                .sum::<Decimal>(),
+        };
+        let subtree_weight = self
+            .children
+            .values()
+            .map(|c| c.weight.borrow().clone())
+            .sum::<Decimal>();
+        self.weight.replace(local_weight + subtree_weight);
     }
 }
 
@@ -220,18 +243,6 @@ impl Amount {
             }
         }
     }
-
-    pub fn weight(&self) -> Decimal {
-        match self {
-            Amount::Empty => Decimal::ZERO,
-            Amount::AggregateValue(values) => values.iter().map(|d| d * d).sum::<Decimal>(),
-            Amount::ValueByCommodity(values) | Amount::QuantityByCommodity(values) => values
-                .values()
-                .flat_map(|vs| vs.iter())
-                .map(|d| d * d)
-                .sum::<Decimal>(),
-        }
-    }
 }
 
 use AccountType::*;
@@ -262,6 +273,7 @@ impl Report {
             let Some(node) = self.root.children.get(&header) else {
                 continue;
             };
+            node.update_weights();
             self.render_subtree(&mut table, node, header, 0);
             table.add_row(Row::Empty);
         }
@@ -274,6 +286,7 @@ impl Report {
             let Some(node) = self.root.children.get(&header) else {
                 continue;
             };
+            node.update_weights();
             self.render_subtree(&mut table, node, header, 0);
             table.add_row(Row::Empty);
         }
@@ -309,7 +322,7 @@ impl Report {
 
     fn render_subtree(&self, table: &mut Table, root: &Node, header: String, indent: usize) {
         let mut children = root.children.iter().collect::<Vec<_>>();
-        children.sort_by(|a, b| a.1.amount.weight().cmp(&b.1.amount.weight()).reverse());
+        children.sort_by(|a, b| a.1.weight.borrow().cmp(&b.1.weight.borrow()).reverse());
 
         self.render_line(table, header, indent, &root.amount);
         for (segment, child) in children {
