@@ -248,22 +248,18 @@ impl Journal {
         let mut gains = Vec::new();
 
         for ((account, commodity), qty) in quantities.iter() {
-            if qty.is_zero()
-                && values
-                    .get(&(*account, *commodity))
-                    .map_or(true, |v| v.is_zero())
-            {
-                continue;
-            }
             if !account.account_type.is_al() {
                 continue;
             }
-            let v_prev = values
+            let previous_value = values
                 .get(&(*account, *commodity))
                 .copied()
                 .unwrap_or_default();
-            let v_cur = normalized_prices.valuate(&registry, qty, *commodity)?;
-            let gain = v_cur - v_prev;
+            if qty.is_zero() && previous_value.is_zero() {
+                continue;
+            }
+            let current_value = normalized_prices.valuate(&registry, qty, *commodity)?;
+            let gain = current_value - previous_value;
             if gain.is_zero() {
                 continue;
             }
