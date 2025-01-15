@@ -16,10 +16,7 @@ use crate::model::{
     registry::Registry,
 };
 
-use super::{
-    segment_tree::Node,
-    table::{Cell, Row, Table},
-};
+use super::table::{Cell, Row, Table};
 
 pub struct Aligner {
     dates: Vec<NaiveDate>,
@@ -171,6 +168,25 @@ impl Add<&Position> for &Position {
 }
 
 #[derive(Default)]
+struct Node {
+    children: HashMap<String, Node>,
+    amount: Amount,
+}
+
+impl Node {
+    pub fn insert(&mut self, names: &[&str], amount: Amount) {
+        match *names {
+            [first, ref rest @ ..] => self
+                .children
+                .entry(first.into())
+                .or_default()
+                .insert(rest, amount),
+            [] => self.amount = amount,
+        }
+    }
+}
+
+#[derive(Default)]
 pub enum Amount {
     #[default]
     Empty,
@@ -223,7 +239,7 @@ use AccountType::*;
 pub struct Report {
     pub dates: Vec<NaiveDate>,
 
-    pub root: Node<Amount>,
+    root: Node,
 
     pub total_al: Amount,
     pub total_eie: Amount,
@@ -291,17 +307,11 @@ impl Report {
         self.render_line(table, header, 0, node);
     }
 
-    fn render_subtree(
-        &self,
-        table: &mut Table,
-        root: &Node<Amount>,
-        header: String,
-        indent: usize,
-    ) {
+    fn render_subtree(&self, table: &mut Table, root: &Node, header: String, indent: usize) {
         let mut children = root.children.iter().collect::<Vec<_>>();
-        children.sort_by(|a, b| a.1.weight().cmp(&b.1.weight()).reverse());
+        children.sort_by(|a, b| a.1.amount.weight().cmp(&b.1.amount.weight()).reverse());
 
-        self.render_line(table, header, indent, root);
+        self.render_line(table, header, indent, &root.amount);
         for (segment, child) in children {
             self.render_subtree(table, child, segment.clone(), indent + 2);
         }
@@ -365,7 +375,7 @@ pub enum ReportAmount {
 
 impl ReportBuilder {
     pub fn build(&self, dated_positions: &DatedPositions) -> Report {
-        let mut root: Node<Amount> = Default::default();
+        let mut root: Node = Default::default();
 
         let mut total_al = Position::default();
         let mut total_eie = Position::default();

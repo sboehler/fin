@@ -34,29 +34,29 @@ impl Prices {
             .insert(price.target, Decimal::ONE / price.price);
     }
 
-    pub fn normalize(&self, target: &CommodityID) -> NormalizedPrices {
+    pub fn normalize(&self, target: CommodityID) -> NormalizedPrices {
         let mut prices = HashMap::default();
         self.normalize_rec(target, Decimal::ONE, &mut prices);
         NormalizedPrices {
             date: self.date,
-            target: *target,
+            target: target,
             prices,
         }
     }
 
     fn normalize_rec(
         &self,
-        target: &CommodityID,
+        target: CommodityID,
         target_price: Decimal,
         prices: &mut HashMap<CommodityID, Decimal>,
     ) {
-        prices.insert(*target, target_price);
-        if let Some(target_denominated) = self.prices.get(target) {
+        prices.insert(target, target_price);
+        if let Some(target_denominated) = self.prices.get(&target) {
             for (neighbor, price) in target_denominated {
                 if prices.contains_key(neighbor) {
                     continue;
                 }
-                self.normalize_rec(neighbor, price * target_price, prices)
+                self.normalize_rec(*neighbor, price * target_price, prices)
             }
         }
     }
@@ -72,10 +72,10 @@ pub struct NormalizedPrices {
 type Result<T> = result::Result<T, ModelError>;
 
 impl NormalizedPrices {
-    pub fn new(commodity: &CommodityID) -> Self {
+    pub fn new(commodity: CommodityID) -> Self {
         NormalizedPrices {
             date: NaiveDate::default(),
-            target: *commodity,
+            target: commodity,
             prices: HashMap::default(),
         }
     }
@@ -83,15 +83,15 @@ impl NormalizedPrices {
         &self,
         registry: &Rc<Registry>,
         quantity: &Decimal,
-        commodity: &CommodityID,
+        commodity: CommodityID,
     ) -> Result<Decimal> {
-        if let Some(price) = self.prices.get(commodity) {
+        if let Some(price) = self.prices.get(&commodity) {
             return Ok((quantity * price)
                 .round_dp_with_strategy(8, rust_decimal::RoundingStrategy::MidpointAwayFromZero));
         }
         Err(ModelError::NoPriceFound {
             date: self.date,
-            commodity_name: registry.commodity_name(*commodity),
+            commodity_name: registry.commodity_name(commodity),
             target_name: registry.commodity_name(self.target),
         })
     }

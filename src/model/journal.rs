@@ -150,14 +150,14 @@ impl Journal {
 
     pub fn process(
         &mut self,
-        valuation: Option<&CommodityID>,
+        valuation: Option<CommodityID>,
         close: Option<Interval>,
     ) -> Result<(), ModelError> {
         let mut prices = Prices::default();
         let mut quantities = Positions::default();
         let mut values = Positions::default();
 
-        self.valuation = valuation.cloned();
+        self.valuation = valuation;
         self.closing = close;
 
         for date in self.entire_period().expect("journal is empty").dates() {
@@ -228,7 +228,7 @@ impl Journal {
             for b in &mut t.bookings {
                 b.value = normalized_prices
                     .as_ref()
-                    .map(|p| p.valuate(registry, &b.quantity, &b.commodity))
+                    .map(|p| p.valuate(registry, &b.quantity, b.commodity))
                     .transpose()?;
             }
         }
@@ -262,7 +262,7 @@ impl Journal {
                 .get(&(*account, *commodity))
                 .copied()
                 .unwrap_or_default();
-            let v_cur = normalized_prices.valuate(&registry, qty, commodity)?;
+            let v_cur = normalized_prices.valuate(&registry, qty, *commodity)?;
             let gain = v_cur - v_prev;
             if gain.is_zero() {
                 continue;

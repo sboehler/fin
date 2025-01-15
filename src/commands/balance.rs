@@ -50,12 +50,12 @@ impl Command {
         let syntax_trees = parse_files(&self.journal)?;
         let mut journal = analyze_files(&syntax_trees)?;
         journal.check()?;
-        let val = self
+        let valuation = self
             .valuation
             .as_ref()
             .map(|s| journal.registry.commodity_id(s))
             .transpose()?;
-        journal.process(val.as_ref(), None)?;
+        journal.process(valuation, None)?;
         let partition = Partition::from_interval(
             Period(
                 self.from_date.or(journal.min_transaction_date()).unwrap(),
@@ -68,7 +68,7 @@ impl Command {
             .iter()
             .rev()
             .take(self.last.map(|v| v + 1).unwrap_or(usize::MAX))
-            .cloned()
+            .copied()
             .collect::<Vec<_>>();
         dates.reverse();
 
