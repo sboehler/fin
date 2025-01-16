@@ -17,6 +17,7 @@ fn main() {
         commands::Commands::Parse(p) => p.run(),
         commands::Commands::Format(p) => p.run(),
         commands::Commands::Balance(p) => p.run(),
+        commands::Commands::Fetch(p) => p.run(),
     };
     if let Err(e) = r {
         println!("{}", e);
