@@ -1,7 +1,10 @@
 use std::{error::Error, fs::File, path::PathBuf};
 
+use chrono::Days;
 use clap::Args;
-use serde::Deserialize;
+use yahoo::Client;
+
+use crate::quotes::yahoo::{self, Config};
 
 #[derive(Args)]
 pub struct Command {
@@ -11,16 +14,17 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let config = File::open(&self.config)?;
-        let result: Vec<Config> = serde_yaml::from_reader(config)?;
-        println!("{:?}", result);
+        let parsed_configs: Vec<Config> = serde_yaml::from_reader(config)?;
+        let client = Client::new();
+        let parsed_config = &parsed_configs[10];
+        let res = client.fetch(
+            &parsed_config.symbol,
+            chrono::offset::Utc::now(),
+            chrono::offset::Utc::now()
+                .checked_sub_days(Days::new(365))
+                .unwrap(),
+        );
+        println!("{:?}", res);
         Ok(())
     }
-}
-
-#[derive(Deserialize, Debug)]
-struct Config {
-    commodity: String,
-    target_commodity: String,
-    file: String,
-    symbol: String,
 }
