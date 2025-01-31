@@ -43,7 +43,6 @@ pub struct Journal {
     pub days: BTreeMap<NaiveDate, Day>,
 
     pub valuation: Option<CommodityID>,
-    pub closing: Option<Interval>,
 }
 
 impl Default for Journal {
@@ -58,7 +57,6 @@ impl Journal {
             registry: Rc::new(Registry::new()),
             days: BTreeMap::new(),
             valuation: None,
-            closing: None,
         }
     }
 
@@ -158,7 +156,6 @@ impl Journal {
         let mut values = Positions::default();
 
         self.valuation = valuation;
-        self.closing = close;
 
         for date in self.entire_period().expect("journal is empty").dates() {
             let closings = close
