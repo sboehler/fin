@@ -1,6 +1,7 @@
 use std::error::Error;
 
 use chrono::{DateTime, NaiveDate, Utc};
+use chrono_tz::Tz;
 use reqwest::{header::HeaderMap, Url};
 use serde::Deserialize;
 
@@ -8,17 +9,20 @@ pub struct Client {
     client: reqwest::blocking::Client,
 }
 
-impl Client {
-    pub fn new() -> Self {
+impl Default for Client {
+    fn default() -> Self {
         let mut headers = HeaderMap::new();
         headers.insert("User-Agent", Self::USER_AGENT.parse().unwrap());
-        let builder = reqwest::blocking::ClientBuilder::new();
-        let builder = builder.default_headers(headers);
         Self {
-            client: builder.build().unwrap(),
+            client: reqwest::blocking::ClientBuilder::new()
+                .default_headers(headers)
+                .build()
+                .unwrap(),
         }
     }
+}
 
+impl Client {
     const YAHOO_URL: &str = "https://query2.finance.yahoo.com/v8/finance/chart";
     const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15";
 
@@ -30,10 +34,33 @@ impl Client {
         t1: DateTime<Utc>,
     ) -> Result<Vec<Quote>, Box<dyn Error>> {
         let url = Self::create_url(sym, t0, t1)?;
-        let json: api::Body = self.client.get(url).send()?.json()?;
-        println!("{:?}", json);
-
-        Ok(vec![])
+        println!("fetching {}", url);
+        let body: api::Body = self.client.get(url).send()?.json().unwrap();
+        let result = body.chart.result.first().unwrap();
+        let tz: Tz = result.meta.exchange_timezone_name.parse()?;
+        let dates = result.timestamp.iter().map(|ts| {
+            DateTime::from_timestamp(*ts as i64, 0)
+                .unwrap()
+                .with_timezone(&tz)
+                .date_naive()
+        });
+        let q = &result.indicators.quote.first().unwrap();
+        let ac = &result.indicators.adjclose.first().unwrap();
+        Ok(dates
+            .enumerate()
+            .filter_map(|(i, date)| {
+                Some(Quote {
+                    date,
+                    open: q.open[i]?,
+                    high: q.high[i]?,
+                    low: q.low[i]?,
+                    close: q.close[i]?,
+                    adj_close: ac.adjclose[i]?,
+                    volume: q.volume[i]?,
+                })
+            })
+            .filter(|q| q.close > 0.0)
+            .collect())
     }
 
     fn create_url(sym: &str, t0: DateTime<Utc>, t1: DateTime<Utc>) -> Result<Url, Box<dyn Error>> {
@@ -47,7 +74,7 @@ impl Client {
         ];
 
         let mut url = Url::parse_with_params(Self::YAHOO_URL, &params)?;
-        url.path_segments_mut().unwrap().push(&sym);
+        url.path_segments_mut().unwrap().push(sym);
         Ok(url)
     }
 }
@@ -124,15 +151,15 @@ pub mod api {
 
     #[derive(Deserialize, Debug)]
     pub struct Quote {
-        pub volume: Vec<usize>,
-        pub high: Vec<f64>,
-        pub close: Vec<f64>,
-        pub low: Vec<f64>,
-        pub open: Vec<f64>,
+        pub volume: Vec<Option<usize>>,
+        pub high: Vec<Option<f64>>,
+        pub close: Vec<Option<f64>>,
+        pub low: Vec<Option<f64>>,
+        pub open: Vec<Option<f64>>,
     }
 
     #[derive(Deserialize, Debug)]
     pub struct Adjclose {
-        pub adjclose: Vec<f64>,
+        pub adjclose: Vec<Option<f64>>,
     }
 }
