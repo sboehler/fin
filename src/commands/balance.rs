@@ -15,7 +15,7 @@ use std::{error::Error, path::PathBuf};
 
 #[derive(Args)]
 pub struct Command {
-    journal: PathBuf,
+    path: PathBuf,
 
     #[arg(short, long)]
     valuation: Option<String>,
@@ -47,7 +47,7 @@ pub struct Command {
 
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
-        let syntax_trees = parse_files(&self.journal)?;
+        let syntax_trees = parse_files(&self.path)?;
         let mut journal = analyze_files(&syntax_trees)?;
         journal.check()?;
         let valuation = self
