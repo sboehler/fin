@@ -41,8 +41,6 @@ impl Day {
 pub struct Journal {
     pub registry: Rc<Registry>,
     pub days: BTreeMap<NaiveDate, Day>,
-
-    pub valuation: Option<CommodityID>,
 }
 
 impl Default for Journal {
@@ -56,7 +54,6 @@ impl Journal {
         Journal {
             registry: Rc::new(Registry::new()),
             days: BTreeMap::new(),
-            valuation: None,
         }
     }
 
@@ -154,8 +151,6 @@ impl Journal {
         let mut prices = Prices::default();
         let mut quantities = Positions::default();
         let mut values = Positions::default();
-
-        self.valuation = valuation;
 
         for date in self.entire_period().expect("journal is empty").dates() {
             let closings = close
@@ -296,7 +291,6 @@ impl Journal {
                     account: b.account,
                     other: b.other,
                     commodity: b.commodity,
-                    valuation: self.valuation,
                     quantity: b.quantity,
                     value: b.value,
                 })
@@ -310,7 +304,6 @@ pub struct Entry {
     pub account: AccountID,
     pub other: AccountID,
     pub commodity: CommodityID,
-    pub valuation: Option<CommodityID>,
     pub description: Rc<String>,
     pub quantity: Decimal,
     pub value: Option<Decimal>,
@@ -357,7 +350,6 @@ impl Closer {
                             commodity: *commodity,
                             quantity: -*quantity,
                             value: self.values.get(k).copied().map(Neg::neg),
-                            valuation: r.valuation,
                         }),
                 );
                 res.extend(
@@ -371,7 +363,6 @@ impl Closer {
                             commodity: *commodity,
                             quantity: *quantity,
                             value: self.values.get(k).copied(),
-                            valuation: r.valuation,
                         }),
                 );
 
