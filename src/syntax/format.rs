@@ -1,14 +1,14 @@
 use std::io::{self, Result, Write};
 
 use super::cst::{
-    Addon, Assertion, Close, Directive, Include, Open, Price, SubAssertion, SyntaxFile, Transaction,
+    Addon, Assertion, Close, Directive, Include, Open, Price, SubAssertion, SyntaxTree, Transaction,
 };
 
-pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<()> {
-    let n = initialize(syntax_tree);
+pub fn format_file(w: &mut impl Write, tree: &SyntaxTree) -> io::Result<()> {
+    let n = initialize(tree);
     let mut pos = 0;
-    for d in &syntax_tree.directives {
-        w.write_all(syntax_tree.range.file.text[pos..d.range().start].as_bytes())?;
+    for d in &tree.directives {
+        w.write_all(tree.range.file.text[pos..d.range().start].as_bytes())?;
         match d {
             Directive::Include(Include { path, .. }) => {
                 write!(w, "include {}", path.range.text())?;
@@ -108,13 +108,12 @@ pub fn format_file(w: &mut impl Write, syntax_tree: &SyntaxFile) -> io::Result<(
         }
         pos = d.range().end
     }
-    w.write_all(syntax_tree.range.file.text[pos..syntax_tree.range.end].as_bytes())?;
+    w.write_all(tree.range.file.text[pos..tree.range.end].as_bytes())?;
     Ok(())
 }
 
-fn initialize(syntax_tree: &SyntaxFile) -> usize {
-    syntax_tree
-        .directives
+fn initialize(tree: &SyntaxTree) -> usize {
+    tree.directives
         .iter()
         .filter_map(|d| match d {
             Directive::Transaction(Transaction { bookings, .. }) => Some(bookings),

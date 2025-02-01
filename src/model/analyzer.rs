@@ -13,16 +13,16 @@ use super::registry::Registry;
 use crate::{
     model::entities::Period,
     syntax::{
-        cst::{self, SyntaxFile},
+        cst::{self, SyntaxTree},
         error::SyntaxError,
     },
 };
 
 type Result<T> = std::result::Result<T, SyntaxError>;
 
-pub fn analyze_files(files: &Vec<SyntaxFile>) -> Result<Journal> {
+pub fn analyze_files(trees: &Vec<SyntaxTree>) -> Result<Journal> {
     let mut analyzer = Analyzer::new();
-    for file in files {
+    for file in trees {
         analyzer.analyze(file)?
     }
     Ok(Journal {
@@ -47,8 +47,8 @@ impl Analyzer {
         self.days.entry(d).or_insert_with(|| Day::new(d))
     }
 
-    fn analyze(&mut self, file: &SyntaxFile) -> Result<()> {
-        for d in &file.directives {
+    fn analyze(&mut self, tree: &SyntaxTree) -> Result<()> {
+        for d in &tree.directives {
             match d {
                 cst::Directive::Price(p) => self.analyze_price(p)?,
                 cst::Directive::Open(o) => self.analyze_open(o)?,

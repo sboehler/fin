@@ -5,7 +5,7 @@ use std::{
 };
 
 use self::{
-    cst::{Directive, Include, SyntaxFile},
+    cst::{Directive, Include, SyntaxTree},
     error::ParserError,
     file::File,
     parser::Parser,
@@ -18,7 +18,7 @@ pub mod format;
 pub mod parser;
 pub mod scanner;
 
-pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxFile>, ParserError> {
+pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxTree>, ParserError> {
     let mut res = Vec::new();
     let mut done = HashSet::new();
     let mut todo = VecDeque::new();
@@ -53,8 +53,8 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxFile>, ParserEr
     Ok(res)
 }
 
-pub fn parse_file(file_path: &Path) -> std::result::Result<SyntaxFile, Box<dyn Error>> {
+pub fn parse_file(file_path: &Path) -> std::result::Result<SyntaxTree, Box<dyn Error>> {
     let file = File::read(file_path).map_err(|e| ParserError::IO(file_path.to_path_buf(), e))?;
-    let syntax_tree = Parser::new(&file).parse()?;
-    Ok(syntax_tree)
+    let tree = Parser::new(&file).parse()?;
+    Ok(tree)
 }
