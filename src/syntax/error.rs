@@ -50,22 +50,17 @@ impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParserError::IO(path, e) => {
-                writeln!(
-                    f,
-                    "error reading file: {file}:",
-                    file = path.to_string_lossy()
-                )?;
+                let file = path.to_string_lossy();
+                writeln!(f, "error reading file: {file}:")?;
                 e.fmt(f)
             }
             ParserError::Cycle(path) => {
-                writeln!(
-                    f,
-                    "cycle detected. File {file} is referenced at least twice",
-                    file = path.to_string_lossy()
-                )
+                let file = path.to_string_lossy();
+                writeln!(f, "cycle detected: {file} is referenced at least twice")
             }
             ParserError::InvalidPath(file) => {
-                writeln!(f, "invalid path: {file}", file = file.to_string_lossy())
+                let file = file.to_string_lossy();
+                writeln!(f, "invalid path: {file}")
             }
             ParserError::SyntaxError(e) => writeln!(f, "{}", e),
         }
