@@ -1,12 +1,13 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use thiserror::Error;
 
-use crate::syntax::cst::Rng;
-
-use super::entities::{Assertion, Close, Open, Transaction};
+use super::{
+    entities::{AccountID, Assertion, Close, CommodityID, Open, SourceLoc, Transaction},
+    registry::Registry,
+};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ModelError {
@@ -43,45 +44,50 @@ impl Display for ModelError {
     }
 }
 
-#[derive(Error, Eq, PartialEq, Debug)]
+#[derive(Error, Debug)]
 pub enum JournalError {
     AccountAlreadyOpen {
         open: Box<Open>,
-        account_name: String,
+        registry: Rc<Registry>,
     },
     TransactionAccountNotOpen {
         transaction: Box<Transaction>,
-        account_name: String,
+        account: AccountID,
+        registry: Rc<Registry>,
     },
     AssertionAccountNotOpen {
         assertion: Box<Assertion>,
-        account_name: String,
+        registry: Rc<Registry>,
     },
     AssertionIncorrectBalance {
         assertion: Box<Assertion>,
         actual: Decimal,
-        account_name: String,
-        commodity_name: String,
+        registry: Rc<Registry>,
     },
     CloseNonzeroBalance {
         close: Box<Close>,
-        commodity_name: String,
+        commodity: CommodityID,
         balance: Decimal,
-        account_name: String,
+        registry: Rc<Registry>,
     },
 }
 
 impl JournalError {
-    fn write_context(range: &Option<Rng>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(rng) = range {
+    pub fn write_context(
+        location: &Option<SourceLoc>,
+        f: &mut std::fmt::Formatter<'_>,
+        registry: &Registry,
+    ) -> std::fmt::Result {
+        if let Some(loc) = location {
+            let file = registry.source_file(loc.file);
             writeln!(f)?;
-            if let Some(path) = &rng.file.path {
+            if let Some(ref path) = file.path {
                 write!(f, "Defined in file \"{}\", ", path.to_string_lossy())?;
             }
-            let (line, col) = rng.file.position(rng.start);
+            let (line, col) = file.position(loc.start);
             writeln!(f, "line {line}, column {col}")?;
             writeln!(f)?;
-            writeln!(f, "{}", rng)?;
+            file.fmt_range(f, loc.range())?;
         }
         Ok(())
     }
@@ -90,64 +96,69 @@ impl JournalError {
 impl Display for JournalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JournalError::AccountAlreadyOpen { open, account_name } => {
+            JournalError::AccountAlreadyOpen { open, registry } => {
                 writeln!(
                     f,
                     "Error: open directive on {date}: account {account} is already open.",
                     date = open.date,
-                    account = account_name,
+                    account = registry.account_name(open.account),
                 )?;
-                Self::write_context(&open.rng, f)?
+                Self::write_context(&open.rng, f, registry)?;
             }
             JournalError::TransactionAccountNotOpen {
                 transaction,
-                account_name,
+                account,
+                registry,
             } => {
                 writeln!(
                     f,
-                    "Error: transaction directive on {date}: account {account_name} is not open.",
+                    "Error: transaction directive on {date}: account {account} is not open.",
                     date = transaction.date,
+                    account = registry.account_name(*account),
                 )?;
-                Self::write_context(&transaction.rng, f)?
+                Self::write_context(&transaction.rng, f, registry)?;
             }
             JournalError::AssertionAccountNotOpen {
                 assertion,
-                account_name,
+                registry,
             } => {
                 writeln!(
                     f,
                     "Error: balance directive on {date}: account {account} is not open.",
-                    account = account_name,
+                    account = registry.account_name(assertion.account),
                     date = assertion.date,
                 )?;
-                Self::write_context(&assertion.rng, f)?
+                Self::write_context(&assertion.rng, f, registry)?;
             }
             JournalError::AssertionIncorrectBalance {
                 assertion,
                 actual,
-                account_name,
-                commodity_name,
+                registry,
             } => {
                 writeln!(
                     f,
-                    "Error: balance directive on {date}: account {account_name} has balance {actual} {commodity_name}, want {balance} {commodity_name}.",
+                    "Error: balance directive on {date}: account {account} has balance {actual} {commodity}, want {balance} {commodity}.",
                     balance = assertion.balance,
+                    account = registry.account_name(assertion.account),
+                    commodity = registry.commodity_name(assertion.commodity),
                     date = assertion.date,
                 )?;
-                Self::write_context(&assertion.rng, f)?
+                Self::write_context(&assertion.rng, f, registry)?;
             }
             JournalError::CloseNonzeroBalance {
                 close,
-                commodity_name,
+                commodity,
                 balance,
-                account_name,
+                registry,
             } => {
                 writeln!(
                     f,
-                    "Error: close directive on {date}: account {account_name} still has a balance of {balance} {commodity_name}, want zero.",
+                    "Error: close directive on {date}: account {account} still has a balance of {balance} {commodity}, want zero.",
                     date = close.date,
+                    account = registry.account_name(close.account),
+                    commodity = registry.commodity_name(*commodity),
                 )?;
-                Self::write_context(&close.rng, f)?
+                Self::write_context(&close.rng, f, registry)?;
             }
         }
         Ok(())

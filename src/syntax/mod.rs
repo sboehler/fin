@@ -18,7 +18,7 @@ pub mod format;
 pub mod parser;
 pub mod scanner;
 
-pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxTree>, ParserError> {
+pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, File)>, ParserError> {
     let mut res = Vec::new();
     let mut done = HashSet::new();
     let mut todo = VecDeque::new();
@@ -29,9 +29,9 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxTree>, ParserEr
 
     while let Some(file_path) = todo.pop_front() {
         let file = File::read(&file_path).map_err(|e| ParserError::IO(file_path.clone(), e))?;
-        let syntax_file = Parser::new(&file)
+        let syntax_file = Parser::new(&file.text)
             .parse()
-            .map_err(ParserError::SyntaxError)?;
+            .map_err(|e| ParserError::SyntaxError(e, file.clone()))?;
         let dir_name = file_path
             .parent()
             .ok_or(ParserError::InvalidPath(file_path.clone()))?;
@@ -39,7 +39,7 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxTree>, ParserEr
             if let Directive::Include(Include { path, .. }) = d {
                 todo.push_back(
                     dir_name
-                        .join(path.content.text())
+                        .join(&file.text[path.content.clone()])
                         .canonicalize()
                         .map_err(|e| ParserError::IO(file_path.clone(), e))?,
                 );
@@ -48,13 +48,13 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<SyntaxTree>, ParserEr
         if !done.insert(file_path.clone()) {
             Err(ParserError::Cycle(file_path.clone()))?;
         }
-        res.push(syntax_file);
+        res.push((syntax_file, file));
     }
     Ok(res)
 }
 
-pub fn parse_file(file_path: &Path) -> std::result::Result<SyntaxTree, Box<dyn Error>> {
+pub fn parse_file(file_path: &Path) -> std::result::Result<(SyntaxTree, File), Box<dyn Error>> {
     let file = File::read(file_path).map_err(|e| ParserError::IO(file_path.to_path_buf(), e))?;
-    let tree = Parser::new(&file).parse()?;
-    Ok(tree)
+    let tree = Parser::new(&file.text).parse()?;
+    Ok((tree, file))
 }

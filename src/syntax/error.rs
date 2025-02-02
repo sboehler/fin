@@ -2,7 +2,10 @@ use std::{fmt::Display, io, path::PathBuf};
 
 use thiserror::Error;
 
-use super::cst::{Rng, Token};
+use super::{
+    cst::{Rng, Token},
+    file::File,
+};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub struct SyntaxError {
@@ -13,9 +16,23 @@ pub struct SyntaxError {
 
 impl std::fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let (line, col) = self.rng.file.position(self.rng.start);
+        write!(
+            f,
+            "syntax error at position {}: want {}",
+            self.rng.start, self.want
+        )?;
+        if let Some(e) = &self.source {
+            writeln!(f, "{}", e)?;
+        }
+        Ok(())
+    }
+}
+
+impl SyntaxError {
+    pub fn full_error(&self, f: &mut std::fmt::Formatter, file: &File) -> std::fmt::Result {
+        let (line, col) = file.position(self.rng.start);
         writeln!(f)?;
-        if let Some(p) = &self.rng.file.path {
+        if let Some(p) = &file.path {
             writeln!(f, "In file \"{}\"", p.to_string_lossy())?;
         }
         write!(
@@ -26,7 +43,7 @@ impl std::fmt::Display for SyntaxError {
         writeln!(f)?;
         writeln!(f)?;
 
-        for (n, line) in self.rng.context() {
+        for (n, line) in file.context(self.rng.clone()) {
             writeln!(f, "{n:5} |{line}")?;
         }
         writeln!(f, "{}^ want {}", " ".repeat(col + 6), self.want,)?;
@@ -43,7 +60,7 @@ pub enum ParserError {
     IO(PathBuf, io::Error),
     Cycle(PathBuf),
     InvalidPath(PathBuf),
-    SyntaxError(SyntaxError),
+    SyntaxError(SyntaxError, File),
 }
 
 impl Display for ParserError {
@@ -62,7 +79,10 @@ impl Display for ParserError {
                 let file = file.to_string_lossy();
                 writeln!(f, "invalid path: {file}")
             }
-            ParserError::SyntaxError(e) => writeln!(f, "{}", e),
+            ParserError::SyntaxError(error, file) => {
+                writeln!(f, "{}", error)?;
+                error.full_error(f, file)
+            }
         }
     }
 }

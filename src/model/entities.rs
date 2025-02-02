@@ -10,6 +10,8 @@ use std::{
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
+use crate::syntax::cst::Rng;
+
 use super::error::ModelError;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Ord, PartialOrd)]
@@ -69,9 +71,30 @@ pub struct CommodityID {
     pub id: usize,
 }
 
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
+pub struct SourceLoc {
+    pub file: SourceFileID,
+    pub start: usize,
+    pub end: usize,
+}
+
+impl SourceLoc {
+    pub fn new(file: SourceFileID, range: Rng) -> Self {
+        SourceLoc {
+            file,
+            start: range.start,
+            end: range.end,
+        }
+    }
+
+    pub fn range(&self) -> std::ops::Range<usize> {
+        self.start..self.end
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Price {
-    pub rng: Option<Rng>,
+    pub rng: Option<SourceLoc>,
     pub date: NaiveDate,
     pub commodity: CommodityID,
     pub price: Decimal,
@@ -80,7 +103,7 @@ pub struct Price {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Open {
-    pub rng: Option<Rng>,
+    pub rng: Option<SourceLoc>,
     pub date: NaiveDate,
     pub account: AccountID,
 }
@@ -129,7 +152,7 @@ impl Booking {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Transaction {
-    pub rng: Option<Rng>,
+    pub rng: Option<SourceLoc>,
     pub date: NaiveDate,
     pub description: Rc<String>,
     pub bookings: Vec<Booking>,
@@ -138,7 +161,7 @@ pub struct Transaction {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Assertion {
-    pub rng: Option<Rng>,
+    pub rng: Option<SourceLoc>,
     pub date: NaiveDate,
     pub account: AccountID,
     pub balance: Decimal,
@@ -147,14 +170,12 @@ pub struct Assertion {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Close {
-    pub rng: Option<Rng>,
+    pub rng: Option<SourceLoc>,
     pub date: NaiveDate,
     pub account: AccountID,
 }
 
 use chrono::{Datelike, Days, Months};
-
-use crate::syntax::cst::Rng;
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Ord, PartialOrd)]
 pub enum Interval {
@@ -444,3 +465,6 @@ impl<K, V> DerefMut for Positions<K, V> {
         &mut self.positions
     }
 }
+
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd)]
+pub struct SourceFileID(pub usize);

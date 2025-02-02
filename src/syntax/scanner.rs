@@ -1,12 +1,10 @@
 use super::cst::{Character, Rng, Sequence, Token};
 use super::error::SyntaxError;
-use super::file::File;
-use std::rc::Rc;
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 
 #[derive(Clone)]
 pub struct Scanner<'a> {
-    pub source: &'a Rc<File>,
+    pub source: &'a str,
     chars: RefCell<Peekable<CharIndices<'a>>>,
 }
 
@@ -35,15 +33,15 @@ impl Scope<'_, '_> {
     }
 
     fn rng(&self) -> Rng {
-        Rng::new(self.s.source.clone(), self.start, self.s.pos())
+        self.start..self.s.pos()
     }
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new(s: &'a Rc<File>) -> Scanner<'a> {
+    pub fn new(text: &'a str) -> Scanner<'a> {
         Scanner {
-            source: s,
-            chars: RefCell::new(s.text.char_indices().peekable()),
+            source: text,
+            chars: RefCell::new(text.char_indices().peekable()),
         }
     }
 
@@ -55,11 +53,7 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn rng(&self, start: usize) -> Rng {
-        Rng {
-            file: self.source.clone(),
-            start,
-            end: self.pos(),
-        }
+        start..self.pos()
     }
 
     fn scope(&self) -> Scope<'_, 'a> {
@@ -81,7 +75,7 @@ impl<'a> Scanner<'a> {
         self.chars
             .borrow_mut()
             .peek()
-            .map_or_else(|| self.source.text.len(), |t| t.0)
+            .map_or_else(|| self.source.len(), |t| t.0)
     }
 
     pub fn read_while_1(&self, ch: &Character) -> Result<Rng> {
@@ -215,102 +209,98 @@ mod test_scanner {
 
     #[test]
     fn test_read_while() {
-        let mem = File::mem("aaasdff");
-        let s = Scanner::new(&mem);
-        assert_eq!("aaasd", s.read_while(&Character::NotChar('f')).text());
-        assert_eq!("ff", s.read_while(&Character::Char('f')).text());
-        assert_eq!("", s.read_while(&Character::Char('q')).text());
-        assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
+        let text = "aaasdff";
+        let s = Scanner::new(&text);
+        assert_eq!("aaasd", &text[s.read_while(&Character::NotChar('f'))]);
+        assert_eq!("ff", &text[s.read_while(&Character::Char('f'))]);
+        assert_eq!("", &text[s.read_while(&Character::Char('q'))]);
+        assert_eq!(Ok(""), s.read_eol().map(|rng| &text[rng]));
     }
 
     #[test]
     fn test_read_while_1() {
-        let f = File::mem("aaasdff");
-        let s = Scanner::new(&f);
+        let text = "aaasdff";
+        let s = Scanner::new(&text);
         assert_eq!(
             Ok("aaasd"),
-            s.read_while_1(&Character::NotChar('f'))
-                .as_ref()
-                .map(Rng::text)
+            s.read_while_1(&Character::NotChar('f')).map(|r| &text[r])
         );
         assert_eq!(
             Ok("ff"),
-            s.read_while_1(&Character::Char('f'))
-                .as_ref()
-                .map(Rng::text)
+            s.read_while_1(&Character::Char('f')).map(|r| &text[r])
         );
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 7, 7),
+                rng: 7..7,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
                 source: None,
             }),
             s.read_while_1(&Character::Char('q'))
         );
-        assert_eq!("", s.read_eol().unwrap().text());
+        assert_eq!("", &text[s.read_eol().unwrap()]);
     }
 
     #[test]
     fn test_read_char() {
-        let f = File::mem("asdf");
-        let s = Scanner::new(&f);
-        assert_eq!("a", s.read_char(&Character::Char('a')).unwrap().text());
+        let text = "asdf";
+        let s = Scanner::new(&text);
+        assert_eq!("a", &text[s.read_char(&Character::Char('a')).unwrap()]);
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 1, 2),
+                rng: 1..2,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
                 source: None,
             }),
             s.clone().read_char(&Character::Char('q'))
         );
-        assert_eq!("s", s.read_char(&Character::Char('s')).unwrap().text());
-        assert_eq!("d", s.read_char(&Character::Char('d')).unwrap().text());
-        assert_eq!("f", s.read_char(&Character::Char('f')).unwrap().text());
-        assert_eq!("", s.read_eol().unwrap().text());
+        assert_eq!("s", &text[s.read_char(&Character::Char('s')).unwrap()]);
+        assert_eq!("d", &text[s.read_char(&Character::Char('d')).unwrap()]);
+        assert_eq!("f", &text[s.read_char(&Character::Char('f')).unwrap()]);
+        assert_eq!("", &text[s.read_eol().unwrap()]);
     }
 
     #[test]
     fn test_read_string() {
-        let f = File::mem("asdf");
-        let s = Scanner::new(&f);
-        assert_eq!(Ok("as"), s.read_string("as").as_ref().map(Rng::text));
+        let text = "asdf";
+        let s = Scanner::new(&text);
+        assert_eq!(Ok("as"), s.read_string("as").map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 2, 3),
+                rng: 2..3,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
                 source: None,
             }),
             s.clone().read_char(&Character::Char('q'))
         );
-        assert_eq!(Ok("df"), s.read_string("df").as_ref().map(Rng::text));
-        assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
+        assert_eq!(Ok("df"), s.read_string("df").map(|r| &text[r]));
+        assert_eq!(Ok(""), s.read_eol().map(|r| &text[r]));
     }
 
     #[test]
     fn test_read_transaction() {
-        let f = File::mem("asdf");
-        let s = Scanner::new(&f);
+        let text = "asdf";
+        let s = Scanner::new(&text);
         let rollback = s.snapshot();
 
-        assert_eq!(Ok("asdf"), s.read_string("asdf").as_ref().map(Rng::text));
+        assert_eq!(Ok("asdf"), s.read_string("asdf").map(|r| &text[r]));
         assert_eq!(s.current(), None);
 
         rollback();
 
         assert_eq!(s.current(), Some('a'));
-        assert_eq!(Ok("asdf"), s.read_string("asdf").as_ref().map(Rng::text));
+        assert_eq!(Ok("asdf"), s.read_string("asdf").map(|r| &text[r]));
     }
 
     #[test]
     fn test_read_rest_of_line() {
-        let f = File::mem("\n\n  \nfoo");
-        let s = Scanner::new(&f);
-        assert_eq!(Ok("\n"), s.read_rest_of_line().as_ref().map(Rng::text));
-        assert_eq!(Ok("\n"), s.read_rest_of_line().as_ref().map(Rng::text));
-        assert_eq!(Ok("  \n"), s.read_rest_of_line().as_ref().map(Rng::text));
+        let text = "\n\n  \nfoo";
+        let s = Scanner::new(&text);
+        assert_eq!(Ok("\n"), s.read_rest_of_line().map(|r| &text[r]));
+        assert_eq!(Ok("\n"), s.read_rest_of_line().map(|r| &text[r]));
+        assert_eq!(Ok("  \n"), s.read_rest_of_line().map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 5, 6),
+                rng: 5..6,
                 want: Token::Sequence(Sequence::One(Character::OneOf(vec![
                     Character::NewLine,
                     Character::EOF
@@ -319,62 +309,60 @@ mod test_scanner {
             }),
             s.clone().read_rest_of_line()
         );
-        assert_eq!(Ok("foo"), s.read_string("foo").as_ref().map(Rng::text));
-        assert_eq!(Ok(""), s.read_rest_of_line().as_ref().map(Rng::text));
+        assert_eq!(Ok("foo"), s.read_string("foo").map(|r| &text[r]));
+        assert_eq!(Ok(""), s.read_rest_of_line().map(|r| &text[r]));
     }
 
     #[test]
     fn test_read_1() {
-        let f = File::mem("foo");
-        let s = Scanner::new(&f);
-        assert_eq!(Ok("f"), s.read_1().as_ref().map(Rng::text));
-        assert_eq!(Ok("o"), s.read_1().as_ref().map(Rng::text));
-        assert_eq!(Ok("o"), s.read_1().as_ref().map(Rng::text));
+        let text = "foo";
+        let s = Scanner::new(&text);
+        assert_eq!(Ok("f"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Ok("o"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Ok("o"), s.read_1().map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 3, 3),
+                rng: 3..3,
                 want: Token::Sequence(Sequence::One(Character::Any)),
                 source: None,
             }),
             s.read_1()
         );
-        assert_eq!("", s.read_eol().unwrap().text());
+        assert_eq!("", &text[s.read_eol().unwrap()]);
     }
 
     #[test]
     fn test_read_sequence_number_of() {
-        let f = File::mem("asdf");
-        let s = Scanner::new(&f);
+        let text = "asdf";
+        let s = Scanner::new(&text);
         assert_eq!(
             Ok("as"),
             s.read_sequence(&Sequence::NumberOf(2, Character::Any))
-                .as_ref()
-                .map(Rng::text)
+                .map(|r| &text[r])
         );
         assert_eq!(
             Ok(""),
             s.read_sequence(&Sequence::NumberOf(0, Character::Any))
-                .as_ref()
-                .map(Rng::text)
+                .map(|r| &text[r])
         );
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 2, 4),
+                rng: 2..4,
                 want: Token::Sequence(Sequence::NumberOf(3, Character::Any)),
                 source: None,
             }),
             s.read_sequence(&Sequence::NumberOf(3, Character::Any))
         );
-        assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
+        assert_eq!(Ok(""), s.read_eol().map(|r| &text[r]));
     }
 
     #[test]
     fn test_read_eol() {
-        let f = File::mem("a\n\n");
-        let s = Scanner::new(&f);
+        let text = "a\n\n";
+        let s = Scanner::new(&text);
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 0, 1),
+                rng: 0..1,
                 want: Token::Sequence(Sequence::One(Character::OneOf(vec![
                     Character::NewLine,
                     Character::EOF
@@ -383,34 +371,34 @@ mod test_scanner {
             }),
             s.clone().read_eol()
         );
-        assert_eq!(Ok("a"), s.read_1().as_ref().map(Rng::text));
-        assert_eq!(Ok("\n"), s.read_eol().as_ref().map(Rng::text));
-        assert_eq!(Ok("\n"), s.read_eol().as_ref().map(Rng::text));
-        assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
-        assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
+        assert_eq!(Ok("a"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Ok("\n"), s.read_eol().map(|r| &text[r]));
+        assert_eq!(Ok("\n"), s.read_eol().map(|r| &text[r]));
+        assert_eq!(Ok(""), s.read_eol().map(|r| &text[r]));
+        assert_eq!(Ok(""), s.read_eol().map(|r| &text[r]));
     }
 
     #[test]
     fn test_read_space_1() {
-        let f = File::mem("  a\t\tb  \nc");
-        let s = Scanner::new(&f);
+        let text = "  a\t\tb  \nc";
+        let s = Scanner::new(&text);
 
-        assert_eq!(Ok("  "), s.read_space_1().as_ref().map(Rng::text));
-        assert_eq!(Ok("a"), s.read_1().as_ref().map(Rng::text));
-        assert_eq!(Ok("\t\t"), s.read_space_1().as_ref().map(Rng::text));
+        assert_eq!(Ok("  "), s.read_space_1().map(|r| &text[r]));
+        assert_eq!(Ok("a"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Ok("\t\t"), s.read_space_1().map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 5, 6),
+                rng: 5..6,
                 want: Token::Sequence(Sequence::One(Character::HorizontalSpace)),
                 source: None,
             }),
             s.clone().read_space_1()
         );
-        assert_eq!(Ok("b"), s.read_1().as_ref().map(Rng::text));
-        assert_eq!(Ok("  "), s.read_space_1().as_ref().map(Rng::text));
-        assert_eq!(Ok(""), s.read_space_1().as_ref().map(Rng::text));
-        assert_eq!(Ok("\n"), s.read_eol().as_ref().map(Rng::text));
-        assert_eq!(Ok("c"), s.read_1().as_ref().map(Rng::text));
-        assert_eq!(Ok(""), s.read_eol().as_ref().map(Rng::text));
+        assert_eq!(Ok("b"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Ok("  "), s.read_space_1().map(|r| &text[r]));
+        assert_eq!(Ok(""), s.read_space_1().map(|r| &text[r]));
+        assert_eq!(Ok("\n"), s.read_eol().map(|r| &text[r]));
+        assert_eq!(Ok("c"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Ok(""), s.read_eol().map(|r| &text[r]));
     }
 }

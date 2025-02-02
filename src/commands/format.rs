@@ -14,9 +14,9 @@ impl Command {
 }
 
 fn execute(path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    let syntax_tree = parse_file(path)?;
+    let (syntax_tree, file) = parse_file(path)?;
     let mut w = Vec::new();
-    format_file(&mut w, &syntax_tree)?;
+    format_file(&mut w, &file.text, &syntax_tree)?;
     fs::write(path, &w)?;
     Ok(())
 }

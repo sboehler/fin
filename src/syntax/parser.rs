@@ -1,12 +1,9 @@
-use std::rc::Rc;
-
 use super::cst::{
     Account, Addon, Assertion, Booking, Character, Close, Commodity, Date, Decimal, Directive,
     Include, Open, Price, QuotedString, Rng, Sequence, SubAssertion, SyntaxTree, Token,
     Transaction,
 };
 use super::error::SyntaxError;
-use super::file::File;
 use crate::syntax::scanner::Scanner;
 
 pub struct Parser<'a> {
@@ -47,16 +44,12 @@ impl<'a, 'b> Scope<'a, 'b> {
     }
 
     fn rng(&self) -> Rng {
-        Rng::new(
-            self.parser.scanner.source.clone(),
-            self.start,
-            self.parser.scanner.pos(),
-        )
+        self.start..self.parser.scanner.pos()
     }
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(s: &'a Rc<File>) -> Parser<'a> {
+    pub fn new(s: &'a str) -> Parser<'a> {
         Parser {
             scanner: Scanner::new(s),
         }
@@ -93,8 +86,8 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::AccountType);
         self.scanner
             .read_while_1(&Character::Alphabetic)
-            .and_then(|rng| match rng.text() {
-                "Assets" | "Liabilities" | "Expenses" | "Equity" | "Income" => Ok(rng),
+            .and_then(|rng| match &self.scanner.source[rng.clone()] {
+                "Assets" | "Liabilities" | "Expenses" | "Equity" | "Income" => Ok(rng.clone()),
                 _ => Err(scope.token_error()),
             })
     }
@@ -503,81 +496,73 @@ impl<'a> Parser<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
 
-    use crate::syntax::{cst::Rng, cst::Sequence};
+    use crate::syntax::cst::Sequence;
 
     use super::*;
 
     #[test]
     fn test_parse_commodity1() {
-        let f1 = File::mem("USD");
-        assert_eq!(
-            Ok(Commodity(Rng::new(f1.clone(), 0, 3))),
-            Parser::new(&f1).parse_commodity(),
-        );
+        let text = "USD";
+        assert_eq!(Ok(Commodity(0..3)), Parser::new(text).parse_commodity());
     }
 
     #[test]
     fn test_parse_commodity2() {
-        let f2 = File::mem("1FOO");
-        assert_eq!(
-            Ok(Commodity(Rng::new(f2.clone(), 0, 4))),
-            Parser::new(&File::mem("1FOO")).parse_commodity()
-        );
+        assert_eq!(Ok(Commodity(0..4)), Parser::new("1FOO").parse_commodity());
     }
 
     #[test]
     fn test_parse_commodity3() {
-        let f3 = File::mem(" USD");
+        let text = " USD";
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f3.clone(), 0, 1),
+                rng: 0..1,
                 want: Token::Commodity,
                 source: Some(Box::new(SyntaxError {
-                    rng: Rng::new(f3.clone(), 0, 1),
+                    rng: 0..1,
                     want: Token::Sequence(Sequence::One(Character::AlphaNum)),
                     source: None,
                 })),
             }),
-            Parser::new(&f3).parse_commodity()
+            Parser::new(&text).parse_commodity()
         );
     }
 
     #[test]
     fn test_parse_commodity4() {
-        let f4 = File::mem("/USD");
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f4.clone(), 0, 1),
+                rng: 0..1,
                 want: Token::Commodity,
                 source: Some(Box::new(SyntaxError {
-                    rng: Rng::new(f4.clone(), 0, 1),
+                    rng: 0..1,
                     want: Token::Sequence(Sequence::One(Character::AlphaNum)),
                     source: None,
                 })),
             }),
-            Parser::new(&f4).parse_commodity()
+            Parser::new("/USD").parse_commodity()
         );
     }
 
     #[test]
     fn test_parse_account() {
-        let f1 = File::mem("Assets");
+        let f1 = "Assets";
         assert_eq!(
             Ok(Account {
-                range: Rng::new(f1.clone(), 0, 6),
-                segments: vec![Rng::new(f1.clone(), 0, 6)],
+                range: 0..6,
+                segments: vec![0..6],
             }),
-            Parser::new(&f1).parse_account(),
+            Parser::new(f1).parse_account(),
         );
     }
 
     #[test]
     fn test_parse_account2() {
-        let f2 = File::mem("Liabilities:Debt  ");
+        let f2 = "Liabilities:Debt  ";
         assert_eq!(
             Ok(Account {
-                range: Rng::new(f2.clone(), 0, 16),
-                segments: vec![Rng::new(f2.clone(), 0, 11), Rng::new(f2.clone(), 12, 16)],
+                range: 0..16,
+                segments: vec![0..11, 12..16],
             }),
             Parser::new(&f2).parse_account(),
         );
@@ -585,10 +570,10 @@ mod tests {
 
     #[test]
     fn test_parse_account3() {
-        let f3 = File::mem(" USD");
+        let f3 = " USD";
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f3.clone(), 0, 1),
+                rng: 0..1,
                 want: Token::Sequence(Sequence::One(Character::Alphabetic)),
                 source: None,
             }),
@@ -598,22 +583,19 @@ mod tests {
 
     #[test]
     fn test_parse_date1() {
-        let f = File::mem("2024-05-07");
-        assert_eq!(
-            Ok(Date(Rng::new(f.clone(), 0, 10))),
-            Parser::new(&f).parse_date(),
-        );
+        let f = "2024-05-07";
+        assert_eq!(Ok(Date(0..10)), Parser::new(&f).parse_date(),);
     }
 
     #[test]
     fn test_parse_date2() {
-        let f = File::mem("024-02-02");
+        let f = "024-02-02";
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 0, 4),
+                rng: 0..4,
                 want: Token::Date,
                 source: Some(Box::new(SyntaxError {
-                    rng: Rng::new(f.clone(), 0, 4),
+                    rng: 0..4,
                     want: Token::Sequence(Sequence::NumberOf(4, Character::Digit)),
                     source: None,
                 })),
@@ -624,13 +606,13 @@ mod tests {
 
     #[test]
     fn test_parse_date3() {
-        let f = File::mem("2024-02-0");
+        let f = "2024-02-0";
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 0, 9),
+                rng: 0..9,
                 want: Token::Date,
                 source: Some(Box::new(SyntaxError {
-                    rng: Rng::new(f.clone(), 8, 9),
+                    rng: 8..9,
                     want: Token::Sequence(Sequence::NumberOf(2, Character::Digit)),
                     source: None,
                 })),
@@ -640,13 +622,13 @@ mod tests {
     }
     #[test]
     fn test_parse_date4() {
-        let f = File::mem("2024-0--0");
+        let f = "2024-0--0";
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 0, 7),
+                rng: 0..7,
                 want: Token::Date,
                 source: Some(Box::new(SyntaxError {
-                    rng: Rng::new(f.clone(), 5, 7),
+                    rng: 5..7,
                     want: Token::Sequence(Sequence::NumberOf(2, Character::Digit)),
                     source: None,
                 })),
@@ -658,35 +640,28 @@ mod tests {
     #[test]
     fn test_parse_interval() {
         for d in ["daily", "weekly", "monthly", "quarterly", "yearly", "once"] {
-            assert_eq!(
-                Ok(d),
-                Parser::new(&File::mem(d))
-                    .parse_interval()
-                    .as_ref()
-                    .map(Rng::text),
-            );
+            assert_eq!(Ok(d), Parser::new(d).parse_interval().map(|rng| &d[rng]),);
         }
     }
 
     #[test]
     fn test_parse_decimal() {
         for d in ["0", "10.01", "-10.01"] {
-            let f = File::mem(d);
             assert_eq!(
-                Ok(Decimal(Rng::new(f.clone(), 0, d.len()))),
-                Parser::new(&f).parse_decimal(Token::Decimal),
+                Ok(Decimal(0..d.len())),
+                Parser::new(d).parse_decimal(Token::Decimal),
             );
         }
     }
     #[test]
     fn test_parse_decimal2() {
-        let f = File::mem("foo");
+        let f = "foo";
         assert_eq!(
             Err(SyntaxError {
-                rng: Rng::new(f.clone(), 0, 1),
+                rng: 0..1,
                 want: Token::Decimal,
                 source: Some(Box::new(SyntaxError {
-                    rng: Rng::new(f.clone(), 0, 1),
+                    rng: 0..1,
                     want: Token::Sequence(Sequence::One(Character::Digit)),
                     source: None,
                 })),
@@ -696,31 +671,24 @@ mod tests {
     }
 
     mod addon {
+        use crate::syntax::cst::{Account, Addon, Commodity, Date};
         use crate::syntax::parser::Parser;
-        use crate::syntax::{
-            cst::{Account, Addon, Commodity, Date, Rng},
-            file::File,
-        };
         use pretty_assertions::assert_eq;
 
         #[test]
         fn performance() {
-            let f1 = File::mem("@performance( USD  , VT)");
+            let f1 = "@performance( USD  , VT)";
             assert_eq!(
                 Ok(Addon::Performance {
-                    range: Rng::new(f1.clone(), 0, 24),
-
-                    commodities: vec![
-                        Commodity(Rng::new(f1.clone(), 14, 17)),
-                        Commodity(Rng::new(f1.clone(), 21, 23)),
-                    ]
+                    range: 0..24,
+                    commodities: vec![Commodity(14..17), Commodity(21..23),]
                 }),
                 Parser::new(&f1).parse_addon()
             );
-            let f2 = File::mem("@performance(  )");
+            let f2 = "@performance(  )";
             assert_eq!(
                 Ok(Addon::Performance {
-                    range: Rng::new(f2.clone(), 0, 16),
+                    range: 0..16,
                     commodities: vec![]
                 }),
                 Parser::new(&f2).parse_addon(),
@@ -729,16 +697,16 @@ mod tests {
 
         #[test]
         fn accrual() {
-            let f = File::mem("@accrue monthly 2024-01-01 2024-12-31 Assets:Payables");
+            let f = "@accrue monthly 2024-01-01 2024-12-31 Assets:Payables";
             assert_eq!(
                 Ok(Addon::Accrual {
-                    range: Rng::new(f.clone(), 0, 53),
-                    interval: Rng::new(f.clone(), 8, 15),
-                    start: Date(Rng::new(f.clone(), 16, 26)),
-                    end: Date(Rng::new(f.clone(), 27, 37)),
+                    range: 0..53,
+                    interval: 8..15,
+                    start: Date(16..26),
+                    end: Date(27..37),
                     account: Account {
-                        range: Rng::new(f.clone(), 38, 53),
-                        segments: vec![Rng::new(f.clone(), 38, 44), Rng::new(f.clone(), 45, 53)]
+                        range: 38..53,
+                        segments: vec![38..44, 45..53]
                     }
                 }),
                 Parser::new(&f).parse_addon()
@@ -752,13 +720,13 @@ mod tests {
 
         #[test]
         fn parse_include() {
-            let f = File::mem(r#"include "/foo/bar/baz/finance.knut""#);
+            let f = r#"include "/foo/bar/baz/finance.knut""#;
             assert_eq!(
                 Ok(Directive::Include(Include {
-                    range: Rng::new(f.clone(), 0, 35),
+                    range: 0..35,
                     path: QuotedString {
-                        range: Rng::new(f.clone(), 8, 35),
-                        content: Rng::new(f.clone(), 9, 34),
+                        range: 8..35,
+                        content: 9..34,
                     }
                 })),
                 Parser::new(&f).parse_directive()
@@ -767,108 +735,99 @@ mod tests {
 
         #[test]
         fn parse_open() {
-            let f = File::mem("2024-03-01 open Assets:Foo");
+            let f = "2024-03-01 open Assets:Foo";
             assert_eq!(
                 Ok(Directive::Open(Open {
-                    range: Rng::new(f.clone(), 0, 26),
-                    date: Date(Rng::new(f.clone(), 0, 10)),
+                    range: 0..26,
+                    date: Date(0..10),
                     account: Account {
-                        range: Rng::new(f.clone(), 16, 26),
-                        segments: vec![Rng::new(f.clone(), 16, 22), Rng::new(f.clone(), 23, 26)]
+                        range: 16..26,
+                        segments: vec![16..22, 23..26]
                     },
                 })),
-                Parser::new(&f).parse_directive()
+                Parser::new(f).parse_directive()
             )
         }
 
         #[test]
         fn parse_transaction() {
-            let f = File::mem("2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD");
+            let f = "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD";
             assert_eq!(
                 Ok(Directive::Transaction(Transaction {
-                    range: Rng::new(f.clone(), 0, 53),
+                    range: 0..53,
                     addon: None,
-                    date: Date(Rng::new(f.clone(), 0, 10)),
+                    date: Date(0..10),
                     description: QuotedString {
-                        range: Rng::new(f.clone(), 11, 20),
-                        content: Rng::new(f.clone(), 12, 19),
+                        range: 11..20,
+                        content: 12..19,
                     },
                     bookings: vec![Booking {
-                        range: Rng::new(f.clone(), 23, 53),
+                        range: 23..53,
                         credit: Account {
-                            range: Rng::new(f.clone(), 23, 33),
-                            segments: vec![
-                                Rng::new(f.clone(), 23, 29),
-                                Rng::new(f.clone(), 30, 33)
-                            ]
+                            range: 23..33,
+                            segments: vec![23..29, 30..33]
                         },
                         debit: Account {
-                            range: Rng::new(f.clone(), 34, 44),
-                            segments: vec![
-                                Rng::new(f.clone(), 34, 40),
-                                Rng::new(f.clone(), 41, 44)
-                            ]
+                            range: 34..44,
+                            segments: vec![34..40, 41..44]
                         },
-                        quantity: Decimal(Rng::new(f.clone(), 45, 49)),
-                        commodity: Commodity(Rng::new(f.clone(), 50, 53)),
+                        quantity: Decimal(45..49),
+                        commodity: Commodity(50..53),
                     },]
                 })),
-                Parser::new(&f).parse_directive()
+                Parser::new(f).parse_directive()
             );
         }
 
         #[test]
         fn parse_close() {
-            let f = File::mem("2024-03-01 close Assets:Foo");
+            let f = "2024-03-01 close Assets:Foo";
             assert_eq!(
                 Ok(Directive::Close(Close {
-                    range: Rng::new(f.clone(), 0, 27),
-                    date: Date(Rng::new(f.clone(), 0, 10)),
+                    range: 0..27,
+                    date: Date(0..10),
                     account: Account {
-                        range: Rng::new(f.clone(), 17, 27),
-                        segments: vec![Rng::new(f.clone(), 17, 23), Rng::new(f.clone(), 24, 27)]
+                        range: 17..27,
+                        segments: vec![17..23, 24..27]
                     }
                 })),
-                Parser::new(&f).parse_directive()
+                Parser::new(f).parse_directive()
             )
         }
 
         #[test]
         fn parse_price() {
-            let f = File::mem("2024-03-01 price FOO 1.543 BAR");
+            let f = "2024-03-01 price FOO 1.543 BAR";
             assert_eq!(
                 Ok(Directive::Price(Price {
-                    range: Rng::new(f.clone(), 0, 30),
-                    date: Date(Rng::new(f.clone(), 0, 10)),
-                    commodity: Commodity(Rng::new(f.clone(), 17, 20)),
-                    price: Decimal(Rng::new(f.clone(), 21, 26)),
-                    target: Commodity(Rng::new(f.clone(), 27, 30)),
+                    range: 0..30,
+                    date: Date(0..10),
+                    commodity: Commodity(17..20),
+                    price: Decimal(21..26),
+                    target: Commodity(27..30),
                 })),
-                Parser::new(&f).parse_directive()
+                Parser::new(f).parse_directive()
             )
         }
 
         #[test]
         fn parse_assertion() {
-            let f = File::mem("2024-03-01 balance Assets:Foo 500.1 BAR");
+            let f = "2024-03-01 balance Assets:Foo 500.1 BAR";
             assert_eq!(
                 Ok(Directive::Assertion(Assertion {
-                    range: Rng::new(f.clone(), 0, 39),
-                    date: Date(Rng::new(f.clone(), 0, 10)),
+                    range: 0..39,
+                    date: Date(0..10),
                     assertions: vec![SubAssertion {
-                        range: Rng::new(f.clone(), 19, 39),
+                        range: 19..39,
                         account: Account {
-                            range: Rng::new(f.clone(), 19, 29),
-                            segments: vec![
-                                Rng::new(f.clone(), 19, 25),
-                                Rng::new(f.clone(), 26, 29)
-                            ],
+                            range: 19..29,
+                            segments: vec![19..25, 26..29],
                         },
-                        balance: Decimal(Rng::new(f.clone(), 30, 35)),
-                        commodity: Commodity(Rng::new(f.clone(), 36, 39)),
+                        balance: Decimal(30..35),
+                        commodity: Commodity(36..39),
                     }]
                 })),
-                Parser::new(&f).parse_directive()
+                Parser::new(f).parse_directive()
             )
         }
     }

@@ -1,13 +1,17 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Display, iter};
 
+use crate::syntax::file::File;
+
 use super::{
-    entities::{AccountID, AccountType, CommodityID},
+    entities::{AccountID, AccountType, CommodityID, SourceFileID},
     error::ModelError,
 };
 
+#[derive(Debug)]
 pub struct Registry {
     commodities_by_name: RefCell<HashMap<String, CommodityID>>,
     accounts_by_name: RefCell<HashMap<String, AccountID>>,
+    source_files: Vec<File>,
 
     accounts: RefCell<Vec<Account>>,
     commodities: RefCell<Vec<Commodity>>,
@@ -24,6 +28,7 @@ impl Registry {
         Registry {
             accounts_by_name: RefCell::new(HashMap::new()),
             commodities_by_name: RefCell::new(HashMap::new()),
+            source_files: Default::default(),
             accounts: Default::default(),
             commodities: Default::default(),
         }
@@ -41,6 +46,15 @@ impl Registry {
         self.accounts.borrow_mut().push(account);
         self.accounts_by_name.borrow_mut().insert(s.to_string(), id);
         Ok(id)
+    }
+
+    pub fn add_source_file(&mut self, source_file: File) -> SourceFileID {
+        self.source_files.push(source_file);
+        SourceFileID(self.source_files.len() - 1)
+    }
+
+    pub fn source_file(&self, id: SourceFileID) -> &File {
+        &self.source_files[id.0]
     }
 
     pub fn account_name(&self, id: AccountID) -> String {

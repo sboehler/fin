@@ -87,7 +87,7 @@ impl Journal {
                 if !accounts.insert(o.account) {
                     return Err(JournalError::AccountAlreadyOpen {
                         open: Box::new(o.clone()),
-                        account_name: self.registry.account_name(o.account),
+                        registry: self.registry.clone(),
                     });
                 }
                 Ok(())
@@ -97,7 +97,8 @@ impl Journal {
                     if !accounts.contains(&b.account) {
                         return Err(JournalError::TransactionAccountNotOpen {
                             transaction: Box::new(t.clone()),
-                            account_name: self.registry.account_name(b.account),
+                            account: b.account,
+                            registry: self.registry.clone(),
                         });
                     }
                     quantities.insert_or_add(&(b.account, b.commodity), &b.quantity);
@@ -108,7 +109,7 @@ impl Journal {
                 if !accounts.contains(&a.account) {
                     return Err(JournalError::AssertionAccountNotOpen {
                         assertion: Box::new(a.clone()),
-                        account_name: self.registry.account_name(a.account),
+                        registry: self.registry.clone(),
                     });
                 }
                 let balance = quantities
@@ -119,8 +120,7 @@ impl Journal {
                     return Err(JournalError::AssertionIncorrectBalance {
                         assertion: Box::new(a.clone()),
                         actual: balance,
-                        account_name: self.registry.account_name(a.account),
-                        commodity_name: self.registry.commodity_name(a.commodity),
+                        registry: self.registry.clone(),
                     });
                 }
                 Ok(())
@@ -130,9 +130,9 @@ impl Journal {
                     if pos.0 == c.account && !qty.is_zero() {
                         return Err(JournalError::CloseNonzeroBalance {
                             close: Box::new(c.clone()),
-                            commodity_name: self.registry.commodity_name(pos.1),
+                            commodity: pos.1,
                             balance: *qty,
-                            account_name: self.registry.account_name(c.account),
+                            registry: self.registry.clone(),
                         });
                     }
                 }

@@ -1,65 +1,35 @@
-use std::{fmt::Display, rc::Rc};
+use std::{fmt::Display, ops::Range};
 
-use super::file::File;
+pub type Rng = Range<usize>;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Rng {
-    pub file: Rc<File>,
-    pub start: usize,
-    pub end: usize,
+pub fn context(text: &str, rng: Range<usize>) -> Vec<(usize, &str)> {
+    let (start_line, _) = position(text, rng.start);
+    let (end_line, _) = position(text, rng.end);
+
+    text.lines()
+        .enumerate()
+        .skip(start_line - 1)
+        .take(end_line - start_line + 1)
+        .map(|(i, l)| (i + 1, l))
+        .collect()
 }
 
-impl Rng {
-    pub fn new(file: Rc<File>, start: usize, end: usize) -> Rng {
-        Rng { file, start, end }
-    }
-
-    pub fn text(&self) -> &str {
-        &self.file.text[self.start..self.end]
-    }
-
-    pub fn len(&self) -> usize {
-        self.end - self.start
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.end == self.start
-    }
-
-    pub fn context(&self) -> Vec<(usize, &str)> {
-        let (start_line, _) = self.file.position(self.start);
-        let (end_line, _) = self.file.position(self.end);
-
-        self.file
-            .text
-            .lines()
-            .enumerate()
-            .skip(start_line - 1)
-            .take(end_line - start_line + 1)
-            .map(|(i, l)| (i + 1, l))
-            .collect()
-    }
-}
-
-impl Display for Rng {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        self.context()
-            .iter()
-            .try_for_each(|(i, l)| writeln!(f, "{:5} |{}", i, l))
-    }
+pub fn position(text: &str, pos: usize) -> (usize, usize) {
+    let lines = text[..pos].split('\n').collect::<Vec<_>>();
+    let line = lines.len();
+    let col = lines.last().iter().flat_map(|s| s.chars()).count() + 1;
+    (line, col)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{File, Rng};
 
     use pretty_assertions::assert_eq;
 
     #[test]
     fn test_position() {
-        let f = File::mem(&["line1", "line2", "line3", "line4", "line5"].join("\n"));
-        let r = Rng::new(f, 13, 15);
-        assert_eq!(["    3 |line3", ""].join("\n"), r.to_string(),)
+        let f = &["line1", "line2", "line3", "line4", "line5"].join("\n");
+        assert_eq!(["    3 |line3", ""].join("\n"), f[13..15])
     }
 }
 

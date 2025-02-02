@@ -1,28 +1,34 @@
 use std::{
     fs, io,
+    ops::Range,
     path::{Path, PathBuf},
-    rc::Rc,
 };
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct File {
     pub path: Option<PathBuf>,
     pub text: String,
 }
 
 impl File {
-    pub fn mem(s: &str) -> Rc<File> {
-        Rc::new(File {
-            path: None,
-            text: s.to_owned(),
+    pub fn read(path: &Path) -> io::Result<File> {
+        Ok(File {
+            text: fs::read_to_string(path)?,
+            path: Some(path.to_path_buf()),
         })
     }
 
-    pub fn read(path: &Path) -> io::Result<Rc<File>> {
-        Ok(Rc::new(File {
-            text: fs::read_to_string(path)?,
-            path: Some(path.to_path_buf()),
-        }))
+    pub fn context(&self, rng: Range<usize>) -> Vec<(usize, &str)> {
+        let (start_line, _) = self.position(rng.start);
+        let (end_line, _) = self.position(rng.end);
+
+        self.text
+            .lines()
+            .enumerate()
+            .skip(start_line - 1)
+            .take(end_line - start_line + 1)
+            .map(|(i, l)| (i + 1, l))
+            .collect()
     }
 
     pub fn position(&self, pos: usize) -> (usize, usize) {
@@ -31,25 +37,18 @@ impl File {
         let col = lines.last().iter().flat_map(|s| s.chars()).count() + 1;
         (line, col)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::File;
-
-    use pretty_assertions::assert_eq;
-
-    #[test]
-    fn test_position() {
-        let f = File::mem(&["foo", "bar", ""].join("\n"));
-        assert_eq!(f.position(0), (1, 1));
-        assert_eq!(f.position(1), (1, 2));
-        assert_eq!(f.position(2), (1, 3));
-        assert_eq!(f.position(3), (1, 4));
-        assert_eq!(f.position(4), (2, 1));
-        assert_eq!(f.position(5), (2, 2));
-        assert_eq!(f.position(6), (2, 3));
-        assert_eq!(f.position(7), (2, 4));
-        assert_eq!(f.position(8), (3, 1));
+    pub fn fmt_range(&self, f: &mut std::fmt::Formatter, rng: Range<usize>) -> std::fmt::Result {
+        self.context(rng)
+            .iter()
+            .try_for_each(|(i, l)| writeln!(f, "{:5} |{}", i, l))
     }
 }
+
+// impl Display for Rng {
+//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//         self.context()
+//             .iter()
+//             .try_for_each(|(i, l)| writeln!(f, "{:5} |{}", i, l))
+//     }
+// }
