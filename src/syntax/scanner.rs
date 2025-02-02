@@ -104,10 +104,6 @@ impl<'a> Scanner<'a> {
         scope.range()
     }
 
-    pub fn read_all(&self) -> Range<usize> {
-        self.read_while(&Character::Any)
-    }
-
     pub fn read_char(&self, ch: &Character) -> Result<Range<usize>> {
         let scope = self.scope();
         let c = self.advance();
@@ -157,14 +153,6 @@ impl<'a> Scanner<'a> {
                 }
                 Ok(scope.range())
             }
-        }
-    }
-
-    pub fn read_1(&self) -> Result<Range<usize>> {
-        let scope = self.scope();
-        match self.advance() {
-            Some(_) => Ok(scope.range()),
-            None => Err(scope.character_error(&Character::Any)),
         }
     }
 
@@ -315,24 +303,6 @@ mod test_scanner {
     }
 
     #[test]
-    fn test_read_1() {
-        let text = "foo";
-        let s = Scanner::new(&text);
-        assert_eq!(Ok("f"), s.read_1().map(|r| &text[r]));
-        assert_eq!(Ok("o"), s.read_1().map(|r| &text[r]));
-        assert_eq!(Ok("o"), s.read_1().map(|r| &text[r]));
-        assert_eq!(
-            Err(SyntaxError {
-                range: 3..3,
-                want: Token::Sequence(Sequence::One(Character::Any)),
-                source: None,
-            }),
-            s.read_1()
-        );
-        assert_eq!("", &text[s.read_eol().unwrap()]);
-    }
-
-    #[test]
     fn test_read_sequence_number_of() {
         let text = "asdf";
         let s = Scanner::new(&text);
@@ -372,7 +342,7 @@ mod test_scanner {
             }),
             s.clone().read_eol()
         );
-        assert_eq!(Ok("a"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Some('a'), s.advance());
         assert_eq!(Ok("\n"), s.read_eol().map(|r| &text[r]));
         assert_eq!(Ok("\n"), s.read_eol().map(|r| &text[r]));
         assert_eq!(Ok(""), s.read_eol().map(|r| &text[r]));
@@ -385,7 +355,7 @@ mod test_scanner {
         let s = Scanner::new(&text);
 
         assert_eq!(Ok("  "), s.read_space_1().map(|r| &text[r]));
-        assert_eq!(Ok("a"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Some('a'), s.advance());
         assert_eq!(Ok("\t\t"), s.read_space_1().map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
@@ -395,11 +365,11 @@ mod test_scanner {
             }),
             s.clone().read_space_1()
         );
-        assert_eq!(Ok("b"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Some('b'), s.advance());
         assert_eq!(Ok("  "), s.read_space_1().map(|r| &text[r]));
         assert_eq!(Ok(""), s.read_space_1().map(|r| &text[r]));
         assert_eq!(Ok("\n"), s.read_eol().map(|r| &text[r]));
-        assert_eq!(Ok("c"), s.read_1().map(|r| &text[r]));
+        assert_eq!(Some('c'), s.advance());
         assert_eq!(Ok(""), s.read_eol().map(|r| &text[r]));
     }
 }

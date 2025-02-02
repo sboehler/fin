@@ -15,8 +15,8 @@ pub mod cst;
 pub mod error;
 pub mod file;
 pub mod format;
-pub mod parser;
-pub mod scanner;
+mod parser;
+mod scanner;
 
 pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, File)>, ParserError> {
     let mut res = Vec::new();
@@ -29,13 +29,13 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, File)>, 
 
     while let Some(file_path) = todo.pop_front() {
         let file = File::read(&file_path).map_err(|e| ParserError::IO(file_path.clone(), e))?;
-        let syntax_file = Parser::new(&file.text)
+        let tree = Parser::new(&file.text)
             .parse()
             .map_err(|e| ParserError::SyntaxError(e, file.clone()))?;
         let dir_name = file_path
             .parent()
             .ok_or(ParserError::InvalidPath(file_path.clone()))?;
-        for d in &syntax_file.directives {
+        for d in &tree.directives {
             if let Directive::Include(Include { path, .. }) = d {
                 todo.push_back(
                     dir_name
@@ -48,7 +48,7 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, File)>, 
         if !done.insert(file_path.clone()) {
             Err(ParserError::Cycle(file_path.clone()))?;
         }
-        res.push((syntax_file, file));
+        res.push((tree, file));
     }
     Ok(res)
 }

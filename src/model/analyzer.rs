@@ -270,7 +270,7 @@ impl Analyzer {
     ) -> std::result::Result<CommodityID, ParserError> {
         self.registry
             .commodity_id(&source.text[commodity.0.clone()])
-            .map_err(|_e| {
+            .map_err(|_| {
                 ParserError::SyntaxError(
                     SyntaxError {
                         range: commodity.0.clone(),
@@ -289,7 +289,7 @@ impl Analyzer {
     ) -> std::result::Result<AccountID, ParserError> {
         self.registry
             .account_id(&source.text[account.range.clone()])
-            .map_err(|_e| {
+            .map_err(|_| {
                 ParserError::SyntaxError(
                     SyntaxError {
                         range: account.range.clone(),
