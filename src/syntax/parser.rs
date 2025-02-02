@@ -1,7 +1,8 @@
+use std::ops::Range;
+
 use super::cst::{
     Account, Addon, Assertion, Booking, Character, Close, Commodity, Date, Decimal, Directive,
-    Include, Open, Price, QuotedString, Rng, Sequence, SubAssertion, SyntaxTree, Token,
-    Transaction,
+    Include, Open, Price, QuotedString, Sequence, SubAssertion, SyntaxTree, Token, Transaction,
 };
 use super::error::SyntaxError;
 use crate::syntax::scanner::Scanner;
@@ -43,7 +44,7 @@ impl<'a, 'b> Scope<'a, 'b> {
         }
     }
 
-    fn rng(&self) -> Rng {
+    fn rng(&self) -> Range<usize> {
         self.start..self.parser.scanner.pos()
     }
 }
@@ -82,7 +83,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_account_type(&self) -> Result<Rng> {
+    fn parse_account_type(&self) -> Result<Range<usize>> {
         let scope = self.scope(Token::AccountType);
         self.scanner
             .read_while_1(&Character::Alphabetic)
@@ -118,7 +119,7 @@ impl<'a> Parser<'a> {
         Ok(Date(scope.rng()))
     }
 
-    fn parse_interval(&self) -> Result<Rng> {
+    fn parse_interval(&self) -> Result<Range<usize>> {
         let scope = self.scope(Token::Interval);
         match self.scanner.current() {
             Some('d') => self
@@ -213,7 +214,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_comment(&self) -> Result<Rng> {
+    fn parse_comment(&self) -> Result<Range<usize>> {
         let scope = self.scope(Token::Comment);
         match self.scanner.current() {
             Some('#') | Some('*') => {

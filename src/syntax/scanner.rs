@@ -1,5 +1,6 @@
-use super::cst::{Character, Rng, Sequence, Token};
+use super::cst::{Character, Sequence, Token};
 use super::error::SyntaxError;
+use std::ops::Range;
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 
 #[derive(Clone)]
@@ -32,7 +33,7 @@ impl Scope<'_, '_> {
         }
     }
 
-    fn rng(&self) -> Rng {
+    fn rng(&self) -> Range<usize> {
         self.start..self.s.pos()
     }
 }
@@ -52,7 +53,7 @@ impl<'a> Scanner<'a> {
         })
     }
 
-    pub fn rng(&self, start: usize) -> Rng {
+    pub fn rng(&self, start: usize) -> Range<usize> {
         start..self.pos()
     }
 
@@ -78,7 +79,7 @@ impl<'a> Scanner<'a> {
             .map_or_else(|| self.source.len(), |t| t.0)
     }
 
-    pub fn read_while_1(&self, ch: &Character) -> Result<Rng> {
+    pub fn read_while_1(&self, ch: &Character) -> Result<Range<usize>> {
         let scope = self.scope();
         if !ch.is(self.current()) {
             self.advance();
@@ -87,7 +88,7 @@ impl<'a> Scanner<'a> {
         Ok(self.read_while(ch))
     }
 
-    pub fn read_while(&self, ch: &Character) -> Rng {
+    pub fn read_while(&self, ch: &Character) -> Range<usize> {
         let scope = self.scope();
         while ch.is(self.current()) {
             self.advance();
@@ -95,7 +96,7 @@ impl<'a> Scanner<'a> {
         scope.rng()
     }
 
-    pub fn read_until(&self, ch: &Character) -> Rng {
+    pub fn read_until(&self, ch: &Character) -> Range<usize> {
         let scope = self.scope();
         while !ch.is(self.current()) {
             self.advance();
@@ -103,11 +104,11 @@ impl<'a> Scanner<'a> {
         scope.rng()
     }
 
-    pub fn read_all(&self) -> Rng {
+    pub fn read_all(&self) -> Range<usize> {
         self.read_while(&Character::Any)
     }
 
-    pub fn read_char(&self, ch: &Character) -> Result<Rng> {
+    pub fn read_char(&self, ch: &Character) -> Result<Range<usize>> {
         let scope = self.scope();
         let c = self.advance();
         if ch.is(c) {
@@ -117,7 +118,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_string(&self, str: &str) -> Result<Rng> {
+    pub fn read_string(&self, str: &str) -> Result<Range<usize>> {
         let scope = self.scope();
         for c in str.chars() {
             self.read_char(&Character::Char(c))?;
@@ -125,7 +126,7 @@ impl<'a> Scanner<'a> {
         Ok(scope.rng())
     }
 
-    pub fn read_sequence(&self, seq: &Sequence) -> Result<Rng> {
+    pub fn read_sequence(&self, seq: &Sequence) -> Result<Range<usize>> {
         let scope = self.scope();
         match seq {
             Sequence::One(ch) => {
@@ -159,7 +160,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_1(&self) -> Result<Rng> {
+    pub fn read_1(&self) -> Result<Range<usize>> {
         let scope = self.scope();
         match self.advance() {
             Some(_) => Ok(scope.rng()),
@@ -167,7 +168,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_eol(&self) -> Result<Rng> {
+    pub fn read_eol(&self) -> Result<Range<usize>> {
         let scope = self.scope();
         let c = self.advance();
         match c {
@@ -179,7 +180,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_space_1(&self) -> Result<Rng> {
+    pub fn read_space_1(&self) -> Result<Range<usize>> {
         let scope = self.scope();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
@@ -190,11 +191,11 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn read_space(&self) -> Rng {
+    pub fn read_space(&self) -> Range<usize> {
         self.read_while(&Character::HorizontalSpace)
     }
 
-    pub fn read_rest_of_line(&self) -> Result<Rng> {
+    pub fn read_rest_of_line(&self) -> Result<Range<usize>> {
         let scope = self.scope();
         self.read_while(&Character::HorizontalSpace);
         self.read_eol()?;

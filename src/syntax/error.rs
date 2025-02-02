@@ -1,15 +1,12 @@
-use std::{fmt::Display, io, path::PathBuf};
+use std::{fmt::Display, io, ops::Range, path::PathBuf};
 
 use thiserror::Error;
 
-use super::{
-    cst::{Rng, Token},
-    file::File,
-};
+use super::{cst::Token, file::File};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub struct SyntaxError {
-    pub rng: Rng,
+    pub rng: Range<usize>,
     pub want: Token,
     pub source: Option<Box<SyntaxError>>,
 }

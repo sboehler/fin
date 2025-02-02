@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::ops::Range;
 use std::rc::Rc;
 
 use chrono::NaiveDate;
@@ -241,7 +242,7 @@ impl Analyzer {
 
     fn analyze_interval(
         &mut self,
-        d: &cst::Rng,
+        d: &Range<usize>,
         source: &File,
     ) -> std::result::Result<Interval, ParserError> {
         match &source.text[d.clone()] {
