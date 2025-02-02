@@ -19,7 +19,7 @@ struct Scope<'a, 'b> {
 impl Scope<'_, '_> {
     fn character_error(&self, want: &Character) -> SyntaxError {
         SyntaxError {
-            rng: self.s.rng(self.start),
+            range: self.s.range(self.start),
             want: Token::Sequence(Sequence::One(want.clone())),
             source: None,
         }
@@ -27,13 +27,13 @@ impl Scope<'_, '_> {
 
     fn error(&self, want: &Sequence) -> SyntaxError {
         SyntaxError {
-            rng: self.s.rng(self.start),
+            range: self.s.range(self.start),
             want: Token::Sequence(want.clone()),
             source: None,
         }
     }
 
-    fn rng(&self) -> Range<usize> {
+    fn range(&self) -> Range<usize> {
         self.start..self.s.pos()
     }
 }
@@ -53,7 +53,7 @@ impl<'a> Scanner<'a> {
         })
     }
 
-    pub fn rng(&self, start: usize) -> Range<usize> {
+    pub fn range(&self, start: usize) -> Range<usize> {
         start..self.pos()
     }
 
@@ -93,7 +93,7 @@ impl<'a> Scanner<'a> {
         while ch.is(self.current()) {
             self.advance();
         }
-        scope.rng()
+        scope.range()
     }
 
     pub fn read_until(&self, ch: &Character) -> Range<usize> {
@@ -101,7 +101,7 @@ impl<'a> Scanner<'a> {
         while !ch.is(self.current()) {
             self.advance();
         }
-        scope.rng()
+        scope.range()
     }
 
     pub fn read_all(&self) -> Range<usize> {
@@ -112,7 +112,7 @@ impl<'a> Scanner<'a> {
         let scope = self.scope();
         let c = self.advance();
         if ch.is(c) {
-            Ok(scope.rng())
+            Ok(scope.range())
         } else {
             Err(scope.character_error(ch))
         }
@@ -123,7 +123,7 @@ impl<'a> Scanner<'a> {
         for c in str.chars() {
             self.read_char(&Character::Char(c))?;
         }
-        Ok(scope.rng())
+        Ok(scope.range())
     }
 
     pub fn read_sequence(&self, seq: &Sequence) -> Result<Range<usize>> {
@@ -131,13 +131,13 @@ impl<'a> Scanner<'a> {
         match seq {
             Sequence::One(ch) => {
                 self.read_char(ch)?;
-                Ok(scope.rng())
+                Ok(scope.range())
             }
             Sequence::OneOf(seqs) => {
                 for s in seqs {
                     let rollback = self.snapshot();
                     if self.read_sequence(s).is_ok() {
-                        return Ok(scope.rng());
+                        return Ok(scope.range());
                     }
                     rollback();
                 }
@@ -148,14 +148,14 @@ impl<'a> Scanner<'a> {
                 for _ in 0..*n {
                     self.read_char(char).map_err(|_| scope.error(seq))?;
                 }
-                Ok(scope.rng())
+                Ok(scope.range())
             }
             Sequence::String(s) => {
                 for c in s.chars() {
                     self.read_char(&Character::Char(c))
                         .map_err(|_| scope.error(seq))?;
                 }
-                Ok(scope.rng())
+                Ok(scope.range())
             }
         }
     }
@@ -163,7 +163,7 @@ impl<'a> Scanner<'a> {
     pub fn read_1(&self) -> Result<Range<usize>> {
         let scope = self.scope();
         match self.advance() {
-            Some(_) => Ok(scope.rng()),
+            Some(_) => Ok(scope.range()),
             None => Err(scope.character_error(&Character::Any)),
         }
     }
@@ -172,7 +172,7 @@ impl<'a> Scanner<'a> {
         let scope = self.scope();
         let c = self.advance();
         match c {
-            None | Some('\n') => Ok(scope.rng()),
+            None | Some('\n') => Ok(scope.range()),
             _ => {
                 Err(scope
                     .character_error(&Character::OneOf(vec![Character::NewLine, Character::EOF])))
@@ -199,7 +199,7 @@ impl<'a> Scanner<'a> {
         let scope = self.scope();
         self.read_while(&Character::HorizontalSpace);
         self.read_eol()?;
-        Ok(scope.rng())
+        Ok(scope.range())
     }
 }
 
@@ -215,7 +215,7 @@ mod test_scanner {
         assert_eq!("aaasd", &text[s.read_while(&Character::NotChar('f'))]);
         assert_eq!("ff", &text[s.read_while(&Character::Char('f'))]);
         assert_eq!("", &text[s.read_while(&Character::Char('q'))]);
-        assert_eq!(Ok(""), s.read_eol().map(|rng| &text[rng]));
+        assert_eq!(Ok(""), s.read_eol().map(|r| &text[r]));
     }
 
     #[test]
@@ -232,7 +232,7 @@ mod test_scanner {
         );
         assert_eq!(
             Err(SyntaxError {
-                rng: 7..7,
+                range: 7..7,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
                 source: None,
             }),
@@ -248,7 +248,7 @@ mod test_scanner {
         assert_eq!("a", &text[s.read_char(&Character::Char('a')).unwrap()]);
         assert_eq!(
             Err(SyntaxError {
-                rng: 1..2,
+                range: 1..2,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
                 source: None,
             }),
@@ -267,7 +267,7 @@ mod test_scanner {
         assert_eq!(Ok("as"), s.read_string("as").map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
-                rng: 2..3,
+                range: 2..3,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
                 source: None,
             }),
@@ -301,7 +301,7 @@ mod test_scanner {
         assert_eq!(Ok("  \n"), s.read_rest_of_line().map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
-                rng: 5..6,
+                range: 5..6,
                 want: Token::Sequence(Sequence::One(Character::OneOf(vec![
                     Character::NewLine,
                     Character::EOF
@@ -323,7 +323,7 @@ mod test_scanner {
         assert_eq!(Ok("o"), s.read_1().map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
-                rng: 3..3,
+                range: 3..3,
                 want: Token::Sequence(Sequence::One(Character::Any)),
                 source: None,
             }),
@@ -348,7 +348,7 @@ mod test_scanner {
         );
         assert_eq!(
             Err(SyntaxError {
-                rng: 2..4,
+                range: 2..4,
                 want: Token::Sequence(Sequence::NumberOf(3, Character::Any)),
                 source: None,
             }),
@@ -363,7 +363,7 @@ mod test_scanner {
         let s = Scanner::new(&text);
         assert_eq!(
             Err(SyntaxError {
-                rng: 0..1,
+                range: 0..1,
                 want: Token::Sequence(Sequence::One(Character::OneOf(vec![
                     Character::NewLine,
                     Character::EOF
@@ -389,7 +389,7 @@ mod test_scanner {
         assert_eq!(Ok("\t\t"), s.read_space_1().map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
-                rng: 5..6,
+                range: 5..6,
                 want: Token::Sequence(Sequence::One(Character::HorizontalSpace)),
                 source: None,
             }),

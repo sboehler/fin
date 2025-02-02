@@ -103,7 +103,7 @@ impl Display for JournalError {
                     date = open.date,
                     account = registry.account_name(open.account),
                 )?;
-                Self::write_context(&open.rng, f, registry)?;
+                Self::write_context(&open.loc, f, registry)?;
             }
             JournalError::TransactionAccountNotOpen {
                 transaction,
@@ -116,7 +116,7 @@ impl Display for JournalError {
                     date = transaction.date,
                     account = registry.account_name(*account),
                 )?;
-                Self::write_context(&transaction.rng, f, registry)?;
+                Self::write_context(&transaction.loc, f, registry)?;
             }
             JournalError::AssertionAccountNotOpen {
                 assertion,
@@ -128,7 +128,7 @@ impl Display for JournalError {
                     account = registry.account_name(assertion.account),
                     date = assertion.date,
                 )?;
-                Self::write_context(&assertion.rng, f, registry)?;
+                Self::write_context(&assertion.loc, f, registry)?;
             }
             JournalError::AssertionIncorrectBalance {
                 assertion,
@@ -143,7 +143,7 @@ impl Display for JournalError {
                     commodity = registry.commodity_name(assertion.commodity),
                     date = assertion.date,
                 )?;
-                Self::write_context(&assertion.rng, f, registry)?;
+                Self::write_context(&assertion.loc, f, registry)?;
             }
             JournalError::CloseNonzeroBalance {
                 close,
@@ -158,7 +158,7 @@ impl Display for JournalError {
                     account = registry.account_name(close.account),
                     commodity = registry.commodity_name(*commodity),
                 )?;
-                Self::write_context(&close.rng, f, registry)?;
+                Self::write_context(&close.loc, f, registry)?;
             }
         }
         Ok(())

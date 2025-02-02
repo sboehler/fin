@@ -22,7 +22,7 @@ struct Scope<'a, 'b> {
 impl<'a, 'b> Scope<'a, 'b> {
     fn error(&self, source: SyntaxError) -> SyntaxError {
         SyntaxError {
-            rng: self.parser.scanner.rng(self.start),
+            range: self.parser.scanner.range(self.start),
             want: self.token.clone(),
             source: Some(Box::new(source)),
         }
@@ -30,7 +30,7 @@ impl<'a, 'b> Scope<'a, 'b> {
 
     fn token_error(&self) -> SyntaxError {
         SyntaxError {
-            rng: self.parser.scanner.rng(self.start),
+            range: self.parser.scanner.range(self.start),
             want: self.token.clone(),
             source: None,
         }
@@ -44,7 +44,7 @@ impl<'a, 'b> Scope<'a, 'b> {
         }
     }
 
-    fn rng(&self) -> Range<usize> {
+    fn range(&self) -> Range<usize> {
         self.start..self.parser.scanner.pos()
     }
 }
@@ -78,7 +78,7 @@ impl<'a> Parser<'a> {
             );
         }
         Ok(Account {
-            range: scope.rng(),
+            range: scope.range(),
             segments,
         })
     }
@@ -87,8 +87,8 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::AccountType);
         self.scanner
             .read_while_1(&Character::Alphabetic)
-            .and_then(|rng| match &self.scanner.source[rng.clone()] {
-                "Assets" | "Liabilities" | "Expenses" | "Equity" | "Income" => Ok(rng.clone()),
+            .and_then(|r| match &self.scanner.source[r.clone()] {
+                "Assets" | "Liabilities" | "Expenses" | "Equity" | "Income" => Ok(r.clone()),
                 _ => Err(scope.token_error()),
             })
     }
@@ -116,7 +116,7 @@ impl<'a> Parser<'a> {
                     .read_sequence(&Sequence::NumberOf(2, Character::Digit))
             })
             .map_err(|e| scope.error(e))?;
-        Ok(Date(scope.rng()))
+        Ok(Date(scope.range()))
     }
 
     fn parse_interval(&self) -> Result<Range<usize>> {
@@ -163,7 +163,7 @@ impl<'a> Parser<'a> {
                 .and_then(|_| self.scanner.read_while_1(&Character::Digit))
                 .map_err(|e| scope.error(e))?;
         }
-        Ok(Decimal(scope.rng()))
+        Ok(Decimal(scope.range()))
     }
 
     fn parse_quoted_string(&self) -> Result<QuotedString> {
@@ -176,7 +176,7 @@ impl<'a> Parser<'a> {
             .read_char(&Character::Char('"'))
             .map_err(|e| scope.error(e))?;
         Ok(QuotedString {
-            range: scope.rng(),
+            range: scope.range(),
             content,
         })
     }
@@ -209,7 +209,7 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(SyntaxTree {
-            range: file_scope.rng(),
+            range: file_scope.range(),
             directives,
         })
     }
@@ -219,7 +219,7 @@ impl<'a> Parser<'a> {
         match self.scanner.current() {
             Some('#') | Some('*') => {
                 self.scanner.read_until(&Character::NewLine);
-                let range = scope.rng();
+                let range = scope.range();
                 self.scanner
                     .read_char(&Character::NewLine)
                     .map_err(|e| scope.error(e))?;
@@ -228,7 +228,7 @@ impl<'a> Parser<'a> {
             Some('/') => {
                 self.scanner.read_string("//").map_err(|e| scope.error(e))?;
                 self.scanner.read_until(&Character::NewLine);
-                let range = scope.rng();
+                let range = scope.range();
                 self.scanner
                     .read_char(&Character::NewLine)
                     .map_err(|e| scope.error(e))?;
@@ -245,7 +245,7 @@ impl<'a> Parser<'a> {
             Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command(&scope),
             _o => Err(SyntaxError {
                 want: Token::Directive,
-                rng: scope.rng(),
+                range: scope.range(),
                 source: None,
             }),
         }
@@ -258,7 +258,7 @@ impl<'a> Parser<'a> {
             .map_err(|e| scope.error(e))?;
         let path = self.parse_quoted_string().map_err(|e| scope.error(e))?;
         Ok(Directive::Include(Include {
-            range: scope.rng(),
+            range: scope.range(),
             path,
         }))
     }
@@ -324,7 +324,7 @@ impl<'a> Parser<'a> {
             .read_char(&Character::Char(')'))
             .map_err(|e| scope.error(e))?;
         Ok(Addon::Performance {
-            range: scope.rng(),
+            range: scope.range(),
             commodities,
         })
     }
@@ -342,7 +342,7 @@ impl<'a> Parser<'a> {
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let account = self.parse_account().map_err(|e| scope.error(e))?;
         Ok(Addon::Accrual {
-            range: scope.rng(),
+            range: scope.range(),
             interval,
             start: start_date,
             end: end_date,
@@ -363,7 +363,7 @@ impl<'a> Parser<'a> {
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let target = self.parse_commodity().map_err(|e| scope.error(e))?;
         Ok(Directive::Price(Price {
-            range: scope.rng(),
+            range: scope.range(),
             date,
             commodity,
             price,
@@ -378,7 +378,7 @@ impl<'a> Parser<'a> {
             .map_err(|e| scope.error(e))?;
         let a = self.parse_account().map_err(|e| scope.error(e))?;
         Ok(Directive::Open(Open {
-            range: scope.rng(),
+            range: scope.range(),
             date,
             account: a,
         }))
@@ -405,7 +405,7 @@ impl<'a> Parser<'a> {
             }
         }
         Ok(Directive::Transaction(Transaction {
-            range: scope.rng(),
+            range: scope.range(),
             addon,
             date,
             description,
@@ -425,7 +425,7 @@ impl<'a> Parser<'a> {
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let commodity = self.parse_commodity().map_err(|e| scope.error(e))?;
         Ok(Booking {
-            range: scope.rng(),
+            range: scope.range(),
             credit,
             debit,
             quantity,
@@ -456,7 +456,7 @@ impl<'a> Parser<'a> {
             assertions.push(self.parse_sub_assertion().map_err(|e| scope.error(e))?);
         }
         Ok(Directive::Assertion(Assertion {
-            range: scope.rng(),
+            range: scope.range(),
             date,
             assertions,
         }))
@@ -472,7 +472,7 @@ impl<'a> Parser<'a> {
         self.scanner.read_space_1().map_err(|e| scope.error(e))?;
         let commodity = self.parse_commodity().map_err(|e| scope.error(e))?;
         Ok(SubAssertion {
-            range: scope.rng(),
+            range: scope.range(),
             account,
             balance: amount,
             commodity,
@@ -486,7 +486,7 @@ impl<'a> Parser<'a> {
             .map_err(|e| scope.error(e))?;
         let account = self.parse_account().map_err(|e| scope.error(e))?;
         Ok(Directive::Close(Close {
-            range: scope.rng(),
+            range: scope.range(),
             date,
             account,
         }))
@@ -517,10 +517,10 @@ mod tests {
         let text = " USD";
         assert_eq!(
             Err(SyntaxError {
-                rng: 0..1,
+                range: 0..1,
                 want: Token::Commodity,
                 source: Some(Box::new(SyntaxError {
-                    rng: 0..1,
+                    range: 0..1,
                     want: Token::Sequence(Sequence::One(Character::AlphaNum)),
                     source: None,
                 })),
@@ -533,10 +533,10 @@ mod tests {
     fn test_parse_commodity4() {
         assert_eq!(
             Err(SyntaxError {
-                rng: 0..1,
+                range: 0..1,
                 want: Token::Commodity,
                 source: Some(Box::new(SyntaxError {
-                    rng: 0..1,
+                    range: 0..1,
                     want: Token::Sequence(Sequence::One(Character::AlphaNum)),
                     source: None,
                 })),
@@ -574,7 +574,7 @@ mod tests {
         let f3 = " USD";
         assert_eq!(
             Err(SyntaxError {
-                rng: 0..1,
+                range: 0..1,
                 want: Token::Sequence(Sequence::One(Character::Alphabetic)),
                 source: None,
             }),
@@ -593,10 +593,10 @@ mod tests {
         let f = "024-02-02";
         assert_eq!(
             Err(SyntaxError {
-                rng: 0..4,
+                range: 0..4,
                 want: Token::Date,
                 source: Some(Box::new(SyntaxError {
-                    rng: 0..4,
+                    range: 0..4,
                     want: Token::Sequence(Sequence::NumberOf(4, Character::Digit)),
                     source: None,
                 })),
@@ -610,10 +610,10 @@ mod tests {
         let f = "2024-02-0";
         assert_eq!(
             Err(SyntaxError {
-                rng: 0..9,
+                range: 0..9,
                 want: Token::Date,
                 source: Some(Box::new(SyntaxError {
-                    rng: 8..9,
+                    range: 8..9,
                     want: Token::Sequence(Sequence::NumberOf(2, Character::Digit)),
                     source: None,
                 })),
@@ -626,10 +626,10 @@ mod tests {
         let f = "2024-0--0";
         assert_eq!(
             Err(SyntaxError {
-                rng: 0..7,
+                range: 0..7,
                 want: Token::Date,
                 source: Some(Box::new(SyntaxError {
-                    rng: 5..7,
+                    range: 5..7,
                     want: Token::Sequence(Sequence::NumberOf(2, Character::Digit)),
                     source: None,
                 })),
@@ -641,7 +641,7 @@ mod tests {
     #[test]
     fn test_parse_interval() {
         for d in ["daily", "weekly", "monthly", "quarterly", "yearly", "once"] {
-            assert_eq!(Ok(d), Parser::new(d).parse_interval().map(|rng| &d[rng]),);
+            assert_eq!(Ok(d), Parser::new(d).parse_interval().map(|r| &d[r]),);
         }
     }
 
@@ -659,10 +659,10 @@ mod tests {
         let f = "foo";
         assert_eq!(
             Err(SyntaxError {
-                rng: 0..1,
+                range: 0..1,
                 want: Token::Decimal,
                 source: Some(Box::new(SyntaxError {
-                    rng: 0..1,
+                    range: 0..1,
                     want: Token::Sequence(Sequence::One(Character::Digit)),
                     source: None,
                 })),

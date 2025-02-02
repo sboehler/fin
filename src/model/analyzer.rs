@@ -80,7 +80,7 @@ impl Analyzer {
         let price = self.analyze_decimal(&p.price, source)?;
         let target = self.analyze_commodity(&p.target, source)?;
         let price = Price {
-            rng: Some(SourceLoc::new(self.current_file, p.range.clone())),
+            loc: Some(SourceLoc::new(self.current_file, p.range.clone())),
             date,
             commodity,
             price,
@@ -98,7 +98,7 @@ impl Analyzer {
         let date = self.analyze_date(&o.date, source)?;
         let account = self.analyze_account(&o.account, source)?;
         let value = Open {
-            rng: Some(SourceLoc::new(self.current_file, o.range.clone())),
+            loc: Some(SourceLoc::new(self.current_file, o.range.clone())),
             date,
             account,
         };
@@ -129,7 +129,7 @@ impl Analyzer {
             .flatten()
             .collect::<Vec<_>>();
         let mut trx = Transaction {
-            rng: Some(SourceLoc::new(self.current_file, t.range.clone())),
+            loc: Some(SourceLoc::new(self.current_file, t.range.clone())),
             date,
             description: Rc::new(source.text[t.description.content.clone()].to_string()),
             bookings,
@@ -177,7 +177,7 @@ impl Analyzer {
             .iter()
             .map(|a| {
                 Ok(Assertion {
-                    rng: Some(SourceLoc::new(self.current_file, a.range.clone())),
+                    loc: Some(SourceLoc::new(self.current_file, a.range.clone())),
 
                     date,
                     account: self.analyze_account(&a.account, source)?,
@@ -198,7 +198,7 @@ impl Analyzer {
         let date = self.analyze_date(&c.date, source)?;
         let account = self.analyze_account(&c.account, source)?;
         let value = Close {
-            rng: Some(SourceLoc::new(self.current_file, c.range.clone())),
+            loc: Some(SourceLoc::new(self.current_file, c.range.clone())),
             date,
             account,
         };
@@ -214,7 +214,7 @@ impl Analyzer {
         NaiveDate::parse_from_str(&source.text[date.0.clone()], "%Y-%m-%d").map_err(|_| {
             ParserError::SyntaxError(
                 SyntaxError {
-                    rng: date.0.clone(),
+                    range: date.0.clone(),
                     want: cst::Token::Date,
                     source: None,
                 },
@@ -231,7 +231,7 @@ impl Analyzer {
         rust_decimal::Decimal::from_str_exact(&source.text[decimal.0.clone()]).map_err(|_| {
             ParserError::SyntaxError(
                 SyntaxError {
-                    rng: decimal.0.clone(),
+                    range: decimal.0.clone(),
                     want: cst::Token::Decimal,
                     source: None,
                 },
@@ -254,7 +254,7 @@ impl Analyzer {
             "once" => Ok(Interval::Single),
             _ => Err(ParserError::SyntaxError(
                 SyntaxError {
-                    rng: d.clone(),
+                    range: d.clone(),
                     want: cst::Token::Decimal,
                     source: None,
                 },
@@ -273,7 +273,7 @@ impl Analyzer {
             .map_err(|_e| {
                 ParserError::SyntaxError(
                     SyntaxError {
-                        rng: commodity.0.clone(),
+                        range: commodity.0.clone(),
                         want: cst::Token::Commodity,
                         source: None,
                     },
@@ -292,7 +292,7 @@ impl Analyzer {
             .map_err(|_e| {
                 ParserError::SyntaxError(
                     SyntaxError {
-                        rng: account.range.clone(),
+                        range: account.range.clone(),
                         want: cst::Token::Account,
                         source: None,
                     },
@@ -314,7 +314,7 @@ impl Analyzer {
         for b in t.bookings {
             if b.account.account_type.is_al() {
                 res.push(Transaction {
-                    rng: t.rng,
+                    loc: t.loc,
                     date: t.date,
                     description: t.description.clone(),
                     bookings: Booking::create(account, b.account, b.quantity, b.commodity, None),
@@ -335,7 +335,7 @@ impl Analyzer {
                         _ => quantity,
                     };
                     res.push(Transaction {
-                        rng: t.rng,
+                        loc: t.loc,
                         date: dt.1,
                         description: format!(
                             "{} (accrual {}/{})",

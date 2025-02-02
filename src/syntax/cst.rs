@@ -1,26 +1,5 @@
 use std::{fmt::Display, ops::Range};
 
-pub type Rng = Range<usize>;
-
-pub fn context(text: &str, rng: Range<usize>) -> Vec<(usize, &str)> {
-    let (start_line, _) = position(text, rng.start);
-    let (end_line, _) = position(text, rng.end);
-
-    text.lines()
-        .enumerate()
-        .skip(start_line - 1)
-        .take(end_line - start_line + 1)
-        .map(|(i, l)| (i + 1, l))
-        .collect()
-}
-
-pub fn position(text: &str, pos: usize) -> (usize, usize) {
-    let lines = text[..pos].split('\n').collect::<Vec<_>>();
-    let line = lines.len();
-    let col = lines.last().iter().flat_map(|s| s.chars()).count() + 1;
-    (line, col)
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -223,29 +202,29 @@ impl Display for Token {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub struct Commodity(pub Rng);
+pub struct Commodity(pub Range<usize>);
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct Account {
-    pub range: Rng,
-    pub segments: Vec<Rng>,
+    pub range: Range<usize>,
+    pub segments: Vec<Range<usize>>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Date(pub Rng);
+pub struct Date(pub Range<usize>);
 
 #[derive(Eq, PartialEq, Debug)]
-pub struct Decimal(pub Rng);
+pub struct Decimal(pub Range<usize>);
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct QuotedString {
-    pub range: Rng,
-    pub content: Rng,
+    pub range: Range<usize>,
+    pub content: Range<usize>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct SyntaxTree {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub directives: Vec<Directive>,
 }
 
@@ -260,12 +239,12 @@ pub enum Directive {
 }
 #[derive(Eq, PartialEq, Debug)]
 pub struct Include {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub path: QuotedString,
 }
 #[derive(Eq, PartialEq, Debug)]
 pub struct Price {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub date: Date,
     pub commodity: Commodity,
     pub price: Decimal,
@@ -274,14 +253,14 @@ pub struct Price {
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Open {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub date: Date,
     pub account: Account,
 }
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Transaction {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub addon: Option<Addon>,
     pub date: Date,
     pub description: QuotedString,
@@ -290,20 +269,20 @@ pub struct Transaction {
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Assertion {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub date: Date,
     pub assertions: Vec<SubAssertion>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Close {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub date: Date,
     pub account: Account,
 }
 
 impl Directive {
-    pub fn range(&self) -> Rng {
+    pub fn range(&self) -> Range<usize> {
         match self {
             Directive::Include(Include { range, .. }) => range.clone(),
             Directive::Price(Price { range, .. }) => range.clone(),
@@ -317,7 +296,7 @@ impl Directive {
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct SubAssertion {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub account: Account,
     pub balance: Decimal,
     pub commodity: Commodity,
@@ -325,7 +304,7 @@ pub struct SubAssertion {
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Booking {
-    pub range: Rng,
+    pub range: Range<usize>,
     pub credit: Account,
     pub debit: Account,
     pub quantity: Decimal,
@@ -335,12 +314,12 @@ pub struct Booking {
 #[derive(Eq, PartialEq, Debug)]
 pub enum Addon {
     Performance {
-        range: Rng,
+        range: Range<usize>,
         commodities: Vec<Commodity>,
     },
     Accrual {
-        range: Rng,
-        interval: Rng,
+        range: Range<usize>,
+        interval: Range<usize>,
         start: Date,
         end: Date,
         account: Account,

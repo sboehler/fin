@@ -6,7 +6,7 @@ use super::{cst::Token, file::File};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub struct SyntaxError {
-    pub rng: Range<usize>,
+    pub range: Range<usize>,
     pub want: Token,
     pub source: Option<Box<SyntaxError>>,
 }
@@ -16,7 +16,7 @@ impl std::fmt::Display for SyntaxError {
         write!(
             f,
             "syntax error at position {}: want {}",
-            self.rng.start, self.want
+            self.range.start, self.want
         )?;
         if let Some(e) = &self.source {
             writeln!(f, "{}", e)?;
@@ -27,7 +27,7 @@ impl std::fmt::Display for SyntaxError {
 
 impl SyntaxError {
     pub fn full_error(&self, f: &mut std::fmt::Formatter, file: &File) -> std::fmt::Result {
-        let (line, col) = file.position(self.rng.start);
+        let (line, col) = file.position(self.range.start);
         writeln!(f)?;
         if let Some(p) = &file.path {
             writeln!(f, "In file \"{}\"", p.to_string_lossy())?;
@@ -40,7 +40,7 @@ impl SyntaxError {
         writeln!(f)?;
         writeln!(f)?;
 
-        for (n, line) in file.context(self.rng.clone()) {
+        for (n, line) in file.context(self.range.clone()) {
             writeln!(f, "{n:5} |{line}")?;
         }
         writeln!(f, "{}^ want {}", " ".repeat(col + 6), self.want,)?;

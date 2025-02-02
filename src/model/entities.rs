@@ -3,14 +3,12 @@ use std::{
     collections::HashMap,
     fmt::Display,
     iter::Sum,
-    ops::{Add, AddAssign, Deref, DerefMut},
+    ops::{Add, AddAssign, Deref, DerefMut, Range},
     rc::Rc,
 };
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-
-use crate::syntax::cst::Rng;
 
 use super::error::ModelError;
 
@@ -79,7 +77,7 @@ pub struct SourceLoc {
 }
 
 impl SourceLoc {
-    pub fn new(file: SourceFileID, range: Rng) -> Self {
+    pub fn new(file: SourceFileID, range: Range<usize>) -> Self {
         SourceLoc {
             file,
             start: range.start,
@@ -94,7 +92,7 @@ impl SourceLoc {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Price {
-    pub rng: Option<SourceLoc>,
+    pub loc: Option<SourceLoc>,
     pub date: NaiveDate,
     pub commodity: CommodityID,
     pub price: Decimal,
@@ -103,7 +101,7 @@ pub struct Price {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Open {
-    pub rng: Option<SourceLoc>,
+    pub loc: Option<SourceLoc>,
     pub date: NaiveDate,
     pub account: AccountID,
 }
@@ -152,7 +150,7 @@ impl Booking {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Transaction {
-    pub rng: Option<SourceLoc>,
+    pub loc: Option<SourceLoc>,
     pub date: NaiveDate,
     pub description: Rc<String>,
     pub bookings: Vec<Booking>,
@@ -161,7 +159,7 @@ pub struct Transaction {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Assertion {
-    pub rng: Option<SourceLoc>,
+    pub loc: Option<SourceLoc>,
     pub date: NaiveDate,
     pub account: AccountID,
     pub balance: Decimal,
@@ -170,7 +168,7 @@ pub struct Assertion {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Close {
-    pub rng: Option<SourceLoc>,
+    pub loc: Option<SourceLoc>,
     pub date: NaiveDate,
     pub account: AccountID,
 }

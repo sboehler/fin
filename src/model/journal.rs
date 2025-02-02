@@ -257,7 +257,7 @@ impl Journal {
             }
             gains.push(Transaction {
                 date,
-                rng: None,
+                loc: None,
                 description: format!(
                     "Adjust value of {} in account {}",
                     registry.commodity_name(*commodity),

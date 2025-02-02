@@ -18,9 +18,9 @@ impl File {
         })
     }
 
-    pub fn context(&self, rng: Range<usize>) -> Vec<(usize, &str)> {
-        let (start_line, _) = self.position(rng.start);
-        let (end_line, _) = self.position(rng.end);
+    pub fn context(&self, range: Range<usize>) -> Vec<(usize, &str)> {
+        let (start_line, _) = self.position(range.start);
+        let (end_line, _) = self.position(range.end);
 
         self.text
             .lines()
@@ -38,17 +38,9 @@ impl File {
         (line, col)
     }
 
-    pub fn fmt_range(&self, f: &mut std::fmt::Formatter, rng: Range<usize>) -> std::fmt::Result {
-        self.context(rng)
+    pub fn fmt_range(&self, f: &mut std::fmt::Formatter, range: Range<usize>) -> std::fmt::Result {
+        self.context(range)
             .iter()
             .try_for_each(|(i, l)| writeln!(f, "{:5} |{}", i, l))
     }
 }
-
-// impl Display for Rng {
-//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         self.context()
-//             .iter()
-//             .try_for_each(|(i, l)| writeln!(f, "{:5} |{}", i, l))
-//     }
-// }
