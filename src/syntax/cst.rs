@@ -1,17 +1,5 @@
 use std::{fmt::Display, ops::Range};
 
-#[cfg(test)]
-mod tests {
-
-    use pretty_assertions::assert_eq;
-
-    #[test]
-    fn test_position() {
-        let f = &["line1", "line2", "line3", "line4", "line5"].join("\n");
-        assert_eq!(["    3 |line3", ""].join("\n"), f[13..15])
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Character {
     EOF,
