@@ -6,8 +6,8 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    AccountID, Assertion, Booking, Close, CommodityID, Interval, Open, Partition, Period,
-    Positions, Price, Transaction,
+    AccountID, Assertion, Booking, Close, CommodityID, Open, Partition, Period, Positions, Price,
+    Transaction,
 };
 use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
@@ -143,21 +143,12 @@ impl Journal {
         Ok(())
     }
 
-    pub fn process(
-        &mut self,
-        valuation: Option<CommodityID>,
-        close: Option<Interval>,
-    ) -> Result<(), ModelError> {
+    pub fn process(&mut self, valuation: Option<CommodityID>) -> Result<(), ModelError> {
         let mut prices = Prices::default();
         let mut quantities = Positions::default();
         let mut values = Positions::default();
 
         for date in self.entire_period().expect("journal is empty").dates() {
-            let closings = close
-                .filter(|&interval| date == interval.start_of(date).unwrap())
-                .map(|_| Vec::new())
-                .unwrap_or_default();
-
             if let Some(day) = self.days.get_mut(&date) {
                 day.prices.iter().for_each(|p| prices.insert(p));
 
@@ -179,11 +170,8 @@ impl Journal {
                 Self::update_quantities(&day.transactions, &mut quantities);
                 Self::update_values(&day.transactions, &mut values);
                 Self::update_values(&day.gains, &mut values);
-                day.closings = closings
             } else {
-                let mut day = Day::new(date);
-                day.closings = closings;
-                self.days.insert(date, day);
+                self.days.insert(date, Day::new(date));
             }
         }
         Ok(())

@@ -55,7 +55,7 @@ impl Command {
             .as_ref()
             .map(|s| journal.registry.commodity_id(s))
             .transpose()?;
-        journal.process(valuation, None)?;
+        journal.process(valuation)?;
         let partition = Partition::from_interval(
             Period(
                 self.from_date.or(journal.min_transaction_date()).unwrap(),
