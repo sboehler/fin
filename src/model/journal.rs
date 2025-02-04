@@ -149,30 +149,23 @@ impl Journal {
         let mut values = Positions::default();
 
         for date in self.entire_period().expect("journal is empty").dates() {
-            if let Some(day) = self.days.get_mut(&date) {
-                day.prices.iter().for_each(|p| prices.insert(p));
+            let day = self.days.entry(date).or_insert_with(|| Day::new(date));
+            day.prices.iter().for_each(|p| prices.insert(p));
 
-                let normalized_prices = valuation.map(|p| prices.normalize(p));
+            let normalized_prices = valuation.map(|p| prices.normalize(p));
 
-                Self::valuate_transactions(
-                    &self.registry,
-                    &mut day.transactions,
-                    &normalized_prices,
-                )?;
+            Self::valuate_transactions(&self.registry, &mut day.transactions, &normalized_prices)?;
 
-                day.gains = Self::compute_gains(
-                    self.registry.clone(),
-                    &normalized_prices,
-                    &quantities,
-                    &values,
-                    day.date,
-                )?;
-                Self::update_quantities(&day.transactions, &mut quantities);
-                Self::update_values(&day.transactions, &mut values);
-                Self::update_values(&day.gains, &mut values);
-            } else {
-                self.days.insert(date, Day::new(date));
-            }
+            day.gains = Self::compute_gains(
+                self.registry.clone(),
+                &normalized_prices,
+                &quantities,
+                &values,
+                day.date,
+            )?;
+            Self::update_quantities(&day.transactions, &mut quantities);
+            Self::update_values(&day.transactions, &mut values);
+            Self::update_values(&day.gains, &mut values);
         }
         Ok(())
     }
