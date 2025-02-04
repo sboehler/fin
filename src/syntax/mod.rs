@@ -1,6 +1,5 @@
 use std::{
     collections::{HashSet, VecDeque},
-    error::Error,
     path::Path,
 };
 
@@ -53,8 +52,10 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, File)>, 
     Ok(res)
 }
 
-pub fn parse_file(file_path: &Path) -> std::result::Result<(SyntaxTree, File), Box<dyn Error>> {
+pub fn parse_file(file_path: &Path) -> std::result::Result<(SyntaxTree, File), ParserError> {
     let file = File::read(file_path).map_err(|e| ParserError::IO(file_path.to_path_buf(), e))?;
-    let tree = Parser::new(&file.text).parse()?;
+    let tree = Parser::new(&file.text)
+        .parse()
+        .map_err(|e| ParserError::SyntaxError(e, file.clone()))?;
     Ok((tree, file))
 }
