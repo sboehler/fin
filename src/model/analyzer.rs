@@ -58,27 +58,24 @@ impl Analyzer {
     ) -> std::result::Result<(), ParserError> {
         self.current_file = self.registry.add_source_file(source.clone());
         for d in &tree.directives {
+            use cst::Directive::*;
             match d {
-                cst::Directive::Price(p) => self.analyze_price(p, source)?,
-                cst::Directive::Open(o) => self.analyze_open(o, source)?,
-                cst::Directive::Transaction(t) => self.analyze_transaction(t, source)?,
-                cst::Directive::Assertion(a) => self.analyze_assertion(a, source)?,
-                cst::Directive::Close(c) => self.analyze_close(c, source)?,
-                cst::Directive::Include(_) => (),
+                Price(p) => self.price(p, source)?,
+                Open(o) => self.open(o, source)?,
+                Transaction(t) => self.transaction(t, source)?,
+                Assertion(a) => self.assertion(a, source)?,
+                Close(c) => self.close(c, source)?,
+                Include(_) => (),
             }
         }
         Ok(())
     }
 
-    fn analyze_price(
-        &mut self,
-        p: &cst::Price,
-        source: &File,
-    ) -> std::result::Result<(), ParserError> {
-        let date = self.analyze_date(&p.date, source)?;
-        let commodity = self.analyze_commodity(&p.commodity, source)?;
-        let price = self.analyze_decimal(&p.price, source)?;
-        let target = self.analyze_commodity(&p.target, source)?;
+    fn price(&mut self, p: &cst::Price, source: &File) -> std::result::Result<(), ParserError> {
+        let date = self.date(&p.date, source)?;
+        let commodity = self.commodity(&p.commodity, source)?;
+        let price = self.decimal(&p.price, source)?;
+        let target = self.commodity(&p.target, source)?;
         let price = Price {
             loc: Some(SourceLoc::new(self.current_file, p.range.clone())),
             date,
@@ -90,13 +87,9 @@ impl Analyzer {
         Ok(())
     }
 
-    fn analyze_open(
-        &mut self,
-        o: &cst::Open,
-        source: &File,
-    ) -> std::result::Result<(), ParserError> {
-        let date = self.analyze_date(&o.date, source)?;
-        let account = self.analyze_account(&o.account, source)?;
+    fn open(&mut self, o: &cst::Open, source: &File) -> std::result::Result<(), ParserError> {
+        let date = self.date(&o.date, source)?;
+        let account = self.account(&o.account, source)?;
         let value = Open {
             loc: Some(SourceLoc::new(self.current_file, o.range.clone())),
             date,
@@ -106,21 +99,21 @@ impl Analyzer {
         Ok(())
     }
 
-    fn analyze_transaction(
+    fn transaction(
         &mut self,
         t: &cst::Transaction,
         source: &File,
     ) -> std::result::Result<(), ParserError> {
-        let date = self.analyze_date(&t.date, source)?;
+        let date = self.date(&t.date, source)?;
         let bookings = t
             .bookings
             .iter()
             .map(|a| {
                 Ok(Booking::create(
-                    self.analyze_account(&a.credit, source)?,
-                    self.analyze_account(&a.debit, source)?,
-                    self.analyze_decimal(&a.quantity, source)?,
-                    self.analyze_commodity(&a.commodity, source)?,
+                    self.account(&a.credit, source)?,
+                    self.account(&a.debit, source)?,
+                    self.decimal(&a.quantity, source)?,
+                    self.commodity(&a.commodity, source)?,
                     None,
                 ))
             })
@@ -140,7 +133,7 @@ impl Analyzer {
                 trx.targets = Some(
                     commodities
                         .iter()
-                        .map(|c| self.analyze_commodity(c, source))
+                        .map(|c| self.commodity(c, source))
                         .collect::<std::result::Result<Vec<_>, ParserError>>()?,
                 );
                 vec![trx]
@@ -152,10 +145,10 @@ impl Analyzer {
                 interval,
                 ..
             }) => {
-                let start = self.analyze_date(start, source)?;
-                let end = self.analyze_date(end, source)?;
-                let interval = self.analyze_interval(interval, source)?;
-                let account = self.analyze_account(account, source)?;
+                let start = self.date(start, source)?;
+                let end = self.date(end, source)?;
+                let interval = self.interval(interval, source)?;
+                let account = self.account(account, source)?;
                 self.expand(trx, start, end, interval, account)
             }
             None => vec![trx],
@@ -166,12 +159,12 @@ impl Analyzer {
         Ok(())
     }
 
-    fn analyze_assertion(
+    fn assertion(
         &mut self,
         a: &cst::Assertion,
         source: &File,
     ) -> std::result::Result<(), ParserError> {
-        let date = self.analyze_date(&a.date, source)?;
+        let date = self.date(&a.date, source)?;
         let mut res = a
             .assertions
             .iter()
@@ -180,9 +173,9 @@ impl Analyzer {
                     loc: Some(SourceLoc::new(self.current_file, a.range.clone())),
 
                     date,
-                    account: self.analyze_account(&a.account, source)?,
-                    balance: self.analyze_decimal(&a.balance, source)?,
-                    commodity: self.analyze_commodity(&a.commodity, source)?,
+                    account: self.account(&a.account, source)?,
+                    balance: self.decimal(&a.balance, source)?,
+                    commodity: self.commodity(&a.commodity, source)?,
                 })
             })
             .collect::<std::result::Result<Vec<_>, ParserError>>()?;
@@ -190,13 +183,9 @@ impl Analyzer {
         Ok(())
     }
 
-    fn analyze_close(
-        &mut self,
-        c: &cst::Close,
-        source: &File,
-    ) -> std::result::Result<(), ParserError> {
-        let date = self.analyze_date(&c.date, source)?;
-        let account = self.analyze_account(&c.account, source)?;
+    fn close(&mut self, c: &cst::Close, source: &File) -> std::result::Result<(), ParserError> {
+        let date = self.date(&c.date, source)?;
+        let account = self.account(&c.account, source)?;
         let value = Close {
             loc: Some(SourceLoc::new(self.current_file, c.range.clone())),
             date,
@@ -206,7 +195,7 @@ impl Analyzer {
         Ok(())
     }
 
-    fn analyze_date(
+    fn date(
         &mut self,
         date: &cst::Date,
         source: &File,
@@ -223,7 +212,7 @@ impl Analyzer {
         })
     }
 
-    fn analyze_decimal(
+    fn decimal(
         &self,
         decimal: &cst::Decimal,
         source: &File,
@@ -240,7 +229,7 @@ impl Analyzer {
         })
     }
 
-    fn analyze_interval(
+    fn interval(
         &mut self,
         d: &Range<usize>,
         source: &File,
@@ -263,7 +252,7 @@ impl Analyzer {
         }
     }
 
-    fn analyze_commodity(
+    fn commodity(
         &mut self,
         commodity: &cst::Commodity,
         source: &File,
@@ -282,7 +271,7 @@ impl Analyzer {
             })
     }
 
-    fn analyze_account(
+    fn account(
         &mut self,
         account: &cst::Account,
         source: &File,
