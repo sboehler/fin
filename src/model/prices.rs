@@ -72,13 +72,6 @@ pub struct NormalizedPrices {
 type Result<T> = result::Result<T, ModelError>;
 
 impl NormalizedPrices {
-    pub fn new(commodity: CommodityID) -> Self {
-        NormalizedPrices {
-            date: NaiveDate::default(),
-            target: commodity,
-            prices: HashMap::default(),
-        }
-    }
     pub fn valuate(
         &self,
         registry: &Rc<Registry>,

@@ -151,11 +151,8 @@ impl Journal {
         for date in self.entire_period().expect("journal is empty").dates() {
             let day = self.days.entry(date).or_insert_with(|| Day::new(date));
             day.prices.iter().for_each(|p| prices.insert(p));
-
             let normalized_prices = valuation.map(|p| prices.normalize(p));
-
             Self::valuate_transactions(&self.registry, &mut day.transactions, &normalized_prices)?;
-
             day.gains = Self::compute_gains(
                 self.registry.clone(),
                 &normalized_prices,

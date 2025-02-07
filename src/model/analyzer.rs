@@ -11,7 +11,6 @@ use super::entities::{
 };
 use super::journal::{Day, Journal};
 use super::registry::Registry;
-use crate::syntax::error::ParserError;
 use crate::syntax::file::File;
 use crate::{
     model::entities::Period,
@@ -21,19 +20,7 @@ use crate::{
     },
 };
 
-pub type Result<T> = std::result::Result<T, ParserError>;
-
-pub fn analyze_files(trees: &Vec<(SyntaxTree, File)>) -> Result<Journal> {
-    let mut analyzer = Analyzer::new();
-    for (file, source_file) in trees {
-        analyzer.analyze(file, source_file)?
-    }
-    Ok(Journal {
-        registry: Rc::new(analyzer.registry),
-        days: analyzer.days,
-    })
-}
-struct Analyzer {
+pub struct Analyzer {
     registry: Registry,
     days: BTreeMap<NaiveDate, Day>,
 
@@ -41,11 +28,18 @@ struct Analyzer {
 }
 
 impl Analyzer {
-    fn new() -> Self {
+    pub fn new(registry: Registry) -> Self {
         Analyzer {
-            registry: Registry::default(),
+            registry,
             days: Default::default(),
             current_file: SourceFileID(0),
+        }
+    }
+
+    pub fn to_journal(self) -> Journal {
+        Journal {
+            registry: Rc::new(self.registry),
+            days: self.days,
         }
     }
 
@@ -53,7 +47,11 @@ impl Analyzer {
         self.days.entry(d).or_insert_with(|| Day::new(d))
     }
 
-    fn analyze(&mut self, tree: &SyntaxTree, source: &File) -> Result<()> {
+    pub fn analyze(
+        &mut self,
+        tree: &SyntaxTree,
+        source: &File,
+    ) -> std::result::Result<(), SyntaxError> {
         self.current_file = self.registry.add_source_file(source.clone());
         for d in &tree.directives {
             use cst::Directive::*;
@@ -69,7 +67,7 @@ impl Analyzer {
         Ok(())
     }
 
-    fn price(&mut self, p: &cst::Price, source: &File) -> Result<()> {
+    fn price(&mut self, p: &cst::Price, source: &File) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&p.date, source)?;
         let commodity = self.commodity(&p.commodity, source)?;
         let price = self.decimal(&p.price, source)?;
@@ -85,7 +83,7 @@ impl Analyzer {
         Ok(())
     }
 
-    fn open(&mut self, o: &cst::Open, source: &File) -> Result<()> {
+    fn open(&mut self, o: &cst::Open, source: &File) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&o.date, source)?;
         let account = self.account(&o.account, source)?;
         let loc = Some(SourceLoc::new(self.current_file, o.range.clone()));
@@ -93,7 +91,11 @@ impl Analyzer {
         Ok(())
     }
 
-    fn transaction(&mut self, t: &cst::Transaction, source: &File) -> Result<()> {
+    fn transaction(
+        &mut self,
+        t: &cst::Transaction,
+        source: &File,
+    ) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&t.date, source)?;
         let bookings = t
             .bookings
@@ -107,7 +109,7 @@ impl Analyzer {
                     None,
                 ))
             })
-            .collect::<Result<Vec<_>>>()?
+            .collect::<std::result::Result<Vec<_>, SyntaxError>>()?
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
@@ -125,7 +127,7 @@ impl Analyzer {
                     commodities
                         .iter()
                         .map(|c| self.commodity(c, source))
-                        .collect::<Result<Vec<_>>>()?,
+                        .collect::<std::result::Result<Vec<_>, SyntaxError>>()?,
                 );
                 vec![trx]
             }
@@ -150,7 +152,11 @@ impl Analyzer {
         Ok(())
     }
 
-    fn assertion(&mut self, a: &cst::Assertion, source: &File) -> Result<()> {
+    fn assertion(
+        &mut self,
+        a: &cst::Assertion,
+        source: &File,
+    ) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&a.date, source)?;
         let mut res = a
             .assertions
@@ -168,12 +174,12 @@ impl Analyzer {
                     commodity,
                 })
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<std::result::Result<Vec<_>, SyntaxError>>()?;
         self.day(date).assertions.append(&mut res);
         Ok(())
     }
 
-    fn close(&mut self, c: &cst::Close, source: &File) -> Result<()> {
+    fn close(&mut self, c: &cst::Close, source: &File) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&c.date, source)?;
         let account = self.account(&c.account, source)?;
         let loc = Some(SourceLoc::new(self.current_file, c.range.clone()));
@@ -181,33 +187,39 @@ impl Analyzer {
         Ok(())
     }
 
-    fn date(&mut self, date: &cst::Date, source: &File) -> Result<NaiveDate> {
+    fn date(
+        &mut self,
+        date: &cst::Date,
+        source: &File,
+    ) -> std::result::Result<NaiveDate, SyntaxError> {
         NaiveDate::parse_from_str(&source.text[date.0.clone()], "%Y-%m-%d").map_err(|_| {
-            ParserError::SyntaxError(
-                SyntaxError {
-                    range: date.0.clone(),
-                    want: cst::Token::Date,
-                    source: None,
-                },
-                source.clone(),
-            )
+            SyntaxError {
+                range: date.0.clone(),
+                want: cst::Token::Date,
+                source: None,
+            }
         })
     }
 
-    fn decimal(&self, decimal: &cst::Decimal, source: &File) -> Result<rust_decimal::Decimal> {
+    fn decimal(
+        &self,
+        decimal: &cst::Decimal,
+        source: &File,
+    ) -> std::result::Result<rust_decimal::Decimal, SyntaxError> {
         rust_decimal::Decimal::from_str_exact(&source.text[decimal.0.clone()]).map_err(|_| {
-            ParserError::SyntaxError(
-                SyntaxError {
-                    range: decimal.0.clone(),
-                    want: cst::Token::Decimal,
-                    source: None,
-                },
-                source.clone(),
-            )
+            SyntaxError {
+                range: decimal.0.clone(),
+                want: cst::Token::Decimal,
+                source: None,
+            }
         })
     }
 
-    fn interval(&mut self, d: &Range<usize>, source: &File) -> Result<Interval> {
+    fn interval(
+        &mut self,
+        d: &Range<usize>,
+        source: &File,
+    ) -> std::result::Result<Interval, SyntaxError> {
         match &source.text[d.clone()] {
             "daily" => Ok(Interval::Daily),
             "weekly" => Ok(Interval::Weekly),
@@ -215,44 +227,39 @@ impl Analyzer {
             "quarterly" => Ok(Interval::Quarterly),
             "yearly" => Ok(Interval::Yearly),
             "once" => Ok(Interval::Single),
-            _ => Err(ParserError::SyntaxError(
-                SyntaxError {
-                    range: d.clone(),
-                    want: cst::Token::Decimal,
-                    source: None,
-                },
-                source.clone(),
-            )),
+            _ => Err(SyntaxError {
+                range: d.clone(),
+                want: cst::Token::Decimal,
+                source: None,
+            }),
         }
     }
 
-    fn commodity(&mut self, commodity: &cst::Commodity, source: &File) -> Result<CommodityID> {
+    fn commodity(
+        &mut self,
+        commodity: &cst::Commodity,
+        source: &File,
+    ) -> std::result::Result<CommodityID, SyntaxError> {
         self.registry
             .commodity_id(&source.text[commodity.0.clone()])
-            .map_err(|_| {
-                ParserError::SyntaxError(
-                    SyntaxError {
-                        range: commodity.0.clone(),
-                        want: cst::Token::Commodity,
-                        source: None,
-                    },
-                    source.clone(),
-                )
+            .map_err(|_| SyntaxError {
+                range: commodity.0.clone(),
+                want: cst::Token::Commodity,
+                source: None,
             })
     }
 
-    fn account(&mut self, account: &cst::Account, source: &File) -> Result<AccountID> {
+    fn account(
+        &mut self,
+        account: &cst::Account,
+        source: &File,
+    ) -> std::result::Result<AccountID, SyntaxError> {
         self.registry
             .account_id(&source.text[account.range.clone()])
-            .map_err(|_| {
-                ParserError::SyntaxError(
-                    SyntaxError {
-                        range: account.range.clone(),
-                        want: cst::Token::Account,
-                        source: None,
-                    },
-                    source.clone(),
-                )
+            .map_err(|_| SyntaxError {
+                range: account.range.clone(),
+                want: cst::Token::Account,
+                source: None,
             })
     }
 
@@ -306,11 +313,5 @@ impl Analyzer {
             }
         }
         res
-    }
-}
-
-impl Default for Analyzer {
-    fn default() -> Self {
-        Self::new()
     }
 }

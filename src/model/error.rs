@@ -4,6 +4,8 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use thiserror::Error;
 
+use crate::syntax::{error::SyntaxError, file::File};
+
 use super::{
     entities::{AccountID, Assertion, Close, CommodityID, Open, SourceLoc, Transaction},
     registry::Registry,
@@ -19,6 +21,7 @@ pub enum ModelError {
         commodity_name: String,
         target_name: String,
     },
+    SyntaxError(SyntaxError, File),
 }
 
 impl Display for ModelError {
@@ -39,6 +42,10 @@ impl Display for ModelError {
                     date = date,
                     target = target
                 )
+            }
+            Self::SyntaxError(error, file) => {
+                println!("Here we go");
+                error.full_error(f, file)
             }
         }
     }

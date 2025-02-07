@@ -13,14 +13,7 @@ pub struct SyntaxError {
 
 impl std::fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "syntax error at position {}: want {}",
-            self.range.start, self.want
-        )?;
-        if let Some(e) = &self.source {
-            writeln!(f, "{}", e)?;
-        }
+        write!(f, "syntax error: expected {}", self.want)?;
         Ok(())
     }
 }
@@ -46,7 +39,7 @@ impl SyntaxError {
         writeln!(f, "{}^ want {}", " ".repeat(col + 6), self.want,)?;
         writeln!(f)?;
         if let Some(e) = &self.source {
-            writeln!(f, "{}", e)?;
+            e.full_error(f, file)?;
         }
         Ok(())
     }

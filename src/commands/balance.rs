@@ -1,4 +1,4 @@
-use crate::model::analyzer::analyze_files;
+use crate::model::build_journal;
 use crate::model::entities::{Interval, Partition, Period};
 use crate::model::journal::Closer;
 use crate::report::balance::{Aligner, DatedPositions, ReportAmount, ReportBuilder, Shortener};
@@ -48,7 +48,7 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let syntax_trees = parse_files(&self.path)?;
-        let mut journal = analyze_files(&syntax_trees)?;
+        let mut journal = build_journal(&syntax_trees)?;
         journal.check()?;
         let valuation = self
             .valuation
