@@ -199,7 +199,7 @@ mod test_scanner {
     #[test]
     fn test_read_while() {
         let text = "aaasdff";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
         assert_eq!("aaasd", &text[s.read_while(&Character::NotChar('f'))]);
         assert_eq!("ff", &text[s.read_while(&Character::Char('f'))]);
         assert_eq!("", &text[s.read_while(&Character::Char('q'))]);
@@ -209,7 +209,7 @@ mod test_scanner {
     #[test]
     fn test_read_while_1() {
         let text = "aaasdff";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
         assert_eq!(
             Ok("aaasd"),
             s.read_while_1(&Character::NotChar('f')).map(|r| &text[r])
@@ -232,7 +232,7 @@ mod test_scanner {
     #[test]
     fn test_read_char() {
         let text = "asdf";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
         assert_eq!("a", &text[s.read_char(&Character::Char('a')).unwrap()]);
         assert_eq!(
             Err(SyntaxError {
@@ -251,7 +251,7 @@ mod test_scanner {
     #[test]
     fn test_read_string() {
         let text = "asdf";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
         assert_eq!(Ok("as"), s.read_string("as").map(|r| &text[r]));
         assert_eq!(
             Err(SyntaxError {
@@ -268,7 +268,7 @@ mod test_scanner {
     #[test]
     fn test_read_transaction() {
         let text = "asdf";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
         let rollback = s.snapshot();
 
         assert_eq!(Ok("asdf"), s.read_string("asdf").map(|r| &text[r]));
@@ -283,7 +283,7 @@ mod test_scanner {
     #[test]
     fn test_read_rest_of_line() {
         let text = "\n\n  \nfoo";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
         assert_eq!(Ok("\n"), s.read_rest_of_line().map(|r| &text[r]));
         assert_eq!(Ok("\n"), s.read_rest_of_line().map(|r| &text[r]));
         assert_eq!(Ok("  \n"), s.read_rest_of_line().map(|r| &text[r]));
@@ -305,7 +305,7 @@ mod test_scanner {
     #[test]
     fn test_read_sequence_number_of() {
         let text = "asdf";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
         assert_eq!(
             Ok("as"),
             s.read_sequence(&Sequence::NumberOf(2, Character::Any))
@@ -330,7 +330,7 @@ mod test_scanner {
     #[test]
     fn test_read_eol() {
         let text = "a\n\n";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
         assert_eq!(
             Err(SyntaxError {
                 range: 0..1,
@@ -352,7 +352,7 @@ mod test_scanner {
     #[test]
     fn test_read_space_1() {
         let text = "  a\t\tb  \nc";
-        let s = Scanner::new(&text);
+        let s = Scanner::new(text);
 
         assert_eq!(Ok("  "), s.read_space_1().map(|r| &text[r]));
         assert_eq!(Some('a'), s.advance());

@@ -36,7 +36,7 @@ impl Analyzer {
         }
     }
 
-    pub fn to_journal(self) -> Journal {
+    pub fn journal(self) -> Journal {
         Journal {
             registry: Rc::new(self.registry),
             days: self.days,

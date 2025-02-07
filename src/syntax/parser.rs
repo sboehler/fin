@@ -525,7 +525,7 @@ mod tests {
                     source: None,
                 })),
             }),
-            Parser::new(&text).parse_commodity()
+            Parser::new(text).parse_commodity()
         );
     }
 
@@ -565,7 +565,7 @@ mod tests {
                 range: 0..16,
                 segments: vec![0..11, 12..16],
             }),
-            Parser::new(&f2).parse_account(),
+            Parser::new(f2).parse_account(),
         );
     }
 
@@ -578,14 +578,14 @@ mod tests {
                 want: Token::Sequence(Sequence::One(Character::Alphabetic)),
                 source: None,
             }),
-            Parser::new(&f3).parse_account(),
+            Parser::new(f3).parse_account(),
         );
     }
 
     #[test]
     fn test_parse_date1() {
         let f = "2024-05-07";
-        assert_eq!(Ok(Date(0..10)), Parser::new(&f).parse_date(),);
+        assert_eq!(Ok(Date(0..10)), Parser::new(f).parse_date(),);
     }
 
     #[test]
@@ -601,7 +601,7 @@ mod tests {
                     source: None,
                 })),
             }),
-            Parser::new(&f).parse_date(),
+            Parser::new(f).parse_date(),
         );
     }
 
@@ -618,7 +618,7 @@ mod tests {
                     source: None,
                 })),
             }),
-            Parser::new(&f).parse_date(),
+            Parser::new(f).parse_date(),
         );
     }
     #[test]
@@ -634,7 +634,7 @@ mod tests {
                     source: None,
                 })),
             }),
-            Parser::new(&f).parse_date()
+            Parser::new(f).parse_date()
         )
     }
 
@@ -667,7 +667,7 @@ mod tests {
                     source: None,
                 })),
             }),
-            Parser::new(&f).parse_decimal(Token::Decimal),
+            Parser::new(f).parse_decimal(Token::Decimal),
         );
     }
 
@@ -684,7 +684,7 @@ mod tests {
                     range: 0..24,
                     commodities: vec![Commodity(14..17), Commodity(21..23),]
                 }),
-                Parser::new(&f1).parse_addon()
+                Parser::new(f1).parse_addon()
             );
             let f2 = "@performance(  )";
             assert_eq!(
@@ -692,7 +692,7 @@ mod tests {
                     range: 0..16,
                     commodities: vec![]
                 }),
-                Parser::new(&f2).parse_addon(),
+                Parser::new(f2).parse_addon(),
             )
         }
 
@@ -710,7 +710,7 @@ mod tests {
                         segments: vec![38..44, 45..53]
                     }
                 }),
-                Parser::new(&f).parse_addon()
+                Parser::new(f).parse_addon()
             )
         }
     }
@@ -730,7 +730,7 @@ mod tests {
                         content: 9..34,
                     }
                 })),
-                Parser::new(&f).parse_directive()
+                Parser::new(f).parse_directive()
             )
         }
 

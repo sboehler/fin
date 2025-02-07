@@ -43,10 +43,7 @@ impl Display for ModelError {
                     target = target
                 )
             }
-            Self::SyntaxError(error, file) => {
-                println!("Here we go");
-                error.full_error(f, file)
-            }
+            Self::SyntaxError(error, file) => error.full_error(f, file),
         }
     }
 }

@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, path::PathBuf};
 
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
@@ -34,7 +34,6 @@ impl Client {
         t1: DateTime<Utc>,
     ) -> Result<Vec<Quote>, Box<dyn Error>> {
         let url = Self::create_url(sym, t0, t1)?;
-        println!("fetching {}", url);
         let body: api::Body = self.client.get(url).send()?.json().unwrap();
         let result = body.chart.result.first().unwrap();
         let tz: Tz = result.meta.exchange_timezone_name.parse()?;
@@ -90,7 +89,7 @@ mod tests {
         let t0 = DateTime::parse_from_rfc3339("2024-10-01T12:09:14Z")?;
         let t1 = DateTime::parse_from_rfc3339("2023-10-01T12:09:14Z")?;
         assert_eq!(
-            Client::create_url("GOOG".into(), t0.into(), t1.into())
+            Client::create_url("GOOG", t0.into(), t1.into())
                 .unwrap()
                 .as_str(),
             "https://query2.finance.yahoo.com/v8/finance/chart/GOOG?events=history&interval=1d&period1=1696162154&period2=1727784554"
@@ -103,7 +102,7 @@ mod tests {
 pub struct Config {
     pub commodity: String,
     pub target_commodity: String,
-    pub file: String,
+    pub file: PathBuf,
     pub symbol: String,
 }
 
