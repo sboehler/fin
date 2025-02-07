@@ -63,14 +63,14 @@ impl Command {
             ),
             self.period.to_interval(),
         );
-        let mut dates = partition
+        let dates = partition
             .end_dates()
             .iter()
             .rev()
             .take(self.last.map(|v| v + 1).unwrap_or(usize::MAX))
             .copied()
+            .rev()
             .collect::<Vec<_>>();
-        dates.reverse();
 
         let mut closer = Closer::new(
             partition.start_dates(),
@@ -101,7 +101,7 @@ impl Command {
         let report = builder.build(&dated_positions);
         let renderer = TextRenderer {
             table: report.render(),
-            round: self.round.unwrap_or(0),
+            round: self.round.unwrap_or_default(),
         };
         let mut lock = stdout().lock();
         renderer.render(lock.borrow_mut()).unwrap();
