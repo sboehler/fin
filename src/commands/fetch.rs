@@ -53,11 +53,9 @@ impl Command {
                     .checked_sub_days(Days::new(365))
                     .unwrap();
                 bar.set_message(format!("fetching {}", config.symbol));
-                let res = client
+                client
                     .fetch(&config.symbol, t0, t1)
-                    .map_err(|e| format!("error fetching {}: {}", config.symbol, e));
-                // bar.inc(1);
-                res
+                    .map_err(|e| format!("error fetching {}: {}", config.symbol, e))
             })
             .collect::<Result<Vec<_>, _>>()?;
         for (config, quotes) in parsed_configs.iter().zip(quotes) {

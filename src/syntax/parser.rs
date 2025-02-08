@@ -547,13 +547,12 @@ mod tests {
 
     #[test]
     fn test_parse_account() {
-        let f1 = "Assets";
         assert_eq!(
             Ok(Account {
                 range: 0..6,
-                segments: vec![0..6],
+                segments: vec![Range { start: 0, end: 6 }],
             }),
-            Parser::new(f1).parse_account(),
+            Parser::new("Assets").parse_account(),
         );
     }
 
