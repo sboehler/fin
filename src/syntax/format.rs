@@ -84,7 +84,7 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
                         commodity = &source[commodity.0.clone()]
                     )?,
                     _ => {
-                        writeln!(w, "{date} balance ", date = &source[date.0.clone()])?;
+                        writeln!(w, "{date} balance", date = &source[date.0.clone()])?;
                         for a in assertions {
                             writeln!(
                                 w,
