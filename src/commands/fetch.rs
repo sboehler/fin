@@ -17,6 +17,7 @@ use crate::{
 };
 use chrono::Days;
 use clap::Args;
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use rust_decimal::{prelude::FromPrimitive, Decimal};
 use yahoo::Client;
@@ -29,29 +30,40 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         rayon::ThreadPoolBuilder::new()
-            .num_threads(4)
+            .num_threads(5)
             .build_global()
             .unwrap();
 
         let config = File::open(&self.config)?;
         let parsed_configs: Vec<Config> = serde_yaml::from_reader(config)?;
         let client = Client::default();
+        let style = ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )
+        .unwrap();
+
+        let bar = ProgressBar::new(u64::from_usize(parsed_configs.len()).unwrap());
+        bar.set_style(style);
         let quotes = parsed_configs
             .par_iter()
+            .progress_with(bar.clone())
             .map(|config| {
                 let t0 = chrono::offset::Utc::now();
                 let t1 = chrono::offset::Utc::now()
                     .checked_sub_days(Days::new(365))
                     .unwrap();
-                client
+                bar.set_message(format!("fetching {}", config.symbol));
+                let res = client
                     .fetch(&config.symbol, t0, t1)
-                    .map_err(|e| format!("error fetching {}: {}", config.symbol, e))
+                    .map_err(|e| format!("error fetching {}: {}", config.symbol, e));
+                // bar.inc(1);
+                res
             })
             .collect::<Result<Vec<_>, _>>()?;
         for (config, quotes) in parsed_configs.iter().zip(quotes) {
             let path = &self.config.parent().unwrap().join(&config.file);
             let mut journal = Self::read_file(&self.config.parent().unwrap().join(&config.file))?;
-            Self::add_quotes(&mut journal, &parsed_configs[0], quotes)?;
+            Self::add_quotes(&mut journal, config, quotes)?;
             Self::write_file(path, &journal)?;
         }
         Ok(())
