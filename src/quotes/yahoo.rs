@@ -1,9 +1,8 @@
-use std::{error::Error, path::PathBuf};
+use std::error::Error;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
 use reqwest::{header::HeaderMap, Url};
-use serde::Deserialize;
 
 pub struct Client {
     client: reqwest::blocking::Client,
@@ -96,14 +95,6 @@ mod tests {
         );
         Ok(())
     }
-}
-
-#[derive(Deserialize, Debug)]
-pub struct Config {
-    pub commodity: String,
-    pub target_commodity: String,
-    pub file: PathBuf,
-    pub symbol: String,
 }
 
 #[derive(Debug)]
