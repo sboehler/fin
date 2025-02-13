@@ -1,16 +1,16 @@
-use std::{
-    error::Error,
-    fs::File,
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+use std::{error::Error, iter::Peekable, path::PathBuf, rc::Rc};
 
 use chrono::NaiveDate;
 use clap::Args;
+use csv::{StringRecord, StringRecordsIntoIter};
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
-use crate::model::{entities::AccountID, registry::Registry};
+use crate::model::{
+    self,
+    entities::{AccountID, Booking, CommodityID},
+    registry::Registry,
+};
 
 #[derive(Args)]
 pub struct Command {
@@ -23,58 +23,117 @@ pub struct Command {
 impl Command {
     pub fn run(&self) -> Result<(), Box<dyn Error>> {
         let registry = Rc::new(Registry::new());
-        let importer = Importer::new(registry.clone(), registry.account_id(&self.account)?);
-        importer.import(&self.source)?;
-
+        let source = std::fs::read_to_string(&self.source)?;
+        let mut importer = Parser::new(
+            registry.clone(),
+            registry.account_id(&self.account)?,
+            &source,
+        );
+        importer.load()?;
         Ok(())
     }
 }
 
-struct Importer {
-    _registry: Rc<Registry>,
-    _account: AccountID,
+struct Parser<'a> {
+    registry: Rc<Registry>,
+    account: AccountID,
+
+    iter: Peekable<StringRecordsIntoIter<&'a [u8]>>,
+    current: Option<StringRecord>,
 }
 
-impl Importer {
-    fn new(registry: Rc<Registry>, account: AccountID) -> Self {
+impl<'a> Parser<'a> {
+    fn new(registry: Rc<Registry>, account: AccountID, source: &'a str) -> Self {
         Self {
-            _registry: registry,
-            _account: account,
+            registry,
+            account,
+            current: None,
+            iter: csv::ReaderBuilder::new()
+                .flexible(true)
+                .delimiter(b';')
+                .from_reader(source.as_bytes())
+                .into_records()
+                .peekable(),
         }
     }
 
-    fn import(&self, source: &Path) -> Result<(), Box<dyn Error>> {
-        self.load(source)?;
+    fn advance(&mut self) -> Result<(), Box<dyn Error>> {
+        self.current = self.iter.next().transpose()?;
         Ok(())
     }
 
-    fn load(&self, source: &Path) -> Result<Vec<Transaction>, Box<dyn Error>> {
-        let file = File::open(source)?;
-        let mut reader = csv::ReaderBuilder::new()
-            .flexible(true)
-            .delimiter(b';')
-            .from_reader(&file);
-        let headers = reader
-            .records()
-            .skip_while(|res| {
-                println!("{:?}", res);
-                res.as_ref()
-                    .map(|r| r[0].to_string() != "Datum")
-                    .unwrap_or_default()
-            })
-            .next()
-            .unwrap()?;
+    fn load(&mut self) -> Result<Vec<model::entities::Transaction>, Box<dyn Error>> {
+        let currency = self.read_preamble()?;
+        let headers = self.read_headers()?;
+        let transactions = self.read_transactions(&headers, currency)?;
+        Ok(transactions)
+    }
 
-        println!("{:?}", headers);
-        reader.set_headers(headers);
-        for result in reader.deserialize::<Line>() {
-            println!("{:?}", result);
+    fn read_preamble(&mut self) -> Result<CommodityID, Box<dyn Error>> {
+        while let Some(ref rec) = self.current {
+            if rec.len() != 2 {
+                return Err("no currency found in preamble".into());
+            }
+            if &rec[0] != "Währung:" {
+                self.advance()?;
+                continue;
+            }
+            let name = rec[1].replace(&['"', '='], "");
+            let currency = self.registry.commodity_id(&name)?;
+            return Ok(currency);
         }
-        Ok(vec![])
+        Err("unexpected end of file while looking for currency".into())
+    }
+
+    fn read_headers(&mut self) -> Result<StringRecord, Box<dyn Error>> {
+        let Some(rec) = self.current.clone() else {
+            return Err("no headers found".into());
+        };
+        if rec.len() != 8 || &rec[0] != "Datum" {
+            return Err(format!("invalid headers: {:?}", rec).into());
+        }
+        self.advance()?;
+        Ok(rec)
+    }
+
+    fn read_transactions(
+        &mut self,
+        headers: &StringRecord,
+        currency: CommodityID,
+    ) -> Result<Vec<model::entities::Transaction>, Box<dyn Error>> {
+        let mut transactions = Vec::new();
+        while let Some(ref rec) = self.current {
+            if rec.len() != 8 {
+                return Err(format!("invalid transaction: {:?}", rec).into());
+            }
+            transactions.push(self.read_transaction(currency, headers, rec)?);
+            self.advance()?;
+        }
+        Ok(transactions)
+    }
+
+    fn read_transaction(
+        &self,
+        currency: CommodityID,
+        headers: &csv::StringRecord,
+        record: &csv::StringRecord,
+    ) -> Result<model::entities::Transaction, Box<dyn Error>> {
+        let line: Line = record.deserialize(Some(headers))?;
+        let quantity = line.credit.or(line.debit).ok_or("No quantity")?;
+        let trx = model::entities::Transaction {
+            loc: None,
+            date: line.date,
+            description: Rc::new(line.description),
+            bookings: Booking::create(self.account, self.account, quantity, currency, None),
+            targets: None,
+        };
+        println!("{:?}", trx);
+        Ok(trx)
     }
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Line {
     #[serde(
         deserialize_with = "date_format::deserialize_naive_date",
@@ -105,6 +164,7 @@ struct Line {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Transaction {
     buchungsdatum: NaiveDate,
     avisierungstext: String,
