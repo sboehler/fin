@@ -203,7 +203,7 @@ impl Node {
 }
 
 #[derive(Default)]
-pub enum Amount {
+enum Amount {
     #[default]
     Empty,
     AggregateValue(Vec<Decimal>),
@@ -241,13 +241,13 @@ impl Amount {
 use AccountType::*;
 
 pub struct Report {
-    pub dates: Vec<NaiveDate>,
+    dates: Vec<NaiveDate>,
 
     root: Node,
 
-    pub total_al: Amount,
-    pub total_eie: Amount,
-    pub delta: Amount,
+    total_al: Amount,
+    total_eie: Amount,
+    delta: Amount,
 }
 
 impl Report {
