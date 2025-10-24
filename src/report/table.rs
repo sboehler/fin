@@ -5,8 +5,8 @@ use rust_decimal::Decimal;
 
 #[derive(Debug)]
 pub struct Table {
-    pub columns: Vec<usize>,
-    pub rows: Vec<Row>,
+    columns: Vec<usize>,
+    rows: Vec<Row>,
 }
 
 impl Table {
@@ -53,11 +53,15 @@ pub enum Cell {
 }
 
 pub struct TextRenderer {
-    pub table: Table,
-    pub round: usize,
+    table: Table,
+    round: usize,
 }
 
 impl TextRenderer {
+    pub fn new(table: Table, round: usize) -> Self {
+        Self { table, round }
+    }
+
     pub fn render<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
         let column_widths = self.compute_widths();
         for row in &self.table.rows {

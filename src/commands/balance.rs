@@ -99,10 +99,7 @@ impl Command {
             amount_type: ReportAmount::Value,
         };
         let report = builder.build(&dated_positions);
-        let renderer = TextRenderer {
-            table: report.render(),
-            round: self.round.unwrap_or_default(),
-        };
+        let renderer = TextRenderer::new(report.render(), self.round.unwrap_or_default());
         let mut lock = stdout().lock();
         renderer.render(lock.borrow_mut()).unwrap();
         lock.flush()?;
