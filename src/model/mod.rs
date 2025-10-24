@@ -7,7 +7,7 @@ use crate::syntax::{cst::SyntaxTree, sourcefile::SourceFile};
 pub mod entities;
 pub mod error;
 pub mod journal;
-pub mod printing;
+pub mod printer;
 pub mod registry;
 
 mod journalbuilder;

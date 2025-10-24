@@ -10,7 +10,7 @@ use crate::{
         build_journal,
         entities::Price,
         journal::{self, Journal},
-        printing::Printer,
+        printer::Printer,
     },
     quotes::yahoo::{Client, Quote},
     syntax::parse_file,
