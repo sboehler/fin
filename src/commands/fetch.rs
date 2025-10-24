@@ -6,12 +6,7 @@ use std::{
 };
 
 use crate::{
-    model::{
-        build_journal,
-        entities::Price,
-        journal::{self, Journal},
-        printer::Printer,
-    },
+    model::{build_journal, entities::Price, journal::Journal, printer::Printer},
     quotes::yahoo::{Client, Quote},
     syntax::parse_file,
 };
@@ -104,8 +99,8 @@ fn add_quotes(
     config: &ConfigEntry,
     quotes: Vec<Quote>,
 ) -> Result<(), Box<dyn Error>> {
-    let commodity = journal.registry.commodity_id(&config.commodity)?;
-    let target = journal.registry.commodity_id(&config.target_commodity)?;
+    let commodity = journal.registry().commodity_id(&config.commodity)?;
+    let target = journal.registry().commodity_id(&config.target_commodity)?;
     quotes
         .into_iter()
         .map(|q| Price {
@@ -116,10 +111,7 @@ fn add_quotes(
             target,
         })
         .for_each(|price| {
-            let day = journal
-                .days
-                .entry(price.date)
-                .or_insert_with(|| journal::Day::new(price.date));
+            let day = journal.day(price.date);
             day.prices = vec![price];
         });
     Ok(())
@@ -128,12 +120,12 @@ fn add_quotes(
 fn write_file(path: &PathBuf, journal: &Journal) -> Result<(), Box<dyn Error>> {
     let file = File::create(path)?;
     let mut buf_writer = BufWriter::new(file);
-    let mut printer = Printer::new(&mut buf_writer, journal.registry.clone());
-    journal
-        .days
-        .iter()
-        .flat_map(|d| d.1.prices.iter())
-        .try_for_each(|p| printer.price(p))?;
+    let mut printer = Printer::new(&mut buf_writer, journal.registry().clone());
+    for day in journal.values() {
+        for price in &day.prices {
+            printer.price(price)?;
+        }
+    }
     buf_writer.flush()?;
     Ok(())
 }

@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::ops::Neg;
+use std::ops::{Deref, DerefMut, Neg};
 use std::{collections::BTreeMap, rc::Rc};
 
 use chrono::NaiveDate;
@@ -39,22 +39,26 @@ impl Day {
 }
 
 pub struct Journal {
-    pub registry: Rc<Registry>,
-    pub days: BTreeMap<NaiveDate, Day>,
+    registry: Rc<Registry>,
+    days: BTreeMap<NaiveDate, Day>,
 }
 
 impl Default for Journal {
     fn default() -> Self {
-        Self::new()
+        Self {
+            registry: Rc::new(Registry::new()),
+            days: BTreeMap::new(),
+        }
     }
 }
 
 impl Journal {
-    pub fn new() -> Self {
-        Journal {
-            registry: Rc::new(Registry::new()),
-            days: BTreeMap::new(),
-        }
+    pub fn new(registry: Rc<Registry>, days: BTreeMap<NaiveDate, Day>) -> Self {
+        Self { registry, days }
+    }
+
+    pub fn day(&mut self, date: NaiveDate) -> &mut Day {
+        self.days.entry(date).or_insert_with(|| Day::new(date))
     }
 
     pub fn min_transaction_date(&self) -> Option<NaiveDate> {
@@ -271,6 +275,24 @@ impl Journal {
                     value: b.value,
                 })
             })
+    }
+
+    pub fn registry(&self) -> &Rc<Registry> {
+        &self.registry
+    }
+}
+
+impl Deref for Journal {
+    type Target = BTreeMap<NaiveDate, Day>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.days
+    }
+}
+
+impl DerefMut for Journal {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.days
     }
 }
 

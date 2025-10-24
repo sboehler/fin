@@ -53,7 +53,7 @@ impl Command {
         let valuation = self
             .valuation
             .as_ref()
-            .map(|s| journal.registry.commodity_id(s))
+            .map(|s| journal.registry().commodity_id(s))
             .transpose()?;
         journal.process(valuation)?;
         let partition = Partition::from_interval(
@@ -74,7 +74,7 @@ impl Command {
 
         let mut closer = Closer::new(
             partition.start_dates(),
-            journal.registry.account_id("Equity:Equity").unwrap(),
+            journal.registry().account_id("Equity:Equity").unwrap(),
             !self.diff,
         );
         let aligner = Aligner::new(dates.clone());
@@ -84,7 +84,7 @@ impl Command {
             .flat_map(|row| aligner.align(row))
             .sum::<DatedPositions>();
         let shortener = Shortener::new(
-            journal.registry.clone(),
+            journal.registry().clone(),
             self.mapping
                 .iter()
                 .map(|m| (m.regex.clone(), m.level))
@@ -92,7 +92,7 @@ impl Command {
         );
         let dated_positions = dated_positions.map_account(|account| shortener.shorten(account));
         let builder = ReportBuilder {
-            registry: journal.registry.clone(),
+            registry: journal.registry().clone(),
             dates: dates.clone(),
             cumulative: !self.diff,
             show_commodities: self.show_commodities.clone(),

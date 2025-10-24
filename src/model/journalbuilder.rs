@@ -37,10 +37,7 @@ impl JournalBuilder {
     }
 
     pub fn build(self) -> Journal {
-        Journal {
-            registry: Rc::new(self.registry),
-            days: self.days,
-        }
+        Journal::new(Rc::new(self.registry), self.days)
     }
 
     fn day(&mut self, d: NaiveDate) -> &mut Day {
