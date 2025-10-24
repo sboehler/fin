@@ -83,17 +83,16 @@ impl Journal {
         let mut accounts = HashSet::new();
 
         for day in self.days.values() {
-            day.openings.iter().try_for_each(|o| {
+            for o in &day.openings {
                 if !accounts.insert(o.account) {
                     return Err(JournalError::AccountAlreadyOpen {
                         open: Box::new(o.clone()),
                         registry: self.registry.clone(),
                     });
                 }
-                Ok(())
-            })?;
-            day.transactions.iter().try_for_each(|t| {
-                t.bookings.iter().try_for_each(|b| {
+            }
+            for t in &day.transactions {
+                for b in &t.bookings {
                     if !accounts.contains(&b.account) {
                         return Err(JournalError::TransactionAccountNotOpen {
                             transaction: Box::new(t.clone()),
@@ -102,10 +101,9 @@ impl Journal {
                         });
                     }
                     quantities.insert_or_add(&(b.account, b.commodity), &b.quantity);
-                    Ok(())
-                })
-            })?;
-            day.assertions.iter().try_for_each(|a| {
+                }
+            }
+            for a in &day.assertions {
                 if !accounts.contains(&a.account) {
                     return Err(JournalError::AssertionAccountNotOpen {
                         assertion: Box::new(a.clone()),
@@ -123,9 +121,8 @@ impl Journal {
                         registry: self.registry.clone(),
                     });
                 }
-                Ok(())
-            })?;
-            day.closings.iter().try_for_each(|c| {
+            }
+            for c in &day.closings {
                 for (pos, qty) in quantities.iter() {
                     if pos.0 == c.account && !qty.is_zero() {
                         return Err(JournalError::CloseNonzeroBalance {
@@ -137,8 +134,7 @@ impl Journal {
                     }
                 }
                 accounts.remove(&c.account);
-                Ok(())
-            })?;
+            }
         }
         Ok(())
     }
@@ -150,7 +146,9 @@ impl Journal {
 
         for date in self.entire_period().expect("journal is empty").dates() {
             let day = self.days.entry(date).or_insert_with(|| Day::new(date));
-            day.prices.iter().for_each(|p| prices.insert(p));
+            for p in &day.prices {
+                prices.insert(p);
+            }
             let normalized_prices = valuation.map(|p| prices.normalize(p));
             Self::valuate_transactions(&self.registry, &mut day.transactions, &normalized_prices)?;
             day.gains = Self::compute_gains(
