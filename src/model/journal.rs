@@ -100,7 +100,7 @@ impl Journal {
                             registry: self.registry.clone(),
                         });
                     }
-                    quantities.insert_or_add(&(b.account, b.commodity), &b.quantity);
+                    quantities.insert_or_add((b.account, b.commodity), &b.quantity);
                 }
             }
             for a in &day.assertions {
@@ -172,7 +172,7 @@ impl Journal {
         transactions
             .iter()
             .flat_map(|t| t.bookings.iter())
-            .for_each(|b| quantities.insert_or_add(&(b.account, b.commodity), &b.quantity));
+            .for_each(|b| quantities.insert_or_add((b.account, b.commodity), &b.quantity));
     }
 
     fn update_values(
@@ -183,7 +183,7 @@ impl Journal {
             .iter()
             .flat_map(|t| t.bookings.iter())
             .for_each(|b| {
-                values.insert_or_add(&(b.account, b.commodity), &b.value.unwrap_or_default())
+                values.insert_or_add((b.account, b.commodity), &b.value.unwrap_or_default())
             });
     }
 
@@ -348,9 +348,9 @@ impl Closer {
             }
             if r.account.account_type.is_ie() {
                 self.quantities
-                    .insert_or_add(&(r.account, r.commodity), &r.quantity);
+                    .insert_or_add((r.account, r.commodity), &r.quantity);
                 if let Some(value) = &r.value {
-                    self.values.insert_or_add(&(r.account, r.commodity), value);
+                    self.values.insert_or_add((r.account, r.commodity), value);
                 }
             };
         }

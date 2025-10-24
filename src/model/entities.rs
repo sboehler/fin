@@ -366,7 +366,7 @@ where
     K: Eq + std::hash::Hash + Clone,
     V: AddAssign<&'a V> + 'a + Default,
 {
-    pub fn insert_or_add(&mut self, key: &K, value: &'a V) {
+    pub fn insert_or_add(&mut self, key: K, value: &'a V) {
         *self.entry(key.clone()).or_default() += value;
     }
 
@@ -390,7 +390,7 @@ where
 {
     fn from_iter<T: IntoIterator<Item = (K, &'a V)>>(iter: T) -> Self {
         let mut res: Positions<K, V> = Default::default();
-        iter.into_iter().for_each(|(k, v)| res.insert_or_add(&k, v));
+        iter.into_iter().for_each(|(k, v)| res.insert_or_add(k, v));
         res
     }
 }
@@ -403,7 +403,7 @@ where
 {
     fn extend<T: IntoIterator<Item = (K, &'a V)>>(&mut self, iter: T) {
         for (k, v) in iter {
-            self.insert_or_add(&k, v)
+            self.insert_or_add(k, v)
         }
     }
 }
@@ -416,7 +416,7 @@ where
 {
     fn add_assign(&mut self, rhs: &'a Positions<K, V>) {
         for (k, v) in &rhs.positions {
-            self.insert_or_add(k, v)
+            self.insert_or_add(*k, v)
         }
     }
 }

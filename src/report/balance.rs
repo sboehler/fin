@@ -78,12 +78,12 @@ impl DatedPositions {
         pos.quantities
             .entry(row.commodity)
             .or_default()
-            .insert_or_add(&row.date, &row.quantity);
+            .insert_or_add(row.date, &row.quantity);
         if let Some(value) = row.value {
             pos.values
                 .entry(row.commodity)
                 .or_default()
-                .insert_or_add(&row.date, &value);
+                .insert_or_add(row.date, &value);
         }
     }
 
