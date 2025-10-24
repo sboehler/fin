@@ -20,23 +20,23 @@ use crate::{
     },
 };
 
-pub struct Analyzer {
+pub struct JournalBuilder {
     registry: Registry,
     days: BTreeMap<NaiveDate, Day>,
 
     current_file: SourceFileID,
 }
 
-impl Analyzer {
+impl JournalBuilder {
     pub fn new(registry: Registry) -> Self {
-        Analyzer {
+        JournalBuilder {
             registry,
             days: Default::default(),
             current_file: SourceFileID(0),
         }
     }
 
-    pub fn journal(self) -> Journal {
+    pub fn build(self) -> Journal {
         Journal {
             registry: Rc::new(self.registry),
             days: self.days,
@@ -47,7 +47,7 @@ impl Analyzer {
         self.days.entry(d).or_insert_with(|| Day::new(d))
     }
 
-    pub fn analyze(
+    pub fn add(
         &mut self,
         tree: &SyntaxTree,
         source: &SourceFile,
