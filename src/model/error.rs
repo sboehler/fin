@@ -4,7 +4,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use thiserror::Error;
 
-use crate::syntax::{error::SyntaxError, file::File};
+use crate::syntax::{error::SyntaxError, sourcefile::SourceFile};
 
 use super::{
     entities::{AccountID, Assertion, Close, CommodityID, Open, SourceLoc, Transaction},
@@ -21,7 +21,7 @@ pub enum ModelError {
         commodity_name: String,
         target_name: String,
     },
-    SyntaxError(SyntaxError, File),
+    SyntaxError(SyntaxError, SourceFile),
 }
 
 impl Display for ModelError {
@@ -91,7 +91,7 @@ impl JournalError {
             let (line, col) = file.position(loc.start);
             writeln!(f, "line {line}, column {col}")?;
             writeln!(f)?;
-            file.fmt_range(f, loc.range())?;
+            file.fmt_range(f, &loc.range())?;
         }
         Ok(())
     }

@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Display, iter};
 
-use crate::syntax::file::File;
+use crate::syntax::sourcefile::SourceFile;
 
 use super::{
     entities::{AccountID, AccountType, CommodityID, SourceFileID},
@@ -11,7 +11,7 @@ use super::{
 pub struct Registry {
     commodities_by_name: RefCell<HashMap<String, CommodityID>>,
     accounts_by_name: RefCell<HashMap<String, AccountID>>,
-    source_files: Vec<File>,
+    source_files: Vec<SourceFile>,
 
     accounts: RefCell<Vec<Account>>,
     commodities: RefCell<Vec<Commodity>>,
@@ -48,12 +48,12 @@ impl Registry {
         Ok(id)
     }
 
-    pub fn add_source_file(&mut self, source_file: File) -> SourceFileID {
+    pub fn add_source_file(&mut self, source_file: SourceFile) -> SourceFileID {
         self.source_files.push(source_file);
         SourceFileID(self.source_files.len() - 1)
     }
 
-    pub fn source_file(&self, id: SourceFileID) -> &File {
+    pub fn source_file(&self, id: SourceFileID) -> &SourceFile {
         &self.source_files[id.0]
     }
 

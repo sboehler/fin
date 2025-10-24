@@ -11,7 +11,7 @@ use super::entities::{
 };
 use super::journal::{Day, Journal};
 use super::registry::Registry;
-use crate::syntax::file::File;
+use crate::syntax::sourcefile::SourceFile;
 use crate::{
     model::entities::Period,
     syntax::{
@@ -50,7 +50,7 @@ impl Analyzer {
     pub fn analyze(
         &mut self,
         tree: &SyntaxTree,
-        source: &File,
+        source: &SourceFile,
     ) -> std::result::Result<(), SyntaxError> {
         self.current_file = self.registry.add_source_file(source.clone());
         for d in &tree.directives {
@@ -67,7 +67,11 @@ impl Analyzer {
         Ok(())
     }
 
-    fn price(&mut self, p: &cst::Price, source: &File) -> std::result::Result<(), SyntaxError> {
+    fn price(
+        &mut self,
+        p: &cst::Price,
+        source: &SourceFile,
+    ) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&p.date, source)?;
         let commodity = self.commodity(&p.commodity, source)?;
         let price = self.decimal(&p.price, source)?;
@@ -83,7 +87,7 @@ impl Analyzer {
         Ok(())
     }
 
-    fn open(&mut self, o: &cst::Open, source: &File) -> std::result::Result<(), SyntaxError> {
+    fn open(&mut self, o: &cst::Open, source: &SourceFile) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&o.date, source)?;
         let account = self.account(&o.account, source)?;
         let loc = Some(SourceLoc::new(self.current_file, o.range.clone()));
@@ -94,7 +98,7 @@ impl Analyzer {
     fn transaction(
         &mut self,
         t: &cst::Transaction,
-        source: &File,
+        source: &SourceFile,
     ) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&t.date, source)?;
         let bookings = t
@@ -155,7 +159,7 @@ impl Analyzer {
     fn assertion(
         &mut self,
         a: &cst::Assertion,
-        source: &File,
+        source: &SourceFile,
     ) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&a.date, source)?;
         let mut res = a
@@ -179,7 +183,11 @@ impl Analyzer {
         Ok(())
     }
 
-    fn close(&mut self, c: &cst::Close, source: &File) -> std::result::Result<(), SyntaxError> {
+    fn close(
+        &mut self,
+        c: &cst::Close,
+        source: &SourceFile,
+    ) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&c.date, source)?;
         let account = self.account(&c.account, source)?;
         let loc = Some(SourceLoc::new(self.current_file, c.range.clone()));
@@ -190,7 +198,7 @@ impl Analyzer {
     fn date(
         &mut self,
         date: &cst::Date,
-        source: &File,
+        source: &SourceFile,
     ) -> std::result::Result<NaiveDate, SyntaxError> {
         NaiveDate::parse_from_str(&source.text[date.0.clone()], "%Y-%m-%d").map_err(|_| {
             SyntaxError {
@@ -204,7 +212,7 @@ impl Analyzer {
     fn decimal(
         &self,
         decimal: &cst::Decimal,
-        source: &File,
+        source: &SourceFile,
     ) -> std::result::Result<rust_decimal::Decimal, SyntaxError> {
         rust_decimal::Decimal::from_str_exact(&source.text[decimal.0.clone()]).map_err(|_| {
             SyntaxError {
@@ -218,7 +226,7 @@ impl Analyzer {
     fn interval(
         &mut self,
         d: &Range<usize>,
-        source: &File,
+        source: &SourceFile,
     ) -> std::result::Result<Interval, SyntaxError> {
         match &source.text[d.clone()] {
             "daily" => Ok(Interval::Daily),
@@ -238,7 +246,7 @@ impl Analyzer {
     fn commodity(
         &mut self,
         commodity: &cst::Commodity,
-        source: &File,
+        source: &SourceFile,
     ) -> std::result::Result<CommodityID, SyntaxError> {
         self.registry
             .commodity_id(&source.text[commodity.0.clone()])
@@ -252,7 +260,7 @@ impl Analyzer {
     fn account(
         &mut self,
         account: &cst::Account,
-        source: &File,
+        source: &SourceFile,
     ) -> std::result::Result<AccountID, SyntaxError> {
         self.registry
             .account_id(&source.text[account.range.clone()])

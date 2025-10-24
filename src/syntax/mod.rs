@@ -6,18 +6,18 @@ use std::{
 use self::{
     cst::{Directive, Include, SyntaxTree},
     error::ParserError,
-    file::File,
     parser::Parser,
+    sourcefile::SourceFile,
 };
 
 pub mod cst;
 pub mod error;
-pub mod file;
 pub mod format;
 mod parser;
 mod scanner;
+pub mod sourcefile;
 
-pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, File)>, ParserError> {
+pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, SourceFile)>, ParserError> {
     let mut res = Vec::new();
     let mut done = HashSet::new();
     let mut todo = VecDeque::new();
@@ -27,7 +27,8 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, File)>, 
     );
 
     while let Some(file_path) = todo.pop_front() {
-        let file = File::read(&file_path).map_err(|e| ParserError::IO(file_path.clone(), e))?;
+        let file =
+            SourceFile::read(&file_path).map_err(|e| ParserError::IO(file_path.clone(), e))?;
         let tree = Parser::new(&file.text)
             .parse()
             .map_err(|e| ParserError::SyntaxError(e, file.clone()))?;
@@ -52,8 +53,9 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, File)>, 
     Ok(res)
 }
 
-pub fn parse_file(file_path: &Path) -> std::result::Result<(SyntaxTree, File), ParserError> {
-    let file = File::read(file_path).map_err(|e| ParserError::IO(file_path.to_path_buf(), e))?;
+pub fn parse_file(file_path: &Path) -> std::result::Result<(SyntaxTree, SourceFile), ParserError> {
+    let file =
+        SourceFile::read(file_path).map_err(|e| ParserError::IO(file_path.to_path_buf(), e))?;
     let tree = Parser::new(&file.text)
         .parse()
         .map_err(|e| ParserError::SyntaxError(e, file.clone()))?;

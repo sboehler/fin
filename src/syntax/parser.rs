@@ -5,7 +5,7 @@ use super::cst::{
     Include, Open, Price, QuotedString, Sequence, SubAssertion, SyntaxTree, Token, Transaction,
 };
 use super::error::SyntaxError;
-use crate::syntax::scanner::Scanner;
+use super::scanner::Scanner;
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,

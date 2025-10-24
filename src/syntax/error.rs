@@ -2,7 +2,7 @@ use std::{fmt::Display, io, ops::Range, path::PathBuf};
 
 use thiserror::Error;
 
-use super::{cst::Token, file::File};
+use super::{cst::Token, sourcefile::SourceFile};
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub struct SyntaxError {
@@ -19,7 +19,7 @@ impl std::fmt::Display for SyntaxError {
 }
 
 impl SyntaxError {
-    pub fn full_error(&self, f: &mut std::fmt::Formatter, file: &File) -> std::fmt::Result {
+    pub fn full_error(&self, f: &mut std::fmt::Formatter, file: &SourceFile) -> std::fmt::Result {
         let (line, col) = file.position(self.range.start);
         writeln!(f)?;
         if let Some(p) = &file.path {
@@ -32,10 +32,7 @@ impl SyntaxError {
         )?;
         writeln!(f)?;
         writeln!(f)?;
-
-        for (n, line) in file.context(self.range.clone()) {
-            writeln!(f, "{n:5} |{line}")?;
-        }
+        file.fmt_range(f, &self.range)?;
         writeln!(f, "{}^ want {}", " ".repeat(col + 6), self.want,)?;
         writeln!(f)?;
         if let Some(e) = &self.source {
@@ -50,7 +47,7 @@ pub enum ParserError {
     IO(PathBuf, io::Error),
     Cycle(PathBuf),
     InvalidPath(PathBuf),
-    SyntaxError(SyntaxError, File),
+    SyntaxError(SyntaxError, SourceFile),
 }
 
 impl Display for ParserError {
