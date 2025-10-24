@@ -26,21 +26,13 @@ impl SourceFile {
     }
 
     pub fn fmt_range(&self, f: &mut std::fmt::Formatter, range: &Range<usize>) -> std::fmt::Result {
-        self.context(range)
-            .iter()
-            .try_for_each(|(i, l)| writeln!(f, "{:5} |{}", i, l))
-    }
-
-    fn context(&self, range: &Range<usize>) -> Vec<(usize, &str)> {
         let (start_line, _) = self.position(range.start);
         let (end_line, _) = self.position(range.end);
-
         self.text
             .lines()
             .enumerate()
             .skip(start_line - 1)
             .take(end_line - start_line + 1)
-            .map(|(i, l)| (i + 1, l))
-            .collect()
+            .try_for_each(|(i, l)| writeln!(f, "{:5} |{}", i + 1, l))
     }
 }
