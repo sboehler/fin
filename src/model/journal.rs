@@ -6,8 +6,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 
 use super::entities::{
-    AccountID, Assertion, Booking, Close, CommodityID, Open, Partition, Period, Positions, Price,
-    Transaction,
+    AccountID, Assertion, Booking, Close, CommodityID, Open, Period, Positions, Price, Transaction,
 };
 use super::error::{JournalError, ModelError};
 use super::prices::{NormalizedPrices, Prices};
@@ -259,10 +258,9 @@ impl Journal {
 }
 
 impl Journal {
-    pub fn query<'a>(&'a self, part: &'a Partition) -> impl Iterator<Item = Entry> + 'a {
+    pub fn query<'a>(&'a self) -> impl Iterator<Item = Entry> + 'a {
         self.days
             .values()
-            .filter(|day| part.contains(day.date))
             .flat_map(|day| day.transactions.iter().chain(day.gains.iter()))
             .flat_map(|t| {
                 t.bookings.iter().map(|b| Entry {
