@@ -389,14 +389,8 @@ impl ReportBuilder {
         let from = self.from.or(journal.min_transaction_date()).unwrap();
         let partition = Partition::from_interval(from, self.to, self.period);
         let dates = partition
-            .end_dates()
-            .iter()
-            .rev()
-            .take(self.num_periods.map(|v| v + 1).unwrap_or(usize::MAX))
-            .copied()
-            .rev()
-            .collect::<Vec<_>>();
-
+            .last_n(self.num_periods.map(|v| v + 1).unwrap_or(usize::MAX))
+            .end_dates();
         let mut closer = Closer::new(
             partition.start_dates(),
             journal.registry().account_id("Equity:Equity").unwrap(),
