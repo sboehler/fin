@@ -14,7 +14,7 @@ use regex::Regex;
 use rust_decimal::Decimal;
 
 use crate::model::{
-    entities::{AccountID, AccountType, CommodityID, Interval, Partition, Period, Positions},
+    entities::{AccountID, AccountType, CommodityID, Interval, Partition, Positions},
     journal::{Closer, Entry, Journal},
     registry::Registry,
 };
@@ -386,13 +386,8 @@ pub enum ReportAmount {
 
 impl ReportBuilder {
     pub fn build(&self, journal: &Journal) -> Report {
-        let partition = Partition::from_interval(
-            Period(
-                self.from.or(journal.min_transaction_date()).unwrap(),
-                self.to,
-            ),
-            self.period,
-        );
+        let from = self.from.or(journal.min_transaction_date()).unwrap();
+        let partition = Partition::from_interval(from, self.to, self.period);
         let dates = partition
             .end_dates()
             .iter()

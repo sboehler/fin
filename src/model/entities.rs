@@ -253,16 +253,16 @@ impl Partition {
         self.cover().map(|p| p.contains(d)).unwrap_or(false)
     }
 
-    pub fn from_interval(period: Period, interval: Interval) -> Partition {
+    pub fn from_interval(from: NaiveDate, to: NaiveDate, interval: Interval) -> Partition {
         if interval == Interval::Single {
             return Partition {
-                periods: vec![period],
+                periods: vec![Period(from, to)],
             };
         }
         let mut periods = Vec::new();
-        let mut d = period.0;
-        while d <= period.1 {
-            let end = cmp::min(interval.end_of(d).unwrap(), period.1);
+        let mut d = from;
+        while d <= to {
+            let end = cmp::min(interval.end_of(d).unwrap(), to);
             periods.push(Period(d, end));
             d = end.checked_add_days(Days::new(1)).unwrap();
         }
@@ -302,7 +302,7 @@ mod test_period {
     #[test]
     fn test_dates() {
         assert_eq!(
-            Partition::from_interval(Period(date(2022, 1, 1), date(2022, 3, 20)), Monthly),
+            Partition::from_interval(date(2022, 1, 1), date(2022, 3, 20), Monthly),
             Partition {
                 periods: vec![
                     Period(date(2022, 1, 1), date(2022, 1, 31)),
@@ -312,8 +312,7 @@ mod test_period {
             }
         );
         assert_eq!(
-            Partition::from_interval(Period(date(2022, 1, 1), date(2022, 12, 20)), Monthly)
-                .last_n(4),
+            Partition::from_interval(date(2022, 1, 1), date(2022, 12, 20), Monthly).last_n(4),
             Partition {
                 periods: vec![
                     Period(date(2022, 9, 1), date(2022, 9, 30)),

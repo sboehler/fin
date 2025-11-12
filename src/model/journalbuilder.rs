@@ -12,12 +12,9 @@ use super::entities::{
 use super::journal::{Day, Journal};
 use super::registry::Registry;
 use crate::syntax::sourcefile::SourceFile;
-use crate::{
-    model::entities::Period,
-    syntax::{
-        cst::{self, SyntaxTree},
-        error::SyntaxError,
-    },
+use crate::syntax::{
+    cst::{self, SyntaxTree},
+    error::SyntaxError,
 };
 
 pub struct JournalBuilder {
@@ -277,7 +274,7 @@ impl JournalBuilder {
         account: AccountID,
     ) -> Vec<Transaction> {
         let mut res: Vec<Transaction> = Vec::new();
-        let p = Partition::from_interval(Period(start, end), interval);
+        let p = Partition::from_interval(start, end, interval);
         for b in t.bookings {
             if b.account.account_type.is_al() {
                 res.push(Transaction {
