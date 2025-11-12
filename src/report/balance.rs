@@ -3,8 +3,10 @@ use std::{
     collections::HashMap,
     fmt::Alignment,
     iter::{self, Sum},
+    num::ParseIntError,
     ops::{Add, AddAssign, Deref},
     rc::Rc,
+    str::FromStr,
 };
 
 use chrono::NaiveDate;
@@ -12,8 +14,8 @@ use regex::Regex;
 use rust_decimal::Decimal;
 
 use crate::model::{
-    entities::{AccountID, AccountType, CommodityID, Positions},
-    journal::Entry,
+    entities::{AccountID, AccountType, CommodityID, Interval, Partition, Period, Positions},
+    journal::{Closer, Entry, Journal},
     registry::Registry,
 };
 
@@ -367,8 +369,11 @@ impl Report {
 }
 
 pub struct ReportBuilder {
-    pub dates: Vec<NaiveDate>,
-    pub registry: Rc<Registry>,
+    pub from: Option<NaiveDate>,
+    pub to: NaiveDate,
+    pub num_periods: Option<usize>,
+    pub period: Interval,
+    pub mapping: Vec<Mapping>,
     pub cumulative: bool,
     pub amount_type: ReportAmount,
     pub show_commodities: Vec<Regex>,
@@ -380,17 +385,54 @@ pub enum ReportAmount {
 }
 
 impl ReportBuilder {
-    pub fn build(&self, dated_positions: &DatedPositions) -> Report {
+    pub fn build(&self, journal: &Journal) -> Report {
+        let partition = Partition::from_interval(
+            Period(
+                self.from.or(journal.min_transaction_date()).unwrap(),
+                self.to,
+            ),
+            self.period,
+        );
+        let dates = partition
+            .end_dates()
+            .iter()
+            .rev()
+            .take(self.num_periods.map(|v| v + 1).unwrap_or(usize::MAX))
+            .copied()
+            .rev()
+            .collect::<Vec<_>>();
+
+        let mut closer = Closer::new(
+            partition.start_dates(),
+            journal.registry().account_id("Equity:Equity").unwrap(),
+            self.cumulative,
+        );
+        let aligner = Aligner::new(dates.clone());
+        let dated_positions = journal
+            .query()
+            .filter(|e| partition.contains(e.date))
+            .flat_map(|row| closer.process(row))
+            .flat_map(|row| aligner.align(row))
+            .sum::<DatedPositions>();
+        let shortener = Shortener::new(
+            journal.registry().clone(),
+            self.mapping
+                .iter()
+                .map(|m| (m.regex.clone(), m.level))
+                .collect(),
+        );
+        let dated_positions = dated_positions.map_account(|account| shortener.shorten(account));
+
         let mut root: Node = Default::default();
 
         let mut total_al = Position::default();
         let mut total_eie = Position::default();
 
         dated_positions.iter().for_each(|(account, position)| {
-            let account_name = self.registry.account_name(*account);
+            let account_name = journal.registry().account_name(*account);
             let segments = account_name.split(":").collect::<Vec<_>>();
-            let show_commodities = self.show_commodities(account);
-            let mut value = self.to_amount(position, show_commodities);
+            let show_commodities = self.show_commodities(journal.registry(), account);
+            let mut value = self.to_amount(journal.registry(), &dates, position, show_commodities);
             if !account.account_type.is_al() {
                 value.negate();
             }
@@ -407,12 +449,12 @@ impl ReportBuilder {
         delta += &total_eie;
         total_eie.negate();
 
-        let total_al = self.to_amount(&total_al, false);
-        let total_eie = self.to_amount(&total_eie, false);
-        let delta = self.to_amount(&delta, false);
+        let total_al = self.to_amount(journal.registry(), &dates, &total_al, false);
+        let total_eie = self.to_amount(journal.registry(), &dates, &total_eie, false);
+        let delta = self.to_amount(journal.registry(), &dates, &delta, false);
 
         Report {
-            dates: self.dates.clone(),
+            dates: dates.clone(),
             root,
             total_al,
             total_eie,
@@ -420,19 +462,26 @@ impl ReportBuilder {
         }
     }
 
-    fn to_amount(&self, position: &Position, show_commodities: bool) -> Amount {
+    fn to_amount(
+        &self,
+        registry: &Rc<Registry>,
+        dates: &[NaiveDate],
+        position: &Position,
+        show_commodities: bool,
+    ) -> Amount {
         match self.amount_type {
             ReportAmount::Value if show_commodities => {
-                let value_by_commodity = self.by_commodity_name(&position.values);
+                let value_by_commodity = self.by_commodity_name(registry, dates, &position.values);
                 Amount::ValueByCommodity(value_by_commodity)
             }
             ReportAmount::Value => {
                 let aggregate_positions = Self::aggregate_values(position);
-                let aggregate_value = self.to_vector(&aggregate_positions);
+                let aggregate_value = self.to_vector(dates, &aggregate_positions);
                 Amount::AggregateValue(aggregate_value)
             }
             ReportAmount::Quantity => {
-                let quantity_by_commodity = self.by_commodity_name(&position.quantities);
+                let quantity_by_commodity =
+                    self.by_commodity_name(registry, dates, &position.quantities);
                 Amount::QuantityByCommodity(quantity_by_commodity)
             }
         }
@@ -440,26 +489,32 @@ impl ReportBuilder {
 
     fn by_commodity_name(
         &self,
+        registry: &Rc<Registry>,
+        dates: &[NaiveDate],
         positions: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
     ) -> HashMap<String, Vec<Decimal>> {
         positions
             .iter()
             .map(|(commodity, positions)| {
-                let name = self.registry.commodity_name(*commodity);
-                let values = self.to_vector(positions);
+                let name = registry.commodity_name(*commodity);
+                let values = self.to_vector(dates, positions);
                 (name, values)
             })
             .collect::<HashMap<_, _>>()
     }
 
-    fn show_commodities(&self, account: &AccountID) -> bool {
-        let name = self.registry.account_name(*account);
+    fn show_commodities(&self, registry: &Rc<Registry>, account: &AccountID) -> bool {
+        let name = registry.account_name(*account);
         self.show_commodities.iter().any(|re| re.is_match(&name))
     }
 
-    fn to_vector(&self, positions: &Positions<NaiveDate, Decimal>) -> Vec<Decimal> {
+    fn to_vector(
+        &self,
+        dates: &[NaiveDate],
+        positions: &Positions<NaiveDate, Decimal>,
+    ) -> Vec<Decimal> {
         let mut sum = Decimal::ZERO;
-        self.dates
+        dates
             .iter()
             .map(|date| positions.get(date).cloned().unwrap_or_default())
             .map(|value| {
@@ -478,5 +533,29 @@ impl ReportBuilder {
             .values
             .values()
             .sum::<Positions<NaiveDate, Decimal>>()
+    }
+}
+
+#[derive(Clone)]
+pub struct Mapping {
+    regex: Regex,
+    level: usize,
+}
+
+impl FromStr for Mapping {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        let mut parts = s.split(',');
+        let levels = parts
+            .next()
+            .ok_or(format!("invalid mapping: {}", s))?
+            .parse()
+            .map_err(|e: ParseIntError| e.to_string())?;
+        let regex = Regex::new(parts.next().unwrap_or(".*")).map_err(|e| e.to_string())?;
+        Ok(Mapping {
+            regex,
+            level: levels,
+        })
     }
 }
