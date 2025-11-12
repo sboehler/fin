@@ -78,7 +78,7 @@ impl<'a> Parser<'a> {
                 self.advance()?;
                 continue;
             }
-            let name = rec[1].replace(&['"', '='], "");
+            let name = rec[1].replace(['"', '='], "");
             let currency = self.registry.commodity_id(&name)?;
             return Ok(currency);
         }
@@ -90,7 +90,7 @@ impl<'a> Parser<'a> {
             return Err("no headers found".into());
         };
         if rec.len() != 8 || &rec[0] != "Datum" {
-            return Err(format!("invalid headers: {:?}", rec).into());
+            return Err(format!("invalid headers: {rec:?}").into());
         }
         self.advance()?;
         Ok(rec)
@@ -104,7 +104,7 @@ impl<'a> Parser<'a> {
         let mut transactions = Vec::new();
         while let Some(ref rec) = self.current {
             if rec.len() != 8 {
-                return Err(format!("invalid transaction: {:?}", rec).into());
+                return Err(format!("invalid transaction: {rec:?}").into());
             }
             transactions.push(self.read_transaction(currency, headers, rec)?);
             self.advance()?;
@@ -127,7 +127,7 @@ impl<'a> Parser<'a> {
             bookings: Booking::create(self.account, self.account, quantity, currency, None),
             targets: None,
         };
-        println!("{:?}", trx);
+        println!("{trx:?}");
         Ok(trx)
     }
 }
@@ -180,7 +180,7 @@ mod date_format {
     use chrono::NaiveDate;
     use serde::{Deserialize, Deserializer};
 
-    const FORMAT: &'static str = "%d.%m.%Y";
+    const FORMAT: &str = "%d.%m.%Y";
 
     pub fn deserialize_naive_date<'de, D>(deserializer: D) -> Result<NaiveDate, D::Error>
     where

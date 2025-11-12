@@ -8,7 +8,7 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
     let n = initialize(tree, source);
     let mut pos = 0;
     for d in &tree.directives {
-        w.write_all(source[pos..d.range().start].as_bytes())?;
+        w.write_all(&source.as_bytes()[pos..d.range().start])?;
         match d {
             Directive::Include(Include { path, .. }) => {
                 write!(w, "include {}", &source[path.range.clone()])?;
@@ -108,7 +108,7 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
         }
         pos = d.range().end
     }
-    w.write_all(source[pos..tree.range.end].as_bytes())?;
+    w.write_all(&source.as_bytes()[pos..tree.range.end])?;
     Ok(())
 }
 

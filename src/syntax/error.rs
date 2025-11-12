@@ -67,7 +67,7 @@ impl Display for ParserError {
                 writeln!(f, "invalid path: {file}")
             }
             ParserError::SyntaxError(error, file) => {
-                writeln!(f, "{}", error)?;
+                writeln!(f, "{error}")?;
                 error.full_error(f, file)
             }
         }

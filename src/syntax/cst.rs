@@ -47,8 +47,8 @@ impl Display for Character {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Character::EOF => write!(f, "EOF"),
-            Character::Char(ch) => write!(f, "{:?}", ch),
-            Character::NotChar(ch) => write!(f, "not '{}'", ch),
+            Character::Char(ch) => write!(f, "{ch:?}"),
+            Character::NotChar(ch) => write!(f, "not '{ch}'"),
             Character::Digit => write!(f, "digit"),
             Character::Alphabetic => write!(f, "alphabetic character"),
             Character::AlphaNum => write!(f, "alphanumeric character"),
@@ -80,7 +80,7 @@ pub enum Sequence {
 impl Display for Sequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Sequence::One(ch) => write!(f, "{}", ch),
+            Sequence::One(ch) => write!(f, "{ch}"),
             Sequence::OneOf(seq) => {
                 write!(
                     f,
@@ -91,8 +91,8 @@ impl Display for Sequence {
                         .join(", ")
                 )
             }
-            Sequence::NumberOf(n, ch) => write!(f, "{} {}", n, ch),
-            Sequence::String(ch) => write!(f, "{}", ch),
+            Sequence::NumberOf(n, ch) => write!(f, "{n} {ch}"),
+            Sequence::String(ch) => write!(f, "{ch}"),
         }
     }
 }
@@ -137,7 +137,7 @@ impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Token::EOF => write!(f, "EOF"),
-            Token::Character(ch) => write!(f, "{}", ch),
+            Token::Character(ch) => write!(f, "{ch}"),
             Token::Digit => write!(f, "a digit (0-9)"),
             Token::Decimal => write!(f, "a decimal number"),
             Token::Quantity => write!(f, "quantity (a decimal number)"),
@@ -155,11 +155,11 @@ impl Display for Token {
             }
             Token::Any => write!(f, "any character"),
             Token::WhiteSpace => write!(f, "whitespace"),
-            Token::Custom(s) => write!(f, "{}", s),
+            Token::Custom(s) => write!(f, "{s}"),
             Token::Either(chars) => {
                 let n = chars.len().saturating_sub(2);
                 for (i, ch) in chars.iter().enumerate() {
-                    write!(f, "{}", ch)?;
+                    write!(f, "{ch}")?;
                     match i.cmp(&n) {
                         std::cmp::Ordering::Less => write!(f, ", ")?,
                         std::cmp::Ordering::Equal => write!(f, ", or ")?,
@@ -184,7 +184,7 @@ impl Display for Token {
             Token::Commodity => write!(f, "a commodity"),
             Token::File => write!(f, "a source file"),
             Token::Account => write!(f, "an account"),
-            Token::Sequence(seq) => write!(f, "{}", seq),
+            Token::Sequence(seq) => write!(f, "{seq}"),
         }
     }
 }

@@ -125,9 +125,9 @@ impl TextRenderer {
                     write!(w, " {}", " ".repeat(*indent))?;
                     let width = column_widths[i] - indent;
                     match align {
-                        Alignment::Left => write!(w, "{:<1$} ", text, width)?,
-                        Alignment::Right => write!(w, "{:>1$} ", text, width)?,
-                        Alignment::Center => write!(w, "{:^1$} ", text, width)?,
+                        Alignment::Left => write!(w, "{text:<width$} ")?,
+                        Alignment::Right => write!(w, "{text:>width$} ")?,
+                        Alignment::Center => write!(w, "{text:^width$} ")?,
                     }
                 }
             }
@@ -181,7 +181,7 @@ impl TextRenderer {
         let index = text.find('.').unwrap_or(text.len());
         let mut res = String::new();
         let mut ok = false;
-        for (i, ch) in text.chars().enumerate() {
+        for (i, ch) in text.char_indices() {
             if i >= index && ch != '-' {
                 res.push_str(&text[i..]);
                 break;

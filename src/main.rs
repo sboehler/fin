@@ -23,7 +23,7 @@ fn main() {
         },
     };
     if let Err(e) = r {
-        println!("{}", e);
+        println!("{e}");
         std::process::exit(1)
     };
 }

@@ -27,9 +27,9 @@ pub enum ModelError {
 impl Display for ModelError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidAccountType(s) => write!(f, "invalid account type: {}", s),
-            Self::InvalidCommodityName(s) => write!(f, "invalid commodity name: {}", s),
-            Self::InvalidAccountName(s) => write!(f, "invalid account name: {}", s),
+            Self::InvalidAccountType(s) => write!(f, "invalid account type: {s}"),
+            Self::InvalidCommodityName(s) => write!(f, "invalid commodity name: {s}"),
+            Self::InvalidAccountName(s) => write!(f, "invalid account name: {s}"),
             Self::NoPriceFound {
                 date,
                 commodity_name: commodity,
@@ -37,10 +37,7 @@ impl Display for ModelError {
             } => {
                 write!(
                     f,
-                    "no price found for {commodity} on {date} in {target}",
-                    commodity = commodity,
-                    date = date,
-                    target = target
+                    "no price found for {commodity} on {date} in {target}"
                 )
             }
             Self::SyntaxError(error, file) => error.full_error(f, file),

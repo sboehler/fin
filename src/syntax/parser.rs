@@ -310,7 +310,7 @@ impl<'a> Parser<'a> {
             .map_err(|e| scope.error(e))?;
         self.scanner.read_space();
         let mut commodities = Vec::new();
-        while self.scanner.current().map_or(false, char::is_alphanumeric) {
+        while self.scanner.current().is_some_and(char::is_alphanumeric) {
             commodities.push(self.parse_commodity().map_err(|e| scope.error(e))?);
             self.scanner.read_space();
             if let Some(',') = self.scanner.current() {
@@ -400,7 +400,7 @@ impl<'a> Parser<'a> {
             self.scanner
                 .read_rest_of_line()
                 .map_err(|e| scope.error(e))?;
-            if !self.scanner.current().map_or(false, char::is_alphanumeric) {
+            if !self.scanner.current().is_some_and(char::is_alphanumeric) {
                 break;
             }
         }

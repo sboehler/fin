@@ -256,7 +256,7 @@ impl Report {
     pub fn render(&self) -> Table {
         let mut table = Table::new(
             iter::once(0)
-                .chain(iter::repeat(1).take(self.dates.len()))
+                .chain(std::iter::repeat_n(1, self.dates.len()))
                 .collect::<Vec<_>>(),
         );
         table.add_row(Row::Separator);
@@ -544,7 +544,7 @@ impl FromStr for Mapping {
         let mut parts = s.split(',');
         let levels = parts
             .next()
-            .ok_or(format!("invalid mapping: {}", s))?
+            .ok_or(format!("invalid mapping: {s}"))?
             .parse()
             .map_err(|e: ParseIntError| e.to_string())?;
         let regex = Regex::new(parts.next().unwrap_or(".*")).map_err(|e| e.to_string())?;
