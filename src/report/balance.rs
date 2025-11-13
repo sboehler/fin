@@ -78,13 +78,13 @@ impl Deref for DatedPositions {
 #[derive(Default)]
 struct Node {
     children: HashMap<String, Node>,
-    amount: Amount,
+    amount: ReportLineItem,
     weight: RefCell<Decimal>,
 }
 
 impl Node {
-    pub fn insert(&mut self, names: &[&str], amount: Amount) {
-        match *names {
+    pub fn insert(&mut self, segments: &[&str], amount: ReportLineItem) {
+        match *segments {
             [first, ref rest @ ..] => self
                 .children
                 .entry(first.into())
@@ -97,9 +97,11 @@ impl Node {
     pub fn update_weights(&self) -> Decimal {
         let child_weights: Decimal = self.children.values().map(Node::update_weights).sum();
         let local_weight: Decimal = match &self.amount {
-            Amount::Empty => Decimal::ZERO,
-            Amount::Aggregate(values) => values.iter().map(|d| d * d).sum(),
-            Amount::ByCommodity(v) => v.values().flat_map(|vs| vs.iter()).map(|d| d * d).sum(),
+            ReportLineItem::Empty => Decimal::ZERO,
+            ReportLineItem::Aggregate(values) => values.iter().map(|d| d * d).sum(),
+            ReportLineItem::ByCommodity(v) => {
+                v.values().flat_map(|vs| vs.iter()).map(|d| d * d).sum()
+            }
         };
         let weight = local_weight + child_weights;
         self.weight.replace(weight);
@@ -108,25 +110,25 @@ impl Node {
 }
 
 #[derive(Default)]
-enum Amount {
+enum ReportLineItem {
     #[default]
     Empty,
     Aggregate(Vec<Decimal>),
     ByCommodity(HashMap<String, Vec<Decimal>>),
 }
 
-impl Neg for Amount {
-    type Output = Amount;
+impl Neg for ReportLineItem {
+    type Output = ReportLineItem;
 
     fn neg(mut self) -> Self::Output {
         match &mut self {
-            Amount::Empty => {}
-            Amount::Aggregate(values) => {
+            ReportLineItem::Empty => {}
+            ReportLineItem::Aggregate(values) => {
                 for value in values {
                     *value = -*value;
                 }
             }
-            Amount::ByCommodity(values) => {
+            ReportLineItem::ByCommodity(values) => {
                 for (_, values) in values.iter_mut() {
                     for value in values {
                         *value = -*value;
@@ -145,9 +147,9 @@ pub struct Report {
 
     root: Node,
 
-    total_al: Amount,
-    total_eie: Amount,
-    delta: Amount,
+    total_al: ReportLineItem,
+    total_eie: ReportLineItem,
+    delta: ReportLineItem,
 }
 
 impl Report {
@@ -209,7 +211,7 @@ impl Report {
         table.add_row(Row::Row(cells));
     }
 
-    fn render_summary(&self, table: &mut Table, header: String, node: &Amount) {
+    fn render_summary(&self, table: &mut Table, header: String, node: &ReportLineItem) {
         self.render_line(table, header, 0, node);
     }
 
@@ -223,7 +225,13 @@ impl Report {
         }
     }
 
-    fn render_line(&self, table: &mut Table, header: String, indent: usize, amount: &Amount) {
+    fn render_line(
+        &self,
+        table: &mut Table,
+        header: String,
+        indent: usize,
+        amount: &ReportLineItem,
+    ) {
         let mut cells = Vec::with_capacity(1 + self.dates.len());
         cells.push(Cell::Text {
             text: header,
@@ -231,19 +239,19 @@ impl Report {
             align: Alignment::Left,
         });
         match amount {
-            Amount::Empty => {
+            ReportLineItem::Empty => {
                 for _ in &self.dates {
                     cells.push(Cell::Empty);
                 }
                 table.add_row(Row::Row(cells));
             }
-            Amount::Aggregate(values) => {
+            ReportLineItem::Aggregate(values) => {
                 for value in values {
                     cells.push(Cell::Decimal { value: *value })
                 }
                 table.add_row(Row::Row(cells));
             }
-            Amount::ByCommodity(values) => {
+            ReportLineItem::ByCommodity(values) => {
                 for _ in &self.dates {
                     cells.push(Cell::Empty);
                 }
@@ -331,33 +339,35 @@ impl ReportBuilder {
         dates: Vec<NaiveDate>,
         dated_positions: DatedPositions,
     ) -> Report {
-        let mut root: Node = Default::default();
+        let mut root = Node::default();
         let mut total_al = Positions::default();
         let mut total_eie = Positions::default();
 
-        dated_positions.iter().for_each(|(account, position)| {
+        for (account, position) in dated_positions.iter() {
+            let show_commodities = self.show_commodities(journal.registry(), account);
+            let mut line_item =
+                self.to_line_item(journal.registry(), &dates, position, show_commodities);
+            if !account.account_type.is_al() {
+                line_item = -line_item;
+            }
             let account_name = journal.registry().account_name(*account);
             let segments = account_name.split(":").collect::<Vec<_>>();
-            let show_commodities = self.show_commodities(journal.registry(), account);
-            let mut value = self.to_amount(journal.registry(), &dates, position, show_commodities);
-            if !account.account_type.is_al() {
-                value = -value;
-            }
-            root.insert(&segments, value);
+            root.insert(&segments, line_item);
+
             match account.account_type {
                 Assets | Liabilities => total_al += position,
                 Expenses | Income | Equity => total_eie += position,
             }
-        });
+        }
 
         let mut delta = Positions::default();
         delta += &total_al;
         delta += &total_eie;
         total_eie = total_eie.neg();
 
-        let total_al = self.to_amount(journal.registry(), &dates, &total_al, false);
-        let total_eie = self.to_amount(journal.registry(), &dates, &total_eie, false);
-        let delta = self.to_amount(journal.registry(), &dates, &delta, false);
+        let total_al = self.to_line_item(journal.registry(), &dates, &total_al, false);
+        let total_eie = self.to_line_item(journal.registry(), &dates, &total_eie, false);
+        let delta = self.to_line_item(journal.registry(), &dates, &delta, false);
 
         Report {
             dates: dates.clone(),
@@ -368,22 +378,22 @@ impl ReportBuilder {
         }
     }
 
-    fn to_amount(
+    fn to_line_item(
         &self,
         registry: &Rc<Registry>,
         dates: &[NaiveDate],
         position: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
         show_commodities: bool,
-    ) -> Amount {
+    ) -> ReportLineItem {
         match (&self.report_amount, show_commodities) {
             (ReportAmount::Value, false) => {
                 let aggregate_positions = Self::aggregate_values(position);
                 let aggregate_value = self.to_vector(dates, &aggregate_positions);
-                Amount::Aggregate(aggregate_value)
+                ReportLineItem::Aggregate(aggregate_value)
             }
             _ => {
                 let quantity_by_commodity = self.by_commodity_name(registry, dates, position);
-                Amount::ByCommodity(quantity_by_commodity)
+                ReportLineItem::ByCommodity(quantity_by_commodity)
             }
         }
     }
