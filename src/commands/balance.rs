@@ -30,10 +30,10 @@ pub struct Command {
     diff: bool,
 
     #[arg(short, long)]
-    from_date: Option<NaiveDate>,
+    from: Option<NaiveDate>,
 
     #[arg(short, long)]
-    to_date: Option<NaiveDate>,
+    to: Option<NaiveDate>,
 
     #[command(flatten)]
     period: PeriodArgs,
@@ -58,8 +58,8 @@ impl Command {
         journal.process(valuation)?;
 
         let builder = ReportBuilder {
-            from: self.from_date,
-            to: self.to_date.unwrap_or_else(|| Local::now().date_naive()),
+            from: self.from,
+            to: self.to.unwrap_or_else(|| Local::now().date_naive()),
             num_periods: self.last,
             period: self.period.to_interval(),
             mapping: self.mapping.clone(),
