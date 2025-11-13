@@ -35,10 +35,7 @@ impl Display for ModelError {
                 commodity_name: commodity,
                 target_name: target,
             } => {
-                write!(
-                    f,
-                    "no price found for {commodity} on {date} in {target}"
-                )
+                write!(f, "no price found for {commodity} on {date} in {target}")
             }
             Self::SyntaxError(error, file) => error.full_error(f, file),
         }
