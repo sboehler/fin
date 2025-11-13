@@ -69,7 +69,7 @@ pub struct DatedPositions {
 }
 
 impl DatedPositions {
-    pub fn add(&mut self, row: Entry) {
+    fn add(&mut self, row: Entry) {
         let pos = self.positions.entry(row.account).or_default();
         pos.quantities
             .entry(row.commodity)
@@ -96,26 +96,6 @@ impl Sum<Entry> for DatedPositions {
     fn sum<I: Iterator<Item = Entry>>(iter: I) -> Self {
         let mut res = Self::default();
         iter.into_iter().for_each(|row| res.add(row));
-        res
-    }
-}
-
-impl FromIterator<Entry> for DatedPositions {
-    fn from_iter<T: IntoIterator<Item = Entry>>(iter: T) -> Self {
-        let mut res = Self::default();
-        iter.into_iter().for_each(|row| res.add(row));
-        res
-    }
-}
-
-impl<'a> FromIterator<(AccountID, &'a Position)> for DatedPositions {
-    fn from_iter<T: IntoIterator<Item = (AccountID, &'a Position)>>(iter: T) -> Self {
-        let mut res = Self::default();
-        iter.into_iter().for_each(|(account, position)| {
-            let pos = res.positions.entry(account).or_default();
-            pos.quantities += &position.quantities;
-            pos.values += &position.values;
-        });
         res
     }
 }
