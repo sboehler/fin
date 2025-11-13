@@ -436,11 +436,10 @@ where
     }
 }
 
-impl<'a, 'b, K, V> Neg for Positions<K, V>
+impl<'a, K, V> Neg for Positions<K, V>
 where
     K: Eq + std::hash::Hash + Copy,
-    V: Default + Clone + Neg<Output = V> + AddAssign<&'b V> + 'b,
-    'a: 'b,
+    V: Default + Clone + Neg<Output = V> + AddAssign<&'a V> + 'a,
 {
     type Output = Self;
 
