@@ -63,12 +63,6 @@ impl Shortener {
     }
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Ord, PartialOrd)]
-pub enum AmountType {
-    Value,
-    Quantity,
-}
-
 #[derive(Default)]
 pub struct DatedPositions {
     positions: Positions<AccountID, Position>,
