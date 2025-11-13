@@ -42,27 +42,6 @@ impl Aligner {
     }
 }
 
-pub struct Shortener {
-    registry: Rc<Registry>,
-    patterns: Vec<(Regex, usize)>,
-}
-
-impl Shortener {
-    pub fn new(registry: Rc<Registry>, patterns: Vec<(Regex, usize)>) -> Self {
-        Shortener { registry, patterns }
-    }
-
-    pub fn shorten(&self, account: AccountID) -> Option<AccountID> {
-        let name = self.registry.account_name(account);
-        for (pattern, n) in &self.patterns {
-            if pattern.is_match(&name) {
-                return self.registry.shorten(account, *n);
-            }
-        }
-        Some(account)
-    }
-}
-
 #[derive(Default)]
 pub struct DatedPositions {
     positions: Positions<AccountID, Positions<CommodityID, Positions<NaiveDate, Decimal>>>,
@@ -136,9 +115,11 @@ enum Amount {
     ByCommodity(HashMap<String, Vec<Decimal>>),
 }
 
-impl Amount {
-    pub fn negate(&mut self) {
-        match self {
+impl Neg for Amount {
+    type Output = Amount;
+
+    fn neg(mut self) -> Self::Output {
+        match &mut self {
             Amount::Empty => {}
             Amount::Aggregate(values) => {
                 for value in values {
@@ -152,7 +133,8 @@ impl Amount {
                     }
                 }
             }
-        }
+        };
+        self
     }
 }
 
@@ -325,17 +307,31 @@ impl ReportBuilder {
         {
             add(&mut dated_positions, row);
         }
-        let shortener = Shortener::new(
-            journal.registry().clone(),
-            self.mapping
-                .iter()
-                .map(|m| (m.regex.clone(), m.level))
-                .collect(),
-        );
-        let dated_positions = dated_positions.map_keys(|account| shortener.shorten(account));
+        let dated_positions = self.shorten(journal, dated_positions);
+        self.create_report(journal, dates, dated_positions)
+    }
 
+    fn shorten(&self, journal: &Journal, dated_positions: DatedPositions) -> DatedPositions {
+        DatedPositions {
+            positions: dated_positions.map_keys(|account| {
+                let name = journal.registry().account_name(account);
+                for mapping in &self.mapping {
+                    if mapping.regex.is_match(&name) {
+                        return journal.registry().shorten(account, mapping.level);
+                    }
+                }
+                Some(account)
+            }),
+        }
+    }
+
+    fn create_report(
+        &self,
+        journal: &Journal,
+        dates: Vec<NaiveDate>,
+        dated_positions: DatedPositions,
+    ) -> Report {
         let mut root: Node = Default::default();
-
         let mut total_al = Positions::default();
         let mut total_eie = Positions::default();
 
@@ -345,10 +341,9 @@ impl ReportBuilder {
             let show_commodities = self.show_commodities(journal.registry(), account);
             let mut value = self.to_amount(journal.registry(), &dates, position, show_commodities);
             if !account.account_type.is_al() {
-                value.negate();
+                value = -value;
             }
             root.insert(&segments, value);
-
             match account.account_type {
                 Assets | Liabilities => total_al += position,
                 Expenses | Income | Equity => total_eie += position,
@@ -387,7 +382,7 @@ impl ReportBuilder {
                 Amount::Aggregate(aggregate_value)
             }
             _ => {
-                let quantity_by_commodity = self.by_commodity_name(registry, dates, &position);
+                let quantity_by_commodity = self.by_commodity_name(registry, dates, position);
                 Amount::ByCommodity(quantity_by_commodity)
             }
         }
