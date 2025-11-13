@@ -82,15 +82,6 @@ impl DatedPositions {
                 .insert_or_add(row.date, &value);
         }
     }
-
-    pub fn map_account<F>(&self, f: F) -> Self
-    where
-        F: Fn(AccountID) -> Option<AccountID>,
-    {
-        Self {
-            positions: self.positions.map_keys(f),
-        }
-    }
 }
 
 impl Deref for DatedPositions {
@@ -404,7 +395,7 @@ impl ReportBuilder {
                 .map(|m| (m.regex.clone(), m.level))
                 .collect(),
         );
-        let dated_positions = dated_positions.map_account(|account| shortener.shorten(account));
+        let dated_positions = dated_positions.map_keys(|account| shortener.shorten(account));
 
         let mut root: Node = Default::default();
 
