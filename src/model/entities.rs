@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     iter::Sum,
-    ops::{Add, AddAssign, Deref, DerefMut, Range},
+    ops::{Add, AddAssign, Deref, DerefMut, Neg, Range},
     rc::Rc,
 };
 
@@ -347,7 +347,7 @@ mod test_period {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Positions<K, V> {
     positions: HashMap<K, V>,
 }
@@ -432,6 +432,23 @@ where
         let mut res = Positions::default();
         res += self;
         res += rhs;
+        res
+    }
+}
+
+impl<'a, 'b, K, V> Neg for Positions<K, V>
+where
+    K: Eq + std::hash::Hash + Copy,
+    V: Default + Clone + Neg<Output = V> + AddAssign<&'b V> + 'b,
+    'a: 'b,
+{
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        let mut res = Positions::default();
+        for (k, v) in self.positions {
+            res.positions.insert(k, v.neg());
+        }
         res
     }
 }

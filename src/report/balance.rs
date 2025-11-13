@@ -2,9 +2,9 @@ use std::{
     cell::RefCell,
     collections::HashMap,
     fmt::Alignment,
-    iter::{self, Sum},
+    iter::{self},
     num::ParseIntError,
-    ops::{Add, AddAssign, Deref},
+    ops::{Deref, Neg},
     rc::Rc,
     str::FromStr,
 };
@@ -65,18 +65,22 @@ impl Shortener {
 
 #[derive(Default)]
 pub struct DatedPositions {
-    positions: Positions<AccountID, Position>,
+    positions: Positions<AccountID, Positions<CommodityID, Positions<NaiveDate, Decimal>>>,
 }
 
 impl DatedPositions {
-    fn add(&mut self, row: Entry) {
-        let pos = self.positions.entry(row.account).or_default();
-        pos.quantities
+    fn add_quantity(&mut self, row: Entry) {
+        let position = self.positions.entry(row.account).or_default();
+        position
             .entry(row.commodity)
             .or_default()
             .insert_or_add(row.date, &row.quantity);
+    }
+
+    fn add_value(&mut self, row: Entry) {
+        let position = self.positions.entry(row.account).or_default();
         if let Some(value) = row.value {
-            pos.values
+            position
                 .entry(row.commodity)
                 .or_default()
                 .insert_or_add(row.date, &value);
@@ -85,53 +89,10 @@ impl DatedPositions {
 }
 
 impl Deref for DatedPositions {
-    type Target = Positions<AccountID, Position>;
+    type Target = Positions<AccountID, Positions<CommodityID, Positions<NaiveDate, Decimal>>>;
 
     fn deref(&self) -> &Self::Target {
         &self.positions
-    }
-}
-
-impl Sum<Entry> for DatedPositions {
-    fn sum<I: Iterator<Item = Entry>>(iter: I) -> Self {
-        let mut res = Self::default();
-        iter.into_iter().for_each(|row| res.add(row));
-        res
-    }
-}
-
-#[derive(Default)]
-pub struct Position {
-    quantities: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
-    values: Positions<CommodityID, Positions<NaiveDate, Decimal>>,
-}
-
-impl Position {
-    pub fn negate(&mut self) {
-        self.quantities.values_mut().for_each(|positions| {
-            positions.values_mut().for_each(|value| *value = -*value);
-        });
-        self.values.values_mut().for_each(|positions| {
-            positions.values_mut().for_each(|value| *value = -*value);
-        });
-    }
-}
-
-impl AddAssign<&Position> for Position {
-    fn add_assign(&mut self, rhs: &Position) {
-        self.quantities += &rhs.quantities;
-        self.values += &rhs.values;
-    }
-}
-
-impl Add<&Position> for &Position {
-    type Output = Position;
-
-    fn add(self, rhs: &Position) -> Position {
-        Position {
-            quantities: &self.quantities + &rhs.quantities,
-            values: &self.values + &rhs.values,
-        }
     }
 }
 
@@ -158,10 +119,8 @@ impl Node {
         let child_weights: Decimal = self.children.values().map(Node::update_weights).sum();
         let local_weight: Decimal = match &self.amount {
             Amount::Empty => Decimal::ZERO,
-            Amount::AggregateValue(values) => values.iter().map(|d| d * d).sum(),
-            Amount::ValueByCommodity(v) | Amount::QuantityByCommodity(v) => {
-                v.values().flat_map(|vs| vs.iter()).map(|d| d * d).sum()
-            }
+            Amount::Aggregate(values) => values.iter().map(|d| d * d).sum(),
+            Amount::ByCommodity(v) => v.values().flat_map(|vs| vs.iter()).map(|d| d * d).sum(),
         };
         let weight = local_weight + child_weights;
         self.weight.replace(weight);
@@ -173,28 +132,20 @@ impl Node {
 enum Amount {
     #[default]
     Empty,
-    AggregateValue(Vec<Decimal>),
-    ValueByCommodity(HashMap<String, Vec<Decimal>>),
-    QuantityByCommodity(HashMap<String, Vec<Decimal>>),
+    Aggregate(Vec<Decimal>),
+    ByCommodity(HashMap<String, Vec<Decimal>>),
 }
 
 impl Amount {
     pub fn negate(&mut self) {
         match self {
             Amount::Empty => {}
-            Amount::AggregateValue(values) => {
+            Amount::Aggregate(values) => {
                 for value in values {
                     *value = -*value;
                 }
             }
-            Amount::ValueByCommodity(values) => {
-                for (_, values) in values.iter_mut() {
-                    for value in values {
-                        *value = -*value;
-                    }
-                }
-            }
-            Amount::QuantityByCommodity(values) => {
+            Amount::ByCommodity(values) => {
                 for (_, values) in values.iter_mut() {
                     for value in values {
                         *value = -*value;
@@ -304,13 +255,13 @@ impl Report {
                 }
                 table.add_row(Row::Row(cells));
             }
-            Amount::AggregateValue(values) => {
+            Amount::Aggregate(values) => {
                 for value in values {
                     cells.push(Cell::Decimal { value: *value })
                 }
                 table.add_row(Row::Row(cells));
             }
-            Amount::ValueByCommodity(values) => {
+            Amount::ByCommodity(values) => {
                 for _ in &self.dates {
                     cells.push(Cell::Empty);
                 }
@@ -328,7 +279,6 @@ impl Report {
                     table.add_row(Row::Row(cells))
                 }
             }
-            Amount::QuantityByCommodity(_) => todo!(),
         }
     }
 }
@@ -340,7 +290,7 @@ pub struct ReportBuilder {
     pub period: Interval,
     pub mapping: Vec<Mapping>,
     pub cumulative: bool,
-    pub amount_type: ReportAmount,
+    pub report_amount: ReportAmount,
     pub show_commodities: Vec<Regex>,
 }
 
@@ -362,12 +312,19 @@ impl ReportBuilder {
             self.cumulative,
         );
         let aligner = Aligner::new(dates.clone());
-        let dated_positions = journal
+        let mut dated_positions = DatedPositions::default();
+        let add = match self.report_amount {
+            ReportAmount::Value => DatedPositions::add_value,
+            ReportAmount::Quantity => DatedPositions::add_quantity,
+        };
+        for row in journal
             .query()
             .filter(|e| partition.contains(e.date))
             .flat_map(|row| closer.process(row))
             .flat_map(|row| aligner.align(row))
-            .sum::<DatedPositions>();
+        {
+            add(&mut dated_positions, row);
+        }
         let shortener = Shortener::new(
             journal.registry().clone(),
             self.mapping
@@ -379,8 +336,8 @@ impl ReportBuilder {
 
         let mut root: Node = Default::default();
 
-        let mut total_al = Position::default();
-        let mut total_eie = Position::default();
+        let mut total_al = Positions::default();
+        let mut total_eie = Positions::default();
 
         dated_positions.iter().for_each(|(account, position)| {
             let account_name = journal.registry().account_name(*account);
@@ -398,10 +355,10 @@ impl ReportBuilder {
             }
         });
 
-        let mut delta = Position::default();
+        let mut delta = Positions::default();
         delta += &total_al;
         delta += &total_eie;
-        total_eie.negate();
+        total_eie = total_eie.neg();
 
         let total_al = self.to_amount(journal.registry(), &dates, &total_al, false);
         let total_eie = self.to_amount(journal.registry(), &dates, &total_eie, false);
@@ -420,23 +377,18 @@ impl ReportBuilder {
         &self,
         registry: &Rc<Registry>,
         dates: &[NaiveDate],
-        position: &Position,
+        position: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
         show_commodities: bool,
     ) -> Amount {
-        match self.amount_type {
-            ReportAmount::Value if show_commodities => {
-                let value_by_commodity = self.by_commodity_name(registry, dates, &position.values);
-                Amount::ValueByCommodity(value_by_commodity)
-            }
-            ReportAmount::Value => {
+        match (&self.report_amount, show_commodities) {
+            (ReportAmount::Value, false) => {
                 let aggregate_positions = Self::aggregate_values(position);
                 let aggregate_value = self.to_vector(dates, &aggregate_positions);
-                Amount::AggregateValue(aggregate_value)
+                Amount::Aggregate(aggregate_value)
             }
-            ReportAmount::Quantity => {
-                let quantity_by_commodity =
-                    self.by_commodity_name(registry, dates, &position.quantities);
-                Amount::QuantityByCommodity(quantity_by_commodity)
+            _ => {
+                let quantity_by_commodity = self.by_commodity_name(registry, dates, &position);
+                Amount::ByCommodity(quantity_by_commodity)
             }
         }
     }
@@ -482,11 +434,10 @@ impl ReportBuilder {
             .collect()
     }
 
-    fn aggregate_values(position: &Position) -> Positions<NaiveDate, Decimal> {
-        position
-            .values
-            .values()
-            .sum::<Positions<NaiveDate, Decimal>>()
+    fn aggregate_values(
+        position: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
+    ) -> Positions<NaiveDate, Decimal> {
+        position.values().sum::<Positions<NaiveDate, Decimal>>()
     }
 }
 

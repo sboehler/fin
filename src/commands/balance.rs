@@ -38,6 +38,9 @@ pub struct Command {
     #[command(flatten)]
     period: PeriodArgs,
 
+    #[arg(short, long)]
+    quantity: bool,
+
     #[arg(long)]
     round: Option<usize>,
 }
@@ -62,7 +65,10 @@ impl Command {
             mapping: self.mapping.clone(),
             cumulative: !self.diff,
             show_commodities: self.show_commodities.clone(),
-            amount_type: ReportAmount::Value,
+            report_amount: match self.quantity {
+                true => ReportAmount::Quantity,
+                false => ReportAmount::Value,
+            },
         };
         let report = builder.build(&journal);
         let renderer = TextRenderer::new(report.render(), self.round.unwrap_or_default());
