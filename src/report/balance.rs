@@ -77,19 +77,19 @@ impl Deref for DatedPositions {
 #[derive(Default)]
 struct Node {
     children: HashMap<String, Node>,
-    amount: ReportLineItem,
+    item: ReportItem,
     weight: Decimal,
 }
 
 impl Node {
-    pub fn insert(&mut self, segments: &[&str], amount: ReportLineItem) {
+    pub fn insert(&mut self, segments: &[&str], item: ReportItem) {
         match *segments {
             [first, ref rest @ ..] => self
                 .children
                 .entry(first.into())
                 .or_default()
-                .insert(rest, amount),
-            [] => self.amount = amount,
+                .insert(rest, item),
+            [] => self.item = item,
         }
     }
 
@@ -99,37 +99,35 @@ impl Node {
             child.update_weights();
             child_weights += child.weight;
         }
-        let local_weight = match &self.amount {
-            ReportLineItem::Empty => Decimal::ZERO,
-            ReportLineItem::Aggregate(values) => values.iter().map(|d| d * d).sum(),
-            ReportLineItem::ByCommodity(v) => {
-                v.values().flat_map(|vs| vs.iter()).map(|d| d * d).sum()
-            }
+        let local_weight = match &self.item {
+            ReportItem::Empty => Decimal::ZERO,
+            ReportItem::Aggregation(values) => values.iter().map(|d| d * d).sum(),
+            ReportItem::ByCommodity(v) => v.values().flat_map(|vs| vs.iter()).map(|d| d * d).sum(),
         };
         self.weight = local_weight + child_weights;
     }
 }
 
 #[derive(Default)]
-enum ReportLineItem {
+enum ReportItem {
     #[default]
     Empty,
-    Aggregate(Vec<Decimal>),
+    Aggregation(Vec<Decimal>),
     ByCommodity(HashMap<String, Vec<Decimal>>),
 }
 
-impl Neg for ReportLineItem {
-    type Output = ReportLineItem;
+impl Neg for ReportItem {
+    type Output = ReportItem;
 
     fn neg(mut self) -> Self::Output {
         match &mut self {
-            ReportLineItem::Empty => {}
-            ReportLineItem::Aggregate(values) => {
+            ReportItem::Empty => {}
+            ReportItem::Aggregation(values) => {
                 for value in values {
                     *value = -*value;
                 }
             }
-            ReportLineItem::ByCommodity(values) => {
+            ReportItem::ByCommodity(values) => {
                 for (_, values) in values.iter_mut() {
                     for value in values {
                         *value = -*value;
@@ -148,9 +146,9 @@ pub struct Report {
 
     root: Node,
 
-    total_al: ReportLineItem,
-    total_eie: ReportLineItem,
-    delta: ReportLineItem,
+    total_al: ReportItem,
+    total_eie: ReportItem,
+    delta: ReportItem,
 }
 
 impl Report {
@@ -213,17 +211,17 @@ impl Report {
         let mut children = root.children.iter().collect::<Vec<_>>();
         children.sort_by(|a, b| a.1.weight.cmp(&b.1.weight).reverse());
 
-        self.render_line(table, header, indent, &root.amount);
+        self.render_line(table, header, indent, &root.item);
         for (segment, child) in children {
             self.render_subtree(table, child, segment, indent + 2);
         }
     }
 
-    fn render_summary(&self, table: &mut Table, header: &str, node: &ReportLineItem) {
+    fn render_summary(&self, table: &mut Table, header: &str, node: &ReportItem) {
         self.render_line(table, header, 0, node);
     }
 
-    fn render_line(&self, table: &mut Table, header: &str, indent: usize, amount: &ReportLineItem) {
+    fn render_line(&self, table: &mut Table, header: &str, indent: usize, amount: &ReportItem) {
         let mut cells = Vec::with_capacity(1 + self.dates.len());
         cells.push(Cell::Text {
             text: header.to_string(),
@@ -231,19 +229,19 @@ impl Report {
             align: Alignment::Left,
         });
         match amount {
-            ReportLineItem::Empty => {
+            ReportItem::Empty => {
                 for _ in &self.dates {
                     cells.push(Cell::Empty);
                 }
                 table.add_row(Row::Row(cells));
             }
-            ReportLineItem::Aggregate(values) => {
+            ReportItem::Aggregation(values) => {
                 for value in values {
                     cells.push(Cell::Decimal { value: *value })
                 }
                 table.add_row(Row::Row(cells));
             }
-            ReportLineItem::ByCommodity(values) => {
+            ReportItem::ByCommodity(values) => {
                 for _ in &self.dates {
                     cells.push(Cell::Empty);
                 }
@@ -338,7 +336,7 @@ impl ReportBuilder {
         for (account, position) in dated_positions.iter() {
             let show_commodities = self.show_commodities(journal.registry(), account);
             let mut line_item =
-                self.to_line_item(journal.registry(), &dates, position, show_commodities);
+                self.to_item(journal.registry(), &dates, position, show_commodities);
             if !account.account_type.is_al() {
                 line_item = -line_item;
             }
@@ -357,9 +355,9 @@ impl ReportBuilder {
         delta += &total_eie;
         total_eie = total_eie.neg();
 
-        let total_al = self.to_line_item(journal.registry(), &dates, &total_al, false);
-        let total_eie = self.to_line_item(journal.registry(), &dates, &total_eie, false);
-        let delta = self.to_line_item(journal.registry(), &dates, &delta, false);
+        let total_al = self.to_item(journal.registry(), &dates, &total_al, false);
+        let total_eie = self.to_item(journal.registry(), &dates, &total_eie, false);
+        let delta = self.to_item(journal.registry(), &dates, &delta, false);
 
         root.update_weights();
 
@@ -372,22 +370,22 @@ impl ReportBuilder {
         }
     }
 
-    fn to_line_item(
+    fn to_item(
         &self,
         registry: &Rc<Registry>,
         dates: &[NaiveDate],
         position: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
         show_commodities: bool,
-    ) -> ReportLineItem {
+    ) -> ReportItem {
         match (&self.report_amount, show_commodities) {
             (ReportAmount::Value, false) => {
                 let aggregate_positions = Self::aggregate_values(position);
                 let aggregate_value = self.to_vector(dates, &aggregate_positions);
-                ReportLineItem::Aggregate(aggregate_value)
+                ReportItem::Aggregation(aggregate_value)
             }
             _ => {
                 let quantity_by_commodity = self.by_commodity_name(registry, dates, position);
-                ReportLineItem::ByCommodity(quantity_by_commodity)
+                ReportItem::ByCommodity(quantity_by_commodity)
             }
         }
     }
