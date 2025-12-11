@@ -27,6 +27,7 @@
           rustup
           libiconv
           git
+          python3
         ];
       };
     });

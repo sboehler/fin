@@ -7,7 +7,7 @@ use chrono::{Local, NaiveDate};
 use clap::Args;
 use regex::Regex;
 use std::borrow::BorrowMut;
-use std::io::{stdout, Write};
+use std::io::{Write, stdout};
 use std::{error::Error, path::PathBuf};
 
 #[derive(Args)]

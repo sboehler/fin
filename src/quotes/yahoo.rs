@@ -2,7 +2,7 @@ use std::error::Error;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
-use reqwest::{header::HeaderMap, Url};
+use reqwest::{Url, header::HeaderMap};
 
 pub struct Client {
     client: reqwest::blocking::Client,

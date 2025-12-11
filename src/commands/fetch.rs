@@ -14,7 +14,7 @@ use chrono::Days;
 use clap::Args;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
-use rust_decimal::{prelude::FromPrimitive, Decimal};
+use rust_decimal::{Decimal, prelude::FromPrimitive};
 use serde::Deserialize;
 
 #[derive(Args)]

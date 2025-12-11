@@ -70,12 +70,14 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
                 date, assertions, ..
             }) => {
                 match &assertions[..] {
-                    [SubAssertion {
-                        account,
-                        balance: amount,
-                        commodity,
-                        ..
-                    }] => write!(
+                    [
+                        SubAssertion {
+                            account,
+                            balance: amount,
+                            commodity,
+                            ..
+                        },
+                    ] => write!(
                         w,
                         "{date} balance {account} {amount} {commodity}",
                         date = &source[date.0.clone()],
