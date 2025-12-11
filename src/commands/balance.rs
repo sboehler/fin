@@ -71,7 +71,7 @@ impl Command {
             },
         };
         let report = builder.build(&journal);
-        let renderer = TextRenderer::new(report.render(), self.round.unwrap_or_default());
+        let renderer = TextRenderer::new(report.to_table(), self.round.unwrap_or_default());
         let mut lock = stdout().lock();
         renderer.render(lock.borrow_mut()).unwrap();
         lock.flush()?;

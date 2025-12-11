@@ -1,8 +1,7 @@
 use std::{
-    cell::RefCell,
     collections::HashMap,
     fmt::Alignment,
-    iter::{self},
+    iter::{self, repeat_n},
     num::ParseIntError,
     ops::{Deref, Neg},
     rc::Rc,
@@ -79,7 +78,7 @@ impl Deref for DatedPositions {
 struct Node {
     children: HashMap<String, Node>,
     amount: ReportLineItem,
-    weight: RefCell<Decimal>,
+    weight: Decimal,
 }
 
 impl Node {
@@ -94,18 +93,20 @@ impl Node {
         }
     }
 
-    pub fn update_weights(&self) -> Decimal {
-        let child_weights: Decimal = self.children.values().map(Node::update_weights).sum();
-        let local_weight: Decimal = match &self.amount {
+    pub fn update_weights(&mut self) {
+        let mut child_weights = Decimal::ZERO;
+        for (_, child) in self.children.iter_mut() {
+            child.update_weights();
+            child_weights += child.weight;
+        }
+        let local_weight = match &self.amount {
             ReportLineItem::Empty => Decimal::ZERO,
             ReportLineItem::Aggregate(values) => values.iter().map(|d| d * d).sum(),
             ReportLineItem::ByCommodity(v) => {
                 v.values().flat_map(|vs| vs.iter()).map(|d| d * d).sum()
             }
         };
-        let weight = local_weight + child_weights;
-        self.weight.replace(weight);
-        weight
+        self.weight = local_weight + child_weights;
     }
 }
 
@@ -153,43 +154,30 @@ pub struct Report {
 }
 
 impl Report {
-    pub fn render(&self) -> Table {
+    pub fn to_table(&self) -> Table {
         let mut table = Table::new(
             iter::once(0)
-                .chain(std::iter::repeat_n(1, self.dates.len()))
+                .chain(repeat_n(1, self.dates.len()))
                 .collect::<Vec<_>>(),
         );
         table.add_row(Row::Separator);
+
         self.render_header(&mut table);
+
         table.add_row(Row::Separator);
 
-        for account_type in [Assets, Liabilities] {
-            let header = account_type.to_string();
-            let Some(node) = self.root.children.get(&header) else {
-                continue;
-            };
-            node.update_weights();
-            self.render_subtree(&mut table, node, header, 0);
-            table.add_row(Row::Empty);
-        }
+        self.render_section(&mut table, &[Assets, Liabilities]);
         self.render_summary(&mut table, "Total (A+L)".into(), &self.total_al);
 
         table.add_row(Row::Separator);
 
-        for account_type in [Equity, Income, Expenses] {
-            let header = account_type.to_string();
-            let Some(node) = self.root.children.get(&header) else {
-                continue;
-            };
-            node.update_weights();
-            self.render_subtree(&mut table, node, header, 0);
-            table.add_row(Row::Empty);
-        }
+        self.render_section(&mut table, &[Expenses, Income, Equity]);
         self.render_summary(&mut table, "Total (E+I+E)".into(), &self.total_eie);
 
         table.add_row(Row::Separator);
 
         self.render_summary(&mut table, "Delta".into(), &self.delta);
+
         table.add_row(Row::Separator);
         table
     }
@@ -203,7 +191,7 @@ impl Report {
         });
         for date in &self.dates {
             cells.push(Cell::Text {
-                text: format!("{}", date.format("%Y-%m-%d")),
+                text: date.format("%Y-%m-%d").to_string(),
                 align: Alignment::Center,
                 indent: 0,
             });
@@ -211,30 +199,34 @@ impl Report {
         table.add_row(Row::Row(cells));
     }
 
-    fn render_summary(&self, table: &mut Table, header: String, node: &ReportLineItem) {
-        self.render_line(table, header, 0, node);
-    }
-
-    fn render_subtree(&self, table: &mut Table, root: &Node, header: String, indent: usize) {
-        let mut children = root.children.iter().collect::<Vec<_>>();
-        children.sort_by(|a, b| a.1.weight.borrow().cmp(&b.1.weight.borrow()).reverse());
-
-        self.render_line(table, header, indent, &root.amount);
-        for (segment, child) in children {
-            self.render_subtree(table, child, segment.clone(), indent + 2);
+    fn render_section(&self, table: &mut Table, account_types: &[AccountType]) {
+        for account_type in account_types {
+            let header = account_type.to_string();
+            if let Some(node) = self.root.children.get(&header) {
+                self.render_subtree(table, node, &header, 0);
+                table.add_row(Row::Empty);
+            };
         }
     }
 
-    fn render_line(
-        &self,
-        table: &mut Table,
-        header: String,
-        indent: usize,
-        amount: &ReportLineItem,
-    ) {
+    fn render_subtree(&self, table: &mut Table, root: &Node, header: &str, indent: usize) {
+        let mut children = root.children.iter().collect::<Vec<_>>();
+        children.sort_by(|a, b| a.1.weight.cmp(&b.1.weight).reverse());
+
+        self.render_line(table, header, indent, &root.amount);
+        for (segment, child) in children {
+            self.render_subtree(table, child, segment, indent + 2);
+        }
+    }
+
+    fn render_summary(&self, table: &mut Table, header: &str, node: &ReportLineItem) {
+        self.render_line(table, header, 0, node);
+    }
+
+    fn render_line(&self, table: &mut Table, header: &str, indent: usize, amount: &ReportLineItem) {
         let mut cells = Vec::with_capacity(1 + self.dates.len());
         cells.push(Cell::Text {
-            text: header,
+            text: header.to_string(),
             indent,
             align: Alignment::Left,
         });
@@ -368,6 +360,8 @@ impl ReportBuilder {
         let total_al = self.to_line_item(journal.registry(), &dates, &total_al, false);
         let total_eie = self.to_line_item(journal.registry(), &dates, &total_eie, false);
         let delta = self.to_line_item(journal.registry(), &dates, &delta, false);
+
+        root.update_weights();
 
         Report {
             dates: dates.clone(),
