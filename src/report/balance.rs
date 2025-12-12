@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     fmt::Alignment,
     iter::{self, repeat_n},
-    num::ParseIntError,
     ops::{Deref, Neg},
     rc::Rc,
     str::FromStr,
@@ -20,7 +19,7 @@ use crate::model::{
 
 use super::table::{Cell, Row, Table};
 
-pub struct Aligner {
+struct Aligner {
     dates: Vec<NaiveDate>,
 }
 
@@ -42,7 +41,7 @@ impl Aligner {
 }
 
 #[derive(Default)]
-pub struct DatedPositions {
+struct DatedPositions {
     positions: Positions<AccountID, Positions<CommodityID, Positions<NaiveDate, Decimal>>>,
 }
 
@@ -448,16 +447,14 @@ impl FromStr for Mapping {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, String> {
-        let mut parts = s.split(',');
-        let levels = parts
-            .next()
-            .ok_or(format!("invalid mapping: {s}"))?
+        let parts: Vec<&str> = s.splitn(2, ',').collect();
+        if parts.len() != 2 {
+            return Err(format!("invalid mapping: {s}"));
+        }
+        let level = parts[0]
             .parse()
-            .map_err(|e: ParseIntError| e.to_string())?;
-        let regex = Regex::new(parts.next().unwrap_or(".*")).map_err(|e| e.to_string())?;
-        Ok(Mapping {
-            regex,
-            level: levels,
-        })
+            .map_err(|e| format!("invalid mapping: {e}"))?;
+        let regex = Regex::new(parts[1]).map_err(|e| format!("invalid mapping: {e}"))?;
+        Ok(Mapping { regex, level })
     }
 }
