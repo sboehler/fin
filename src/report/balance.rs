@@ -382,10 +382,7 @@ impl ReportBuilder {
                 let aggregate_value = self.to_vector(dates, &aggregate_positions);
                 ReportItem::Aggregation(aggregate_value)
             }
-            _ => {
-                let quantity_by_commodity = self.by_commodity_name(registry, dates, position);
-                ReportItem::ByCommodity(quantity_by_commodity)
-            }
+            _ => ReportItem::ByCommodity(self.by_commodity_name(registry, dates, position)),
         }
     }
 
