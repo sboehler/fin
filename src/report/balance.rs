@@ -445,7 +445,7 @@ impl FromStr for Mapping {
 
     fn from_str(s: &str) -> Result<Self, String> {
         let parts: Vec<&str> = s.splitn(2, ',').collect();
-        if parts.len() != 2 {
+        if parts.len() > 2 {
             return Err(format!("invalid mapping: {s}"));
         }
         let level = parts[0]
