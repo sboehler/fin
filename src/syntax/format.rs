@@ -69,17 +69,15 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
                 }
             }
             Directive::VirtualAccount(VirtualAccount {
-                account,
-                aggregated_accounts,
-                ..
+                account, patterns, ..
             }) => {
                 writeln!(
                     w,
                     "virtual {account}",
                     account = &source[account.range.clone()]
                 )?;
-                for a in aggregated_accounts {
-                    writeln!(w, "{account}", account = &source[a.range.clone()])?
+                for pattern in patterns {
+                    writeln!(w, "{pattern}", pattern = &source[pattern.clone()])?
                 }
             }
             Directive::Assertion(Assertion {

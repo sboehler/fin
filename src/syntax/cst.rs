@@ -8,6 +8,7 @@ pub enum Character {
     Digit,
     Alphabetic,
     AlphaNum,
+    WhiteSpace,
     Any,
     HorizontalSpace,
     NewLine,
@@ -31,6 +32,7 @@ impl Character {
                 Character::EOF => false,
                 Character::Char(a) => c == *a,
                 Character::NotChar(a) => c != *a,
+                Character::WhiteSpace => c.is_ascii_whitespace(),
                 Character::Digit => c.is_ascii_digit(),
                 Character::Alphabetic => c.is_alphabetic(),
                 Character::AlphaNum => c.is_alphanumeric(),
@@ -50,6 +52,7 @@ impl Display for Character {
             Character::Char(ch) => write!(f, "{ch:?}"),
             Character::NotChar(ch) => write!(f, "not '{ch}'"),
             Character::Digit => write!(f, "digit"),
+            Character::WhiteSpace => write!(f, "whitespace"),
             Character::Alphabetic => write!(f, "alphabetic character"),
             Character::AlphaNum => write!(f, "alphanumeric character"),
             Character::Any => write!(f, "any character"),
@@ -127,6 +130,7 @@ pub enum Token {
     Price,
     Quantity,
     QuotedString,
+    Regex,
     Sequence(Sequence),
     SubAssertion,
     Transaction,
@@ -179,6 +183,7 @@ impl Display for Token {
             Token::Booking => write!(f, "a booking"),
             Token::Transaction => write!(f, "a transaction"),
             Token::Price => write!(f, "a 'price' directive"),
+            Token::Regex => write!(f, "a regular expression"),
             Token::Open => write!(f, "an 'open' directive"),
             Token::QuotedString => write!(f, "a quoted string"),
             Token::AccountType => write!(f, "an account type"),
@@ -262,7 +267,7 @@ pub struct Transaction {
 pub struct VirtualAccount {
     pub range: Range<usize>,
     pub account: Account,
-    pub aggregated_accounts: Vec<Account>,
+    pub patterns: Vec<Range<usize>>,
 }
 
 #[derive(Eq, PartialEq, Debug)]

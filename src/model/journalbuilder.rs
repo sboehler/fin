@@ -3,6 +3,7 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use chrono::NaiveDate;
+use regex::Regex;
 use rust_decimal::Decimal;
 
 use super::entities::{
@@ -56,7 +57,7 @@ impl JournalBuilder {
                 Assertion(a) => self.assertion(a, source)?,
                 Close(c) => self.close(c, source)?,
                 Include(_) => (),
-                VirtualAccount(_) => (),
+                VirtualAccount(va) => self.virtual_account(va, source)?,
             }
         }
         Ok(())
@@ -87,6 +88,31 @@ impl JournalBuilder {
         let account = self.account(&o.account, source)?;
         let loc = Some(SourceLoc::new(self.current_file, o.range.clone()));
         self.day(date).openings.push(Open { loc, date, account });
+        Ok(())
+    }
+
+    fn virtual_account(
+        &mut self,
+        a: &cst::VirtualAccount,
+        source: &SourceFile,
+    ) -> std::result::Result<(), SyntaxError> {
+        let id = self.account(&a.account, source)?;
+        let mut regexes = Vec::new();
+        for pattern in &a.patterns {
+            let regex = Regex::new(&source.text[pattern.clone()]).map_err(|_| SyntaxError {
+                range: pattern.clone(),
+                want: cst::Token::Regex,
+                source: None,
+            })?;
+            regexes.push(regex);
+        }
+        self.registry
+            .virtual_account(id, regexes)
+            .map_err(|_| SyntaxError {
+                range: a.range.clone(),
+                want: cst::Token::VirtualAccount,
+                source: None,
+            })?;
         Ok(())
     }
 

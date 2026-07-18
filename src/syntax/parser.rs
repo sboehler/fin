@@ -275,18 +275,18 @@ impl<'a> Parser<'a> {
         self.scanner
             .read_rest_of_line()
             .map_err(|e| scope.error(e))?;
-        let mut aggregated_accounts = Vec::new();
+        let mut patterns = Vec::new();
         while self.scanner.current().is_some_and(char::is_alphanumeric) {
-            let aggregated_account = self.parse_account().map_err(|e| scope.error(e))?;
+            let pattern = self.scanner.read_until(&Character::WhiteSpace);
             self.scanner
                 .read_rest_of_line()
                 .map_err(|e| scope.error(e))?;
-            aggregated_accounts.push(aggregated_account);
+            patterns.push(pattern);
         }
         Ok(Directive::VirtualAccount(VirtualAccount {
             range: scope.range(),
             account,
-            aggregated_accounts,
+            patterns,
         }))
     }
 

@@ -16,6 +16,7 @@ pub enum ModelError {
     InvalidAccountType(String),
     InvalidCommodityName(String),
     InvalidAccountName(String),
+    DuplicateVirtualAccount(String),
     NoPriceFound {
         date: NaiveDate,
         commodity_name: String,
@@ -30,6 +31,7 @@ impl Display for ModelError {
             Self::InvalidAccountType(s) => write!(f, "invalid account type: {s}"),
             Self::InvalidCommodityName(s) => write!(f, "invalid commodity name: {s}"),
             Self::InvalidAccountName(s) => write!(f, "invalid account name: {s}"),
+            Self::DuplicateVirtualAccount(s) => write!(f, "duplicate virtual account: {s}"),
             Self::NoPriceFound {
                 date,
                 commodity_name: commodity,

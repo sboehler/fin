@@ -20,6 +20,9 @@ pub struct Command {
     #[arg(short, long)]
     mapping: Vec<Mapping>,
 
+    #[arg(short = 'r', long)]
+    vaccounts: Vec<String>,
+
     #[arg(short, long)]
     show_commodities: Vec<Regex>,
 
@@ -56,7 +59,11 @@ impl Command {
             .map(|s| journal.registry().commodity_id(s))
             .transpose()?;
         journal.process(valuation)?;
-
+        let virtual_ids = self
+            .vaccounts
+            .iter()
+            .map(|name| journal.registry().account_id(&name))
+            .collect::<Result<Vec<_>, _>>()?;
         let builder = ReportBuilder {
             from: self.from,
             to: self.to.unwrap_or_else(|| Local::now().date_naive()),
@@ -69,6 +76,16 @@ impl Command {
                 true => ReportAmount::Quantity,
                 false => ReportAmount::Value,
             },
+            account_map: virtual_ids
+                .iter()
+                .flat_map(|id| {
+                    journal
+                        .registry()
+                        .get_patterns(id)
+                        .into_iter()
+                        .map(|regex| (regex, *id))
+                })
+                .collect(),
         };
         let report = builder.build(&journal);
         let renderer = TextRenderer::new(report.to_table(), self.round.unwrap_or_default());

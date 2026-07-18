@@ -271,6 +271,7 @@ pub struct ReportBuilder {
     pub cumulative: bool,
     pub report_amount: ReportAmount,
     pub show_commodities: Vec<Regex>,
+    pub account_map: Vec<(Regex, AccountID)>,
 }
 
 pub enum ReportAmount {
@@ -310,7 +311,14 @@ impl ReportBuilder {
 
     fn shorten(&self, journal: &Journal, dated_positions: DatedPositions) -> DatedPositions {
         DatedPositions {
-            positions: dated_positions.map_keys(|account| {
+            positions: dated_positions.map_keys(|mut account| {
+                let name = journal.registry().account_name(account);
+                for (regex, id) in &self.account_map {
+                    if regex.is_match(&name) {
+                        account = *id;
+                        break;
+                    }
+                }
                 let name = journal.registry().account_name(account);
                 for mapping in &self.mapping {
                     if mapping.regex.is_match(&name) {

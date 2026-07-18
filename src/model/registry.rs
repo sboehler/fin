@@ -1,5 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Display, iter};
 
+use regex::Regex;
+
 use crate::syntax::sourcefile::SourceFile;
 
 use super::{
@@ -15,6 +17,7 @@ pub struct Registry {
 
     accounts: RefCell<Vec<Account>>,
     commodities: RefCell<Vec<Commodity>>,
+    virtual_accounts: RefCell<HashMap<AccountID, Vec<Regex>>>,
 }
 
 impl Default for Registry {
@@ -31,6 +34,7 @@ impl Registry {
             source_files: Default::default(),
             accounts: Default::default(),
             commodities: Default::default(),
+            virtual_accounts: Default::default(),
         }
     }
 
@@ -46,6 +50,29 @@ impl Registry {
         self.accounts.borrow_mut().push(account);
         self.accounts_by_name.borrow_mut().insert(s.to_string(), id);
         Ok(id)
+    }
+
+    pub fn virtual_account(
+        &self,
+        account: AccountID,
+        patterns: Vec<Regex>,
+    ) -> Result<(), ModelError> {
+        if self.virtual_accounts.borrow().contains_key(&account) {
+            return Err(ModelError::DuplicateVirtualAccount(
+                self.account_name(account),
+            ));
+        }
+        self.virtual_accounts.borrow_mut().insert(account, patterns);
+        Ok(())
+    }
+
+    pub fn get_patterns(&self, account: &AccountID) -> Vec<Regex> {
+        return self
+            .virtual_accounts
+            .borrow()
+            .get(account)
+            .cloned()
+            .unwrap_or(Default::default());
     }
 
     pub fn add_source_file(&mut self, source_file: SourceFile) -> SourceFileID {
