@@ -2,3 +2,4 @@
 journal.bean
 /.idea
 .direnv
+.vscode/settings.json
