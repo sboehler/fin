@@ -130,6 +130,7 @@ pub enum Token {
     Sequence(Sequence),
     SubAssertion,
     Transaction,
+    VirtualAccount,
     WhiteSpace,
 }
 
@@ -181,6 +182,7 @@ impl Display for Token {
             Token::Open => write!(f, "an 'open' directive"),
             Token::QuotedString => write!(f, "a quoted string"),
             Token::AccountType => write!(f, "an account type"),
+            Token::VirtualAccount => write!(f, "a virtual account"),
             Token::Commodity => write!(f, "a commodity"),
             Token::File => write!(f, "a source file"),
             Token::Account => write!(f, "an account"),
@@ -224,6 +226,7 @@ pub enum Directive {
     Transaction(Transaction),
     Assertion(Assertion),
     Close(Close),
+    VirtualAccount(VirtualAccount),
 }
 #[derive(Eq, PartialEq, Debug)]
 pub struct Include {
@@ -256,6 +259,13 @@ pub struct Transaction {
 }
 
 #[derive(Eq, PartialEq, Debug)]
+pub struct VirtualAccount {
+    pub range: Range<usize>,
+    pub account: Account,
+    pub aggregated_accounts: Vec<Account>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
 pub struct Assertion {
     pub range: Range<usize>,
     pub date: Date,
@@ -278,6 +288,7 @@ impl Directive {
             Directive::Transaction(Transaction { range, .. }) => range.clone(),
             Directive::Assertion(Assertion { range, .. }) => range.clone(),
             Directive::Close(Close { range, .. }) => range.clone(),
+            Directive::VirtualAccount(VirtualAccount { range, .. }) => range.clone(),
         }
     }
 }

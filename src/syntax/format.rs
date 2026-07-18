@@ -1,5 +1,7 @@
 use std::io::{self, Result, Write};
 
+use crate::syntax::cst::VirtualAccount;
+
 use super::cst::{
     Addon, Assertion, Close, Directive, Include, Open, Price, SubAssertion, SyntaxTree, Transaction,
 };
@@ -64,6 +66,20 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
                         amount = &source[b.quantity.0.clone()],
                         commodity = &source[b.commodity.0.clone()],
                     )?;
+                }
+            }
+            Directive::VirtualAccount(VirtualAccount {
+                account,
+                aggregated_accounts,
+                ..
+            }) => {
+                writeln!(
+                    w,
+                    "virtual {account}",
+                    account = &source[account.range.clone()]
+                )?;
+                for a in aggregated_accounts {
+                    writeln!(w, "{account}", account = &source[a.range.clone()])?
                 }
             }
             Directive::Assertion(Assertion {

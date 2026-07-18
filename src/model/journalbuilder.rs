@@ -56,6 +56,7 @@ impl JournalBuilder {
                 Assertion(a) => self.assertion(a, source)?,
                 Close(c) => self.close(c, source)?,
                 Include(_) => (),
+                VirtualAccount(_) => (),
             }
         }
         Ok(())

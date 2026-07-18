@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use crate::syntax::cst::VirtualAccount;
+
 use super::cst::{
     Account, Addon, Assertion, Booking, Character, Close, Commodity, Date, Decimal, Directive,
     Include, Open, Price, QuotedString, Sequence, SubAssertion, SyntaxTree, Token, Transaction,
@@ -189,7 +191,7 @@ impl<'a> Parser<'a> {
                 '*' | '/' | '#' => {
                     self.parse_comment()?;
                 }
-                c if c.is_ascii_digit() || c == 'i' || c == '@' => {
+                c if c.is_ascii_digit() || c == 'i' || c == '@' || c == 'v' => {
                     let d = self.parse_directive()?;
                     directives.push(d)
                 }
@@ -242,6 +244,7 @@ impl<'a> Parser<'a> {
         let scope = self.scope(Token::Directive);
         match self.scanner.current() {
             Some('i') => self.parse_include(&scope.with(Token::Include)),
+            Some('v') => self.parse_virtual_account(&scope.with(Token::VirtualAccount)),
             Some(c) if c.is_ascii_digit() || c == '@' => self.parse_command(&scope),
             _o => Err(SyntaxError {
                 want: Token::Directive,
@@ -260,6 +263,30 @@ impl<'a> Parser<'a> {
         Ok(Directive::Include(Include {
             range: scope.range(),
             path,
+        }))
+    }
+
+    fn parse_virtual_account(&self, scope: &Scope) -> Result<Directive> {
+        self.scanner
+            .read_string("virtual")
+            .and_then(|_| self.scanner.read_space_1())
+            .map_err(|e| scope.error(e))?;
+        let account = self.parse_account().map_err(|e| scope.error(e))?;
+        self.scanner
+            .read_rest_of_line()
+            .map_err(|e| scope.error(e))?;
+        let mut aggregated_accounts = Vec::new();
+        while self.scanner.current().is_some_and(char::is_alphanumeric) {
+            let aggregated_account = self.parse_account().map_err(|e| scope.error(e))?;
+            self.scanner
+                .read_rest_of_line()
+                .map_err(|e| scope.error(e))?;
+            aggregated_accounts.push(aggregated_account);
+        }
+        Ok(Directive::VirtualAccount(VirtualAccount {
+            range: scope.range(),
+            account,
+            aggregated_accounts,
         }))
     }
 
