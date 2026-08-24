@@ -14,9 +14,7 @@
         "x86_64-darwin"
         "aarch64-darwin"
       ];
-    in
-    {
-      devShells = nixpkgs.lib.genAttrs systems (
+      createDevShell =
         system:
         let
           pkgs = import nixpkgs { inherit system; };
@@ -24,14 +22,18 @@
         {
           default = pkgs.mkShell {
             name = "fin";
-            buildInputs = with pkgs; [
-              rustup
-              libiconv
+            nativeBuildInputs = with pkgs; [
               git
               python3
+              rustup
+            ];
+            buildInputs = with pkgs; [
+              libiconv
             ];
           };
-        }
-      );
+        };
+    in
+    {
+      devShells = nixpkgs.lib.genAttrs systems createDevShell;
     };
 }
