@@ -2,34 +2,36 @@
   description = "fin";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+    nixpkgs.url = "https://flakehub.com/f/DeterminateSystems/nixpkgs-weekly/0.1";
   };
 
-  outputs = { self, nixpkgs, ... }@inputs:
-  let
-    supportedSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
-
-    forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-
-    nixpkgsFor = forAllSystems (system: import nixpkgs {
-      inherit system;
-      config = { };
-    });
-
-  in {
-    devShells = forAllSystems (system:
+  outputs =
+    { nixpkgs, ... }:
     let
-      pkgs = nixpkgsFor.${system};
-    in {
-      default = pkgs.mkShell {
-        name = "fin";
-        buildInputs = with pkgs; [
-          rustup
-          libiconv
-          git
-          python3
-        ];
-      };
-    });
-  };
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
+      ];
+    in
+    {
+      devShells = nixpkgs.lib.genAttrs systems (
+        system:
+        let
+          pkgs = import nixpkgs { inherit system; };
+        in
+        {
+          default = pkgs.mkShell {
+            name = "fin";
+            buildInputs = with pkgs; [
+              rustup
+              libiconv
+              git
+              python3
+            ];
+          };
+        }
+      );
+    };
 }
