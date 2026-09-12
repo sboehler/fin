@@ -27,9 +27,6 @@
               python3
               rustup
             ];
-            buildInputs = with pkgs; [
-              libiconv
-            ];
           };
         };
     in
