@@ -10,12 +10,27 @@ use self::{
     sourcefile::SourceFile,
 };
 
+pub mod bayes;
 pub mod cst;
 pub mod error;
 pub mod format;
 mod parser;
 mod scanner;
 pub mod sourcefile;
+
+/// Parses a journal held in memory. Unlike [`parse_file`], includes are not
+/// followed, since there is no directory to resolve them against.
+pub fn parse_text(text: &str) -> std::result::Result<SyntaxTree, ParserError> {
+    Parser::new(text).parse().map_err(|e| {
+        ParserError::SyntaxError(
+            e,
+            SourceFile {
+                path: None,
+                text: text.to_string(),
+            },
+        )
+    })
+}
 
 pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, SourceFile)>, ParserError> {
     let mut res = Vec::new();

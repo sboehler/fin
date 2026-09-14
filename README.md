@@ -38,6 +38,28 @@ Counter-postings without a known account (bank statement lines, broker
 deposits and withdrawals) are booked against `Equity:TBD`; replace that
 account when reconciling.
 
+## Inferring accounts
+
+`infer` replaces those `Equity:TBD` placeholders with a guess, using a naive
+Bayes model trained on transactions which already have their accounts
+assigned:
+
+```
+fin infer --training-file journal/main.journal --inplace imported.journal
+```
+
+The training file's includes are followed, and it may be the target file
+itself — the usual flow is to append the imported transactions to the journal
+and then infer in place. Each booking is described by the words of its
+description plus its commodity, quantity, and the account on the other side;
+the account with the highest posterior wins. `--account` picks a different
+placeholder (default `Equity:TBD`). Without `--inplace` the result goes to
+stdout.
+
+The guesses are only as good as the training data, so check the result — this
+rewrites the file through the formatter, so `git diff` shows exactly what
+changed.
+
 ## Golden tests
 
 Importers are tested against golden files in `testdata/<root>/<importer>/<case>/`

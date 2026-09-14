@@ -20,6 +20,7 @@ fn main() {
         commands::Commands::Format(p) => p.run(),
         commands::Commands::Balance(p) => p.run(),
         commands::Commands::Fetch(p) => p.run(),
+        commands::Commands::Infer(p) => p.run(),
         commands::Commands::Import(importer) => {
             let mut stdout = std::io::stdout().lock();
             importer.run(&mut stdout).and_then(|_| Ok(stdout.flush()?))
