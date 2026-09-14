@@ -53,6 +53,11 @@ const MAX_DOCUMENT_FREQUENCY: f64 = 0.1;
 /// mean anything, so that small journals are not stripped of all evidence.
 const MIN_OCCURRENCES_TO_PRUNE: usize = 20;
 
+/// Magnitude buckets per decade, so each covers a factor of about 1.3.
+/// Measured by `infer --evaluate` on a 13k transaction journal, where 8 was
+/// the best of 1, 2, 3, 4, 6, 8, 12 and 20.
+const BUCKETS_PER_DECADE: f64 = 8.0;
+
 impl Model {
     pub fn new(account: &str) -> Self {
         Model {
@@ -233,17 +238,33 @@ pub fn transactions(tree: &SyntaxTree) -> impl Iterator<Item = &Transaction> {
 /// values whose punctuation is meaningful (`Assets:Bank`, `19.10`), so they
 /// are only lowercased.
 fn tokenize(source: &str, t: &Transaction, b: &Booking, other: &str) -> HashSet<String> {
-    source[t.description.content.clone()]
+    let quantity = &source[b.quantity.0.clone()];
+    let mut tokens = source[t.description.content.clone()]
         .split_whitespace()
         .map(|word| word.trim_matches(|c: char| !c.is_alphanumeric()))
         .filter(|word| !word.is_empty())
-        .chain([
-            &source[b.commodity.0.clone()],
-            &source[b.quantity.0.clone()],
-            other,
-        ])
+        .chain([&source[b.commodity.0.clone()], other])
+        // The exact amount earns its place next to the magnitude: a
+        // subscription billed at the same figure every month is recognised by
+        // it.
+        .chain([quantity])
         .map(str::to_lowercase)
-        .collect()
+        .collect::<HashSet<_>>();
+    if let Some(bucket) = magnitude(quantity) {
+        tokens.insert(bucket);
+    }
+    tokens
+}
+
+/// A token for the order of magnitude of an amount. The exact amount is
+/// almost always unique and so tells the model nothing, but the size of a
+/// booking does: a twenty franc lunch is not a two hundred franc shop.
+fn magnitude(quantity: &str) -> Option<String> {
+    let value = quantity.replace('\'', "").parse::<f64>().ok()?.abs();
+    if value <= 0.0 {
+        return None;
+    }
+    Some(format!("~{}", (value.log10() * BUCKETS_PER_DECADE).floor()))
 }
 
 #[cfg(test)]
@@ -376,10 +397,11 @@ Income:Salary Assets:Bank 5000.00 CHF
         assert!(c.confidence < 0.9, "{c:?}");
     }
 
-    /// A description the model has seen is decided with high confidence.
+    /// A description the model has seen, for an amount of the size it has
+    /// seen it at, is decided with high confidence.
     #[test]
     fn test_confidence_is_high_with_evidence() {
-        let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
+        let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:TBD 55.00 CHF\n";
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
         let c = model()
@@ -387,6 +409,31 @@ Income:Salary Assets:Bank 5000.00 CHF
             .unwrap();
         assert_eq!(c.account, "Expenses:Groceries");
         assert!(c.confidence > 0.9, "{c:?}");
+    }
+
+    /// With the description alone giving nothing away, the size of the
+    /// booking decides: a small sum at the same merchant is lunch, a large
+    /// one is the weekly shop.
+    #[test]
+    fn test_amount_decides_between_accounts() {
+        let training = "2024-01-01 \"Coop\"\nAssets:Bank Expenses:Restaurants 12.00 CHF\n\n\
+                        2024-01-02 \"Coop\"\nAssets:Bank Expenses:Restaurants 12.50 CHF\n\n\
+                        2024-01-03 \"Coop\"\nAssets:Bank Expenses:Groceries 120.00 CHF\n\n\
+                        2024-01-04 \"Coop\"\nAssets:Bank Expenses:Groceries 125.00 CHF\n";
+        let mut model = Model::new("Expenses:TBD");
+        model.train(training, &parse_text(training).unwrap());
+
+        let predict = |amount: &str| {
+            let source = format!("2024-02-01 \"Coop\"\nAssets:Bank Expenses:TBD {amount} CHF\n");
+            let tree = parse_text(&source).unwrap();
+            let t = transactions(&tree).next().unwrap();
+            model
+                .predict(&source, t, &t.bookings[0], "Assets:Bank")
+                .unwrap()
+                .account
+        };
+        assert_eq!(predict("13.00"), "Expenses:Restaurants");
+        assert_eq!(predict("130.00"), "Expenses:Groceries");
     }
 
     /// Below the threshold the placeholder survives untouched.
@@ -453,6 +500,31 @@ Income:Salary Assets:Bank 5000.00 CHF
         let model = model();
         assert!(!model.is_ubiquitous("assets:bank"));
         assert!(!model.is_ubiquitous("migros"));
+    }
+
+    /// Amounts of a similar size share a bucket; amounts an order of
+    /// magnitude apart do not.
+    #[test]
+    fn test_magnitude_buckets() {
+        assert_eq!(magnitude("20.00"), magnitude("21.00"));
+        assert_ne!(magnitude("20.00"), magnitude("200.00"));
+        assert_ne!(magnitude("20.00"), magnitude("60.00"));
+        // Sign does not change the size of a booking.
+        assert_eq!(magnitude("-20.00"), magnitude("20.00"));
+        // Nothing to bucket.
+        assert_eq!(magnitude("0.00"), None);
+        assert_eq!(magnitude("nope"), None);
+    }
+
+    /// The magnitude is a token in its own right, next to the exact amount.
+    #[test]
+    fn test_tokenize_includes_magnitude() {
+        let source = "2024-01-01 \"Migros\"\nAssets:Bank Expenses:Groceries 50.00 CHF\n";
+        let tree = parse_text(source).unwrap();
+        let t = transactions(&tree).next().unwrap();
+        let tokens = tokenize(source, t, &t.bookings[0], "Assets:Bank");
+        assert!(tokens.contains("50.00"), "{tokens:?}");
+        assert!(tokens.contains(&magnitude("50.00").unwrap()), "{tokens:?}");
     }
 
     #[test]
