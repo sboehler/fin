@@ -69,17 +69,17 @@ To choose a threshold, cross-validate on your own journal:
 fin infer --evaluate --training-file journal/main.journal
 ```
 
-```
- threshold   coverage   accuracy  correct/answered
-     0.000     100.0%      90.0%           720/800
-     0.800      84.8%      94.0%           637/678
-     0.900      72.4%     100.0%           579/579
-```
-
 `coverage` is how often the model answers at that threshold, `accuracy` how
-often those answers are right. Note that the confidence comes from a naive
-Bayes posterior, which is overconfident by construction — it separates "no
-evidence" from "some evidence" well, but is not a calibrated probability.
+often those answers are right. The model is symmetric, so it can predict
+either side of a booking from the other, but only one of those is the job a
+placeholder asks it to do; the two directions are therefore reported apart
+rather than averaged. Read the income/expenses table.
+
+The confidence comes from a naive Bayes posterior, which is overconfident by
+construction: most predictions land very close to 1, which is why the
+reported thresholds run out to `0.999999`. It separates "no evidence" from
+"some evidence" well, but is not a calibrated probability, and the default of
+`0.9` is unlikely to be the right operating point for a real journal.
 
 The guesses are only as good as the training data, so check the result — this
 rewrites the file through the formatter, so `git diff` shows exactly what
