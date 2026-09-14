@@ -1,0 +1,1 @@
+args: [ch.cashback-cards, --account, Liabilities:CashbackCard, statement.csv]

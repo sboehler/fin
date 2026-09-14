@@ -28,7 +28,7 @@ pub struct Command {
     #[arg(short, long)]
     commodity: String,
 
-    /// Value this portfolio instead of the account total, e.g. `3.172.474.493.01`.
+    /// Value this portfolio instead of the account total, e.g. `1.234.567.890.01`.
     #[arg(short, long)]
     portfolio: Option<String>,
 

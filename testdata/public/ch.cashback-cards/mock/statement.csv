@@ -1,0 +1,5 @@
+Transaktionsdatum,Beschreibung,Händler,Kartennummer,Währung,Betrag,Fremdwährung,Betrag in Fremdwährung,Debit/Kredit,Status,Händlerkategorie,Registrierte Kategorie
+"07.06.2026","APPLE.COM/BILL, HOLLYHILL","Apple","3400 00**** *0001","CHF","29.90","","","Belastung","Gebucht","Dienstleistungen","RECORD STORES"
+"05.06.2026","MIGROS WIEDIKON, ZÜRICH","Migros","3400 00**** *0001","CHF","62.30","","","Belastung","Gebucht","Lebensmittel","DEPARTMENT STORES"
+"08.06.2026","AMZN MKTP, LUXEMBOURG","Amazon","5200 00** **** 0002","CHF","29.05","USD","32.15","Belastung","Gebucht","Shopping",""
+"12.05.2026","IHRE ZAHLUNG – BESTEN DANK","","3400 00**** *0001","CHF","-1910.90","","","Gutschrift","Gebucht","Zahlungen",""

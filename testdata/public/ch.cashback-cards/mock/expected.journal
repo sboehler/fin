@@ -1,0 +1,11 @@
+2026-05-12 "IHRE ZAHLUNG – BESTEN DANK / Zahlungen / 3400 00**** *0001 / Gutschrift"
+Equity:TBD               Liabilities:CashbackCard    1910.90 CHF
+
+2026-06-05 "MIGROS WIEDIKON, ZÜRICH / Migros / Lebensmittel / 3400 00**** *0001 / DEPARTMENT STORES / Belastung"
+Liabilities:CashbackCard Equity:TBD                    62.30 CHF
+
+2026-06-07 "APPLE.COM/BILL, HOLLYHILL / Apple / Dienstleistungen / 3400 00**** *0001 / RECORD STORES / Belastung"
+Liabilities:CashbackCard Equity:TBD                    29.90 CHF
+
+2026-06-08 "AMZN MKTP, LUXEMBOURG / Amazon / Shopping / 5200 00** **** 0002 / Belastung / 32.15 USD"
+Liabilities:CashbackCard Equity:TBD                    29.05 CHF

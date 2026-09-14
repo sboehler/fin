@@ -16,7 +16,11 @@ fin import com.interactivebrokers \
 ```
 
 ```
-fin import ch.viac --commodity VIAC --portfolio 3.172.474.493.01 summary.json
+fin import ch.cashback-cards --account Liabilities:CashbackCard statement.csv
+```
+
+```
+fin import ch.viac --commodity VIAC --portfolio 1.234.567.890.01 summary.json
 ```
 
 VIAC is valued rather than booked: the importer emits one `price` directive
