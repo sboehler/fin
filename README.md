@@ -69,11 +69,24 @@ To choose a threshold, cross-validate on your own journal:
 fin infer --evaluate --training-file journal/main.journal
 ```
 
-`coverage` is how often the model answers at that threshold, `accuracy` how
-often those answers are right. The model is symmetric, so it can predict
-either side of a booking from the other, but only one of those is the job a
-placeholder asks it to do; the two directions are therefore reported apart
-rather than averaged. Read the income/expenses table.
+```
+ coverage   threshold   accuracy  correct/answered
+   100.0%    0.136930      83.3%       12929/15530
+    80.0%    0.929146      91.3%       11345/12424
+    60.0%    0.999196      95.4%         8893/9318
+```
+
+`coverage` is how often the model answers, `accuracy` how often those answers
+are right, and `threshold` the `--min-confidence` which produces that
+coverage. The table is indexed by coverage rather than by confidence so that
+two runs stay comparable: changing the features moves the whole confidence
+scale, so the same threshold means different things before and after, while
+the same coverage does not.
+
+The model is symmetric, so it can predict either side of a booking from the
+other, but only one of those is the job a placeholder asks it to do; the two
+directions are therefore reported apart rather than averaged. Read the
+income/expenses table.
 
 The confidence comes from a naive Bayes posterior, which is overconfident by
 construction: most predictions land very close to 1, which is why the

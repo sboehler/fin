@@ -15,11 +15,11 @@ use crate::{
 /// The placeholder the importers book counter-postings to.
 const TBD_ACCOUNT: &str = "Expenses:TBD";
 
-/// Thresholds reported by `--evaluate`. Naive Bayes piles most of its
-/// predictions up near 1, so the upper end is resolved finely.
-const THRESHOLDS: &[f64] = &[
-    0.0, 0.5, 0.8, 0.9, 0.95, 0.99, 0.999, 0.9999, 0.99999, 0.999999,
-];
+/// Coverage levels reported by `--evaluate`. Indexing the table by coverage
+/// rather than by confidence keeps two runs comparable: a change to the
+/// features moves the whole confidence scale, so the same threshold means
+/// something different before and after, while the same coverage does not.
+const COVERAGES: &[f64] = &[1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
 
 #[derive(Args)]
 pub struct Command {
@@ -188,20 +188,22 @@ fn report(title: &str, results: &[&Prediction]) {
     if results.is_empty() {
         return;
     }
+    let mut sorted = results.to_vec();
+    sorted.sort_by(|a, b| b.confidence.total_cmp(&a.confidence));
     println!(
-        "{:>10}  {:>9}  {:>9}  {:>16}",
-        "threshold", "coverage", "accuracy", "correct/answered"
+        "{:>9}  {:>10}  {:>9}  {:>16}",
+        "coverage", "threshold", "accuracy", "correct/answered"
     );
-    for &threshold in THRESHOLDS {
-        let answered = results.iter().filter(|p| p.confidence >= threshold);
-        let (n, correct) = answered.fold((0, 0), |(n, c), p| (n + 1, c + p.correct as usize));
-        if n == 0 {
-            continue;
-        }
-        let coverage = 100.0 * n as f64 / results.len() as f64;
+    for &target in COVERAGES {
+        let n = ((target * sorted.len() as f64).round() as usize).clamp(1, sorted.len());
+        let correct = sorted[..n].iter().filter(|p| p.correct).count();
+        // The confidence of the last prediction accepted is the threshold
+        // which produces this coverage.
+        let threshold = sorted[n - 1].confidence;
+        let coverage = 100.0 * n as f64 / sorted.len() as f64;
         let accuracy = 100.0 * correct as f64 / n as f64;
         let ratio = format!("{correct}/{n}");
-        println!("{threshold:>10.6}  {coverage:>8.1}%  {accuracy:>8.1}%  {ratio:>16}");
+        println!("{coverage:>8.1}%  {threshold:>10.6}  {accuracy:>8.1}%  {ratio:>16}");
     }
 }
 
