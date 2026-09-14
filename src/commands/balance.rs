@@ -62,7 +62,7 @@ impl Command {
         let virtual_ids = self
             .vaccounts
             .iter()
-            .map(|name| journal.registry().account_id(&name))
+            .map(|name| journal.registry().account_id(name))
             .collect::<Result<Vec<_>, _>>()?;
         let builder = ReportBuilder {
             from: self.from,

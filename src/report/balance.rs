@@ -94,7 +94,7 @@ impl Node {
 
     pub fn update_weights(&mut self) {
         let mut child_weights = Decimal::ZERO;
-        for (_, child) in self.children.iter_mut() {
+        for child in self.children.values_mut() {
             child.update_weights();
             child_weights += child.weight;
         }
@@ -127,7 +127,7 @@ impl Neg for ReportItem {
                 }
             }
             ReportItem::ByCommodity(values) => {
-                for (_, values) in values.iter_mut() {
+                for values in values.values_mut() {
                     for value in values {
                         *value = -*value;
                     }
@@ -164,16 +164,16 @@ impl Report {
         table.add_row(Row::Separator);
 
         self.render_section(&mut table, &[Assets, Liabilities]);
-        self.render_summary(&mut table, "Total (A+L)".into(), &self.total_al);
+        self.render_summary(&mut table, "Total (A+L)", &self.total_al);
 
         table.add_row(Row::Separator);
 
         self.render_section(&mut table, &[Expenses, Income, Equity]);
-        self.render_summary(&mut table, "Total (E+I+E)".into(), &self.total_eie);
+        self.render_summary(&mut table, "Total (E+I+E)", &self.total_eie);
 
         table.add_row(Row::Separator);
 
-        self.render_summary(&mut table, "Delta".into(), &self.delta);
+        self.render_summary(&mut table, "Delta", &self.delta);
 
         table.add_row(Row::Separator);
         table
