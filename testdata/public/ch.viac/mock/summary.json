@@ -1,0 +1,46 @@
+{
+  "dailyWealth": [
+    { "date": "2024-01-03", "value": 2010.12345678901234567890 },
+    { "date": "2024-01-01", "value": 0 },
+    { "date": "2024-01-04", "value": 2005.005 },
+    { "date": "2024-01-02", "value": 1000 }
+  ],
+  "totalValue": 2005.005,
+  "totalPerformance": 5.005,
+  "totalPerformanceCalculationMethod": "TWR",
+  "totalReturn": 0.005,
+  "p3aSummary": {
+    "dailyWealth": [
+      { "date": "2024-01-02", "value": 1000 },
+      { "date": "2024-01-03", "value": 2010.12345678901234567890 },
+      { "date": "2024-01-04", "value": 2005.005 }
+    ],
+    "totalValue": 2005.005,
+    "totalPerformance": 5.005,
+    "totalReturn": 0.005,
+    "portfolioWealthSummaries": {
+      "1.01": {
+        "portfolioNumber": "1.01",
+        "dailyWealth": [
+          { "date": "2024-01-02", "value": 1000 },
+          { "date": "2024-01-03", "value": 1005.061728394505 },
+          { "date": "2024-01-04", "value": 1002.5025 }
+        ],
+        "totalValue": 1002.5025,
+        "totalPerformance": 2.5025,
+        "totalReturn": 0.0025
+      },
+      "1.02": {
+        "portfolioNumber": "1.02",
+        "dailyWealth": [
+          { "date": "2024-01-04", "value": 1002.505 },
+          { "date": "2024-01-05", "value": 0 },
+          { "date": "2024-01-03", "value": 1005.06172839450512345678 }
+        ],
+        "totalValue": 0,
+        "totalPerformance": 2.5025,
+        "totalReturn": 0.0025
+      }
+    }
+  }
+}

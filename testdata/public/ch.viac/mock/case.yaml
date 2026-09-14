@@ -1,0 +1,1 @@
+args: [ch.viac, --commodity, VIAC, --portfolio, "1.02", summary.json]

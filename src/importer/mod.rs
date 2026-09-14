@@ -4,6 +4,7 @@ use clap::Subcommand;
 
 pub mod interactivebrokers;
 pub mod postfinance;
+pub mod viac;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -15,6 +16,12 @@ pub enum Commands {
         about = "Import Interactive Brokers activity statement."
     )]
     InteractiveBrokers(interactivebrokers::Command),
+
+    #[command(
+        name = "ch.viac",
+        about = "Import VIAC portfolio values from a JSON summary."
+    )]
+    Viac(viac::Command),
 }
 
 impl Commands {
@@ -22,6 +29,7 @@ impl Commands {
         match self {
             Commands::Postfinance(command) => command.run(w),
             Commands::InteractiveBrokers(command) => command.run(w),
+            Commands::Viac(command) => command.run(w),
         }
     }
 }

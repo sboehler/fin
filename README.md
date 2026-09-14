@@ -15,6 +15,16 @@ fin import com.interactivebrokers \
   --rounding Expenses:Rounding activity.csv
 ```
 
+```
+fin import ch.viac --commodity VIAC --portfolio 3.172.474.493.01 summary.json
+```
+
+VIAC is valued rather than booked: the importer emits one `price` directive
+per day from the portfolio's wealth series. Open app.viac.ch, select "From
+start" in the overview dashboard, and save the response of the `summary` XHR
+call. Omit `--portfolio` to value the account total instead of a single
+portfolio.
+
 Cash amounts are booked in cents while the statement reports them with up to
 nine decimals; the difference accumulated over the period is booked to the
 `--rounding` account at the period end, so the generated cash assertions hold
