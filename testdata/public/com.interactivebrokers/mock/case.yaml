@@ -1,0 +1,17 @@
+args:
+  - com.interactivebrokers
+  - --account
+  - Assets:IBKR
+  - --dividend
+  - Income:Dividends
+  - --interest
+  - Expenses:Interest
+  - --fee
+  - Expenses:Fees
+  - --tax
+  - Expenses:WithholdingTax
+  - --rounding
+  - Expenses:Rounding
+  - --trading
+  - Expenses:Trading
+  - statement.csv

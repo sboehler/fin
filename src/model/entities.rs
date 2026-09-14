@@ -122,6 +122,9 @@ pub struct Booking {
 }
 
 impl Booking {
+    /// Creates the pair of bookings for a transfer of `quantity` from
+    /// `credit` to `debit`. A negative quantity is booked in the opposite
+    /// direction, so the debit side always carries a positive quantity.
     pub fn create(
         credit: AccountID,
         debit: AccountID,
@@ -129,6 +132,11 @@ impl Booking {
         commodity: CommodityID,
         value: Option<Decimal>,
     ) -> Vec<Booking> {
+        let (credit, debit, quantity, value) = if quantity.is_sign_negative() {
+            (debit, credit, -quantity, value.map(|v| -v))
+        } else {
+            (credit, debit, quantity, value)
+        };
         vec![
             Booking {
                 account: credit,

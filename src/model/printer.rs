@@ -60,6 +60,13 @@ impl<'a, W: Write> Printer<'a, W> {
     }
 
     pub fn transaction(&mut self, t: &Transaction, width: usize) -> std::io::Result<()> {
+        if let Some(targets) = &t.targets {
+            let names = targets
+                .iter()
+                .map(|c| self.registry.commodity_name(*c))
+                .collect::<Vec<_>>();
+            writeln!(self.writer, "@performance({})", names.join(","))?;
+        }
         writeln!(
             self.writer,
             "{date} \"{description}\"",

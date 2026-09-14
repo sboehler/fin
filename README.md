@@ -8,8 +8,21 @@ A Rust implementation (work in progress) of https://github.com/sboehler/knut.
 fin import ch.postfinance --account Assets:PostFinance:Checking statement.csv
 ```
 
-Imported transactions are booked against `Equity:TBD`; replace that account
-when reconciling.
+```
+fin import com.interactivebrokers \
+  --account Assets:IBKR --dividend Income:Dividends --interest Expenses:Interest \
+  --fee Expenses:Fees --tax Expenses:WithholdingTax --trading Expenses:Trading \
+  --rounding Expenses:Rounding activity.csv
+```
+
+Cash amounts are booked in cents while the statement reports them with up to
+nine decimals; the difference accumulated over the period is booked to the
+`--rounding` account at the period end, so the generated cash assertions hold
+given correct opening balances.
+
+Counter-postings without a known account (bank statement lines, broker
+deposits and withdrawals) are booked against `Equity:TBD`; replace that
+account when reconciling.
 
 ## Golden tests
 

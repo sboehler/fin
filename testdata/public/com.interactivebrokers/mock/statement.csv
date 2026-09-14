@@ -1,0 +1,36 @@
+﻿Statement,Header,Field Name,Field Value
+Statement,Data,Period,"January 1, 2025 - December 31, 2025"
+Account Information,Header,Field Name,Field Value
+Account Information,Data,Base Currency,CHF
+Trades,Header,DataDiscriminator,Asset Category,Currency,Symbol,Date/Time,Quantity,T. Price,C. Price,Proceeds,Comm/Fee,Basis,Realized P/L,Realized P/L %,MTM P/L,Code
+Trades,Data,Order,Stocks,USD,VTI,"2025-03-03, 09:30:00",10,250.123,251,-2501.23,-1,2502.23,0,0,8.77,O
+Trades,SubTotal,,Stocks,USD,VTI,,10,,,-2501.23,-1,2502.23,0,,8.77,
+Trades,Data,Order,Forex,CHF,USD.CHF,"2025-03-01, 10:00:00","1,000",0.9,,-900.004,-1.8,,,,0,
+Trades,Data,Order,Forex,CHF,USD.CHF,"2025-03-02, 10:00:00","1,000",0.9,,-900.004,-1.8,,,,0,
+Trades,Data,Order,Bonds,USD,X,"2025-03-01, 10:00:00",1,1,,-1,0,,,,0,
+Deposits & Withdrawals,Header,Currency,Settle Date,Description,Amount
+Deposits & Withdrawals,Data,CHF,2025-02-01,Electronic Fund Transfer,"5,000"
+Deposits & Withdrawals,Data,Total,,,5000
+Dividends,Header,Currency,Date,Description,Amount
+Dividends,Data,USD,2025-04-01,VTI(US9229087690) Cash Dividend USD 0.5 per Share (Ordinary Dividend),5
+Dividends,Data,Total in CHF,,,4.5
+Withholding Tax,Header,Currency,Date,Description,Amount,Code
+Withholding Tax,Data,USD,2025-04-01,VTI(US9229087690) Cash Dividend USD 0.5 per Share - US Tax,-0.75,
+Interest,Header,Currency,Date,Description,Amount
+Interest,Data,USD,2025-05-06,USD Debit Interest for Apr-2025,-0.73
+Fees,Header,Subtitle,Currency,Date,Description,Amount
+Fees,Data,Other Fees,CHF,2025-06-01,Withdrawal Fee,-11
+Fees,Data,Total,,,,-11
+Open Positions,Header,DataDiscriminator,Asset Category,Currency,Symbol,Quantity,Mult,Cost Price,Cost Basis,Close Price,Value,Unrealized P/L,Unrealized P/L %,Code
+Open Positions,Data,Summary,Stocks,USD,VTI,10,1,250.123,2501.23,260,2600,98.77,3.95,
+Open Positions,Total,,Stocks,USD,,,,,2501.23,,2600,98.77,,
+Forex Balances,Header,Asset Category,Currency,Description,Quantity,Cost Price,Cost Basis in CHF,Close Price,Value in CHF,Unrealized P/L in CHF,Code
+Forex Balances,Data,Forex,CHF,USD,-498.712,0.9,-448.84,0.8,-398.97,49.87,
+Forex Balances,Data,Total,,,,,-448.84,,-398.97,49.87,
+Cash Report,Header,Currency Summary,Currency,Total,Securities,Futures,
+Cash Report,Data,Starting Cash,Base Currency Summary,0,0,0,
+Cash Report,Data,Ending Cash,Base Currency Summary,2786.422,2786.422,0,
+Cash Report,Data,Starting Cash,CHF,0,0,0,
+Cash Report,Data,Ending Cash,CHF,3185.392,3185.392,0,
+Cash Report,Data,Starting Cash,USD,0,0,0,
+Cash Report,Data,Ending Cash,USD,-498.712,-498.712,0,
