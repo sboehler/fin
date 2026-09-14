@@ -17,7 +17,7 @@ use crate::model::{
 /// The account which receives the counter-postings of all imported
 /// transactions. The user is expected to replace it when reconciling
 /// the imported journal.
-const TBD_ACCOUNT: &str = "Equity:TBD";
+const TBD_ACCOUNT: &str = "Expenses:TBD";
 
 /// Currency assumed when the statement does not declare one.
 const DEFAULT_CURRENCY: &str = "CHF";

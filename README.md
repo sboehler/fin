@@ -35,12 +35,12 @@ nine decimals; the difference accumulated over the period is booked to the
 given correct opening balances.
 
 Counter-postings without a known account (bank statement lines, broker
-deposits and withdrawals) are booked against `Equity:TBD`; replace that
+deposits and withdrawals) are booked against `Expenses:TBD`; replace that
 account when reconciling.
 
 ## Inferring accounts
 
-`infer` replaces those `Equity:TBD` placeholders with a guess, using a naive
+`infer` replaces those `Expenses:TBD` placeholders with a guess, using a naive
 Bayes model trained on transactions which already have their accounts
 assigned:
 
@@ -53,7 +53,7 @@ itself — the usual flow is to append the imported transactions to the journal
 and then infer in place. Each booking is described by the words of its
 description plus its commodity, quantity, and the account on the other side;
 the account with the highest posterior wins. `--account` picks a different
-placeholder (default `Equity:TBD`). Without `--inplace` the result goes to
+placeholder (default `Expenses:TBD`). Without `--inplace` the result goes to
 stdout.
 
 The guesses are only as good as the training data, so check the result — this

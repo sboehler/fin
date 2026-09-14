@@ -23,7 +23,7 @@ use crate::model::{
 /// The account which receives the counter-postings of all imported
 /// transactions. The user is expected to replace it when reconciling
 /// the imported journal.
-const TBD_ACCOUNT: &str = "Equity:TBD";
+const TBD_ACCOUNT: &str = "Expenses:TBD";
 
 #[derive(Args)]
 pub struct Command {
@@ -257,10 +257,10 @@ mod tests {
         assert_eq!(
             String::from_utf8(out).unwrap(),
             "2026-06-07 \"APPLE / Belastung\"\n\
-             Liabilities:Card Equity:TBD            29.90 CHF\n\
+             Liabilities:Card Expenses:TBD          29.90 CHF\n\
              \n\
              2026-06-08 \"ZAHLUNG / Gutschrift\"\n\
-             Equity:TBD       Liabilities:Card     100.00 CHF\n"
+             Expenses:TBD     Liabilities:Card     100.00 CHF\n"
         );
     }
 }

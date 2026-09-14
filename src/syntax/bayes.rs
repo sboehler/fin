@@ -183,7 +183,7 @@ Income:Salary Assets:Bank 5000.00 CHF
 "#;
 
     fn model() -> Model {
-        let mut model = Model::new("Equity:TBD");
+        let mut model = Model::new("Expenses:TBD");
         model.train(TRAINING, &parse_text(TRAINING).unwrap());
         model
     }
@@ -196,7 +196,7 @@ Income:Salary Assets:Bank 5000.00 CHF
 
     #[test]
     fn test_infer() {
-        let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Equity:TBD 12.00 CHF\n";
+        let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
         assert_eq!(
             infer(source),
             "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:Groceries 12.00 CHF\n"
@@ -206,7 +206,7 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// The description decides between accounts seen with the same counterpart.
     #[test]
     fn test_infer_uses_description() {
-        let source = "2024-02-01 \"SBB Ticket\"\nAssets:Bank Equity:TBD 12.00 CHF\n";
+        let source = "2024-02-01 \"SBB Ticket\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
         assert_eq!(
             infer(source),
             "2024-02-01 \"SBB Ticket\"\nAssets:Bank Expenses:Travel 12.00 CHF\n"
@@ -216,7 +216,7 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// The placeholder is replaced on whichever side it appears.
     #[test]
     fn test_infer_credit_side() {
-        let source = "2024-02-01 \"Salary\"\nEquity:TBD Assets:Bank 5000.00 CHF\n";
+        let source = "2024-02-01 \"Salary\"\nExpenses:TBD Assets:Bank 5000.00 CHF\n";
         assert_eq!(
             infer(source),
             "2024-02-01 \"Salary\"\nIncome:Salary Assets:Bank 5000.00 CHF\n"
@@ -226,7 +226,7 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// The account on the other side of the booking is never its own counterpart.
     #[test]
     fn test_infer_excludes_other_account() {
-        let source = "2024-02-01 \"Migros Zuerich\"\nExpenses:Groceries Equity:TBD 12.00 CHF\n";
+        let source = "2024-02-01 \"Migros Zuerich\"\nExpenses:Groceries Expenses:TBD 12.00 CHF\n";
         let result = infer(source);
         assert!(
             !result.contains("Expenses:Groceries Expenses:Groceries"),
@@ -238,8 +238,8 @@ Income:Salary Assets:Bank 5000.00 CHF
     #[test]
     fn test_infer_multiple_bookings() {
         let source = "2024-02-01 \"Migros Zuerich\"\n\
-                      Assets:Bank Equity:TBD 12.00 CHF\n\
-                      Assets:Bank Equity:TBD 13.00 CHF\n";
+                      Assets:Bank Expenses:TBD 12.00 CHF\n\
+                      Assets:Bank Expenses:TBD 13.00 CHF\n";
         assert_eq!(
             infer(source),
             "2024-02-01 \"Migros Zuerich\"\n\
@@ -258,16 +258,16 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// An untrained model has no candidates and changes nothing.
     #[test]
     fn test_infer_without_training() {
-        let source = "2024-02-01 \"Migros\"\nAssets:Bank Equity:TBD 12.00 CHF\n";
-        let model = Model::new("Equity:TBD");
+        let source = "2024-02-01 \"Migros\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
+        let model = Model::new("Expenses:TBD");
         assert_eq!(model.infer(source, &parse_text(source).unwrap()), vec![]);
     }
 
     /// Placeholder bookings in the training file carry no information.
     #[test]
     fn test_train_skips_placeholder() {
-        let source = "2024-01-01 \"Migros\"\nAssets:Bank Equity:TBD 50.00 CHF\n";
-        let mut model = Model::new("Equity:TBD");
+        let source = "2024-01-01 \"Migros\"\nAssets:Bank Expenses:TBD 50.00 CHF\n";
+        let mut model = Model::new("Expenses:TBD");
         model.train(source, &parse_text(source).unwrap());
         assert_eq!(model.count, 0);
         assert!(model.count_by_account.is_empty());

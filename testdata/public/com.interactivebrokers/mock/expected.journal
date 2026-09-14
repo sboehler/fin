@@ -1,5 +1,5 @@
 2025-02-01 "Deposit 5000 CHF"
-Equity:TBD              Assets:IBKR                   5000 CHF
+Expenses:TBD            Assets:IBKR                   5000 CHF
 
 @performance(USD,CHF)
 2025-03-01 "Buy 1000 USD @ 0.9 CHF"

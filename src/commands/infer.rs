@@ -5,7 +5,7 @@ use clap::Args;
 use crate::syntax::{bayes::Model, format::format_file, parse_file, parse_files, parse_text};
 
 /// The placeholder the importers book counter-postings to.
-const TBD_ACCOUNT: &str = "Equity:TBD";
+const TBD_ACCOUNT: &str = "Expenses:TBD";
 
 #[derive(Args)]
 pub struct Command {

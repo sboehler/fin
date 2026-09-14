@@ -26,7 +26,7 @@ use crate::model::{
 /// The account which receives the counter-postings of deposits and
 /// withdrawals. The user is expected to replace it when reconciling
 /// the imported journal.
-const TBD_ACCOUNT: &str = "Equity:TBD";
+const TBD_ACCOUNT: &str = "Expenses:TBD";
 
 #[derive(Args)]
 pub struct Command {
