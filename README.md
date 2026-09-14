@@ -56,6 +56,31 @@ the account with the highest posterior wins. `--account` picks a different
 placeholder (default `Expenses:TBD`). Without `--inplace` the result goes to
 stdout.
 
+A booking is only rewritten if the winner takes at least `--min-confidence`
+of the posterior (default `0.9`); otherwise the placeholder is left in place.
+A transaction unlike anything in the training data leaves every candidate
+tied on the evidence and decided by the prior alone, which would otherwise
+produce a confident-looking wrong account rather than something you can grep
+for.
+
+To choose a threshold, cross-validate on your own journal:
+
+```
+fin infer --evaluate --training-file journal/main.journal
+```
+
+```
+ threshold   coverage   accuracy  correct/answered
+     0.000     100.0%      90.0%           720/800
+     0.800      84.8%      94.0%           637/678
+     0.900      72.4%     100.0%           579/579
+```
+
+`coverage` is how often the model answers at that threshold, `accuracy` how
+often those answers are right. Note that the confidence comes from a naive
+Bayes posterior, which is overconfident by construction — it separates "no
+evidence" from "some evidence" well, but is not a calibrated probability.
+
 The guesses are only as good as the training data, so check the result — this
 rewrites the file through the formatter, so `git diff` shows exactly what
 changed.
