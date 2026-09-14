@@ -1,0 +1,16 @@
+2025-01-03 "TWINT SENDEN AN +41 79 123 45 67 ANNA MUSTER"
+Equity:TBD                  Assets:PostFinance:Checking   -1000.00 CHF
+
+2025-01-03 "BARGELDBEZUG VOM 02.01.2025 POSTOMAT ZUERICH"
+Equity:TBD                  Assets:PostFinance:Checking    -200.00 CHF
+
+2025-01-15 "E-FINANCE 12-345678-9 STADTWERKE ZUERICH RECHNUNG 'STROM' Wohnen"
+Equity:TBD                  Assets:PostFinance:Checking    -118.20 CHF
+
+2025-01-28 "GIRO AUS KONTO CH98 0900 0000 9876 5432 1 MUSTER AG LOHN JANUAR Einkommen Lohn"
+Equity:TBD                  Assets:PostFinance:Checking    6500.00 CHF
+
+2025-01-31 "KAUF/DIENSTLEISTUNG VOM 30.01.2025 KARTEN NR. XXXX1234 MIGROS ZUERICH Lebensmittel"
+Equity:TBD                  Assets:PostFinance:Checking     -42.15 CHF
+
+2025-01-31 balance Assets:PostFinance:Checking 5177.35 CHF

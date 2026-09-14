@@ -1,0 +1,11 @@
+﻿Buchungsart:;"Girokonto"
+Konto:;="CH12 0900 0000 1234 5678 9"
+Währung:;="CHF"
+Datum;Avisierungstext;Gutschrift in CHF;Lastschrift in CHF;Label;Kategorie;Valuta;Saldo in CHF
+31.01.2025;"KAUF/DIENSTLEISTUNG VOM 30.01.2025 KARTEN NR. XXXX1234 MIGROS ZUERICH";;-42.15;;Lebensmittel;30.01.2025;5'177.35
+28.01.2025;"GIRO AUS KONTO CH98 0900 0000 9876 5432 1 MUSTER AG LOHN JANUAR";6'500.00;;Lohn;Einkommen;28.01.2025;5'219.50
+15.01.2025;"E-FINANCE 12-345678-9 STADTWERKE ZUERICH RECHNUNG ""STROM""";;-118.20;;Wohnen;15.01.2025;-1'280.50
+03.01.2025;"TWINT SENDEN AN +41 79 123 45 67 ANNA MUSTER";;-1'000.00;;;03.01.2025;-1'162.30
+03.01.2025;"BARGELDBEZUG VOM 02.01.2025 POSTOMAT ZUERICH";;-200.00;;;02.01.2025;-162.30
+Disclaimer:
+"Dies ist kein durch PostFinance AG erstelltes Dokument. PostFinance AG ist nicht verantwortlich für den Inhalt."

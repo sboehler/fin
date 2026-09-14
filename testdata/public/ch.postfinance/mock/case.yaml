@@ -1,0 +1,1 @@
+args: [ch.postfinance, --account, Assets:PostFinance:Checking, statement.csv]

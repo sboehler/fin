@@ -3,3 +3,4 @@ journal.bean
 /.idea
 .direnv
 .vscode/settings.json
+.DS_Store

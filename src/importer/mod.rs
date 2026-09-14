@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, io::Write};
 
 use clap::Subcommand;
 
@@ -11,9 +11,9 @@ pub enum Commands {
 }
 
 impl Commands {
-    pub fn run(&self) -> Result<(), Box<dyn Error>> {
+    pub fn run(&self, w: &mut impl Write) -> Result<(), Box<dyn Error>> {
         match self {
-            Commands::Postfinance(command) => command.run(),
+            Commands::Postfinance(command) => command.run(w),
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use clap::Parser;
 use fin::commands;
 
@@ -18,9 +20,10 @@ fn main() {
         commands::Commands::Format(p) => p.run(),
         commands::Commands::Balance(p) => p.run(),
         commands::Commands::Fetch(p) => p.run(),
-        commands::Commands::Import(importer) => match importer {
-            fin::importer::Commands::Postfinance(command) => command.run(),
-        },
+        commands::Commands::Import(importer) => {
+            let mut stdout = std::io::stdout().lock();
+            importer.run(&mut stdout).and_then(|_| Ok(stdout.flush()?))
+        }
     };
     if let Err(e) = r {
         println!("{e}");
