@@ -39,7 +39,19 @@ pub struct Model {
     /// in a fixed order and ties resolve the same way on every run.
     count_by_account: BTreeMap<String, usize>,
     count_by_token_and_account: HashMap<String, HashMap<String, usize>>,
+    /// Observations containing each token, i.e. its document frequency.
+    count_by_token: HashMap<String, usize>,
 }
+
+/// A token appearing in more than this share of observations is ignored when
+/// scoring: it is present whatever the account, so it cannot tell candidates
+/// apart. Measured by `infer --evaluate` on a 13k transaction journal, where
+/// 0.1 was the best of 1.0, 0.5, 0.3, 0.2, 0.1 and 0.05.
+const MAX_DOCUMENT_FREQUENCY: f64 = 0.1;
+
+/// ... but only once a token has been seen often enough for its frequency to
+/// mean anything, so that small journals are not stripped of all evidence.
+const MIN_OCCURRENCES_TO_PRUNE: usize = 20;
 
 impl Model {
     pub fn new(account: &str) -> Self {
@@ -48,6 +60,7 @@ impl Model {
             count: 0,
             count_by_account: BTreeMap::new(),
             count_by_token_and_account: HashMap::new(),
+            count_by_token: HashMap::new(),
         }
     }
 
@@ -81,6 +94,7 @@ impl Model {
             .entry(account.to_string())
             .or_default() += 1;
         for token in tokenize(source, t, b, other) {
+            *self.count_by_token.entry(token.clone()).or_default() += 1;
             *self
                 .count_by_token_and_account
                 .entry(token)
@@ -133,7 +147,10 @@ impl Model {
         b: &Booking,
         other: &str,
     ) -> Option<Candidate> {
-        let tokens = tokenize(source, t, b, other);
+        let tokens = tokenize(source, t, b, other)
+            .into_iter()
+            .filter(|token| !self.is_ubiquitous(token))
+            .collect::<HashSet<_>>();
         let mut scored = self
             .count_by_account
             .keys()
@@ -153,14 +170,26 @@ impl Model {
         })
     }
 
+    /// Whether a token appears in so many observations that it cannot tell
+    /// candidates apart. Imported descriptions repeat field separators, card
+    /// numbers and words like "Belastung" on nearly every line; counting them
+    /// as independent evidence is what drives the scores to saturate.
+    fn is_ubiquitous(&self, token: &str) -> bool {
+        let df = self.count_by_token.get(token).copied().unwrap_or_default();
+        df >= MIN_OCCURRENCES_TO_PRUNE && df as f64 > MAX_DOCUMENT_FREQUENCY * self.count as f64
+    }
+
     fn score(&self, candidate: &str, tokens: &HashSet<String>) -> f64 {
         let count = self.count_by_account[candidate] as f64;
         let total = self.count as f64;
         let mut score = (count / total).ln();
         for token in tokens {
             // An unseen token is treated as if it had been observed once
-            // across the whole corpus, which penalises but does not exclude
-            // the candidate.
+            // across the whole corpus. The penalty deliberately does not
+            // depend on the candidate: making it depend on the candidate's own
+            // count (as Lidstone smoothing would) charges a rare account far
+            // less for an unseen token than a common one, which measured far
+            // worse than this on a real journal.
             score += match self
                 .count_by_token_and_account
                 .get(token)
@@ -195,9 +224,19 @@ pub fn transactions(tree: &SyntaxTree) -> impl Iterator<Item = &Transaction> {
     })
 }
 
+/// The tokens describing a booking: the words of the description, plus the
+/// commodity, the quantity and the account on the other side.
+///
+/// Description words are stripped of surrounding punctuation, so that
+/// `"WIEDIKON,"` matches `"Wiedikon"` and the `/` separating the fields of an
+/// imported description drops out entirely. The other three are structured
+/// values whose punctuation is meaningful (`Assets:Bank`, `19.10`), so they
+/// are only lowercased.
 fn tokenize(source: &str, t: &Transaction, b: &Booking, other: &str) -> HashSet<String> {
     source[t.description.content.clone()]
         .split_whitespace()
+        .map(|word| word.trim_matches(|c: char| !c.is_alphanumeric()))
+        .filter(|word| !word.is_empty())
         .chain([
             &source[b.commodity.0.clone()],
             &source[b.quantity.0.clone()],
@@ -365,6 +404,55 @@ Income:Salary Assets:Bank 5000.00 CHF
         let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
         let tree = parse_text(source).unwrap();
         assert_eq!(model().infer(source, &tree, 1.1), vec![]);
+    }
+
+    /// Description words lose their punctuation, so that the field separators
+    /// and trailing commas of an imported description stop being evidence.
+    /// Commodity, quantity and the other account keep theirs.
+    #[test]
+    fn test_tokenize_normalizes_description_words() {
+        let source = "2024-01-01 \"MIGROS WIEDIKON, ZUERICH / Migros\"\n\
+                      Assets:Bank Expenses:Groceries 50.00 CHF\n";
+        let tree = parse_text(source).unwrap();
+        let t = transactions(&tree).next().unwrap();
+        let tokens = tokenize(source, t, &t.bookings[0], "Assets:Bank");
+        assert!(tokens.contains("wiedikon"), "{tokens:?}");
+        assert!(!tokens.contains("wiedikon,"), "{tokens:?}");
+        assert!(!tokens.contains("/"), "{tokens:?}");
+        // "MIGROS" and "Migros" collapse to one token.
+        assert_eq!(tokens.iter().filter(|s| *s == "migros").count(), 1);
+        assert!(tokens.contains("assets:bank"), "{tokens:?}");
+        assert!(tokens.contains("50.00"), "{tokens:?}");
+    }
+
+    /// A token carried by every transaction says nothing about the account, so
+    /// once it is common enough to judge it stops being scored.
+    #[test]
+    fn test_ubiquitous_tokens_are_ignored() {
+        let mut source = String::new();
+        for i in 0..30 {
+            let account = match i % 2 {
+                0 => "Expenses:Groceries",
+                _ => "Expenses:Travel",
+            };
+            source.push_str(&format!(
+                "2024-01-01 \"noise item{i}\"\nAssets:Bank {account} {i}.00 CHF\n\n"
+            ));
+        }
+        let mut model = Model::new("Expenses:TBD");
+        model.train(&source, &parse_text(&source).unwrap());
+        assert!(model.is_ubiquitous("noise"));
+        // Seen once, so its frequency means nothing yet.
+        assert!(!model.is_ubiquitous("item1"));
+    }
+
+    /// Small journals keep every token: a frequency is only meaningful once
+    /// the token has been seen a fair number of times.
+    #[test]
+    fn test_small_journals_are_not_stripped() {
+        let model = model();
+        assert!(!model.is_ubiquitous("assets:bank"));
+        assert!(!model.is_ubiquitous("migros"));
     }
 
     #[test]
