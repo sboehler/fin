@@ -17,6 +17,7 @@ use std::{
 };
 
 use super::cst::{Booking, Directive, SyntaxTree, Transaction};
+use crate::model::entities::AccountType;
 
 /// The account the model would put in place of a placeholder.
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +42,13 @@ pub struct Model {
     count_by_token_and_account: HashMap<String, HashMap<String, usize>>,
     /// Observations containing each token, i.e. its document frequency.
     count_by_token: HashMap<String, usize>,
+}
+
+/// Whether `account` is an income or expenses account, i.e. a category
+/// rather than something the money sits in.
+pub fn is_income_or_expenses(account: &str) -> bool {
+    AccountType::try_from(account.split(':').next().unwrap_or_default())
+        .is_ok_and(|account_type| account_type.is_ie())
 }
 
 /// A token appearing in more than this share of observations is ignored when

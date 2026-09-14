@@ -98,6 +98,32 @@ The guesses are only as good as the training data, so check the result — this
 rewrites the file through the formatter, so `git diff` shows exactly what
 changed.
 
+## Reviewing accounts
+
+`review` turns the same model on the journal itself, and reports the bookings
+whose account disagrees with what the rest of the journal suggests:
+
+```
+fin review --only-income-expenses journal/main.journal
+```
+
+```
+journal/postfinance/2024.knut:755  1.0000
+  2024-06-11 "LASTSCHRIFT ... Leben // Gesundheit"
+  Expenses:Leben:Sonstige:Cash -> Expenses:Leben:Gesundheit:Arzt
+```
+
+Each booking is predicted by a model trained on the other folds of the
+journal, so a transaction never gets to teach the model its own accounts.
+Both sides are questioned but a booking is reported at most once.
+
+A disagreement is a candidate, not a verdict: the model is only right about
+95% of the time even when confident, so most findings on a large journal are
+the model's mistakes rather than yours. Raise `--min-confidence` to see fewer
+and better ones, and prefer `--only-income-expenses` — without it the list
+fills with transfers between your own accounts, where the model has no way of
+knowing whose card a payment settles.
+
 ## Golden tests
 
 Importers are tested against golden files in `testdata/<root>/<importer>/<case>/`

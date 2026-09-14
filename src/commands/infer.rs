@@ -2,14 +2,11 @@ use std::{error::Error, fs, io::Write, path::PathBuf};
 
 use clap::Args;
 
-use crate::{
-    model::entities::AccountType,
-    syntax::{
-        bayes::{Model, apply, transactions},
-        cst::Transaction,
-        format::format_file,
-        parse_file, parse_files, parse_text,
-    },
+use super::crossvalidate::{Item, cross_validate, items};
+use crate::syntax::{
+    bayes::{Model, apply, is_income_or_expenses, transactions},
+    format::format_file,
+    parse_file, parse_files, parse_text,
 };
 
 /// The placeholder the importers book counter-postings to.
@@ -97,29 +94,14 @@ impl Command {
     /// is the job a placeholder actually asks it to do.
     fn evaluate(&self) -> Result<(), Box<dyn Error>> {
         let files = parse_files(&self.training_file)?;
-        let items = files
-            .iter()
-            .flat_map(|(tree, file)| transactions(tree).map(|t| (file.text.as_str(), t)))
-            .collect::<Vec<_>>();
+        let items = items(&files);
         if items.is_empty() {
             return Err("no transactions to evaluate".into());
         }
-        // At least two folds, and never more than there are transactions to
-        // put in them.
-        let folds = self.folds.min(items.len()).max(2);
-
         let mut results = Vec::new();
-        for fold in 0..folds {
-            let mut model = Model::new(&self.account);
-            for (i, (source, t)) in items.iter().enumerate() {
-                if i % folds != fold {
-                    model.train_transaction(source, t);
-                }
-            }
-            for (source, t) in items.iter().skip(fold).step_by(folds) {
-                results.extend(self.predictions(&model, source, t));
-            }
-        }
+        let folds = cross_validate(&items, &self.account, self.folds, |model, item| {
+            results.extend(self.predictions(model, item));
+        });
         if results.is_empty() {
             return Err("no assigned bookings to evaluate".into());
         }
@@ -150,8 +132,9 @@ impl Command {
         Ok(())
     }
 
-    /// Predicts each side of every assigned booking of `t` from the other.
-    fn predictions(&self, model: &Model, source: &str, t: &Transaction) -> Vec<Prediction> {
+    /// Predicts each side of every assigned booking from the other.
+    fn predictions(&self, model: &Model, item: &Item) -> Vec<Prediction> {
+        let (source, t) = (item.source(), item.transaction);
         let mut results = Vec::new();
         for b in &t.bookings {
             let credit = &source[b.credit.range.clone()];
@@ -164,7 +147,7 @@ impl Command {
                     results.push(Prediction {
                         confidence: c.confidence,
                         correct: c.account == truth,
-                        target_is_ie: is_ie(truth),
+                        target_is_ie: is_income_or_expenses(truth),
                     });
                 }
             }
@@ -205,11 +188,6 @@ fn report(title: &str, results: &[&Prediction]) {
         let ratio = format!("{correct}/{n}");
         println!("{coverage:>8.1}%  {threshold:>10.6}  {accuracy:>8.1}%  {ratio:>16}");
     }
-}
-
-fn is_ie(account: &str) -> bool {
-    AccountType::try_from(account.split(':').next().unwrap_or_default())
-        .is_ok_and(|account_type| account_type.is_ie())
 }
 
 /// Counts the placeholders left in the result, so the user knows how much is
