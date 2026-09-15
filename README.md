@@ -20,6 +20,46 @@ fin import ch.cashback-cards --account Liabilities:CashbackCard statement.csv
 ```
 
 ```
+fin import com.schwab \
+  --account Assets:Investments:Schwab --transfer Assets:Investments:Schwab:Awards \
+  --bank Assets:Bank --dividend Income:Dividends --tax Expenses:WithholdingTax \
+  --interest Income:Interest --trading Expenses:Trading --fee Expenses:Fees \
+  transactions.csv
+```
+
+Under "Accounts / History", pick the account and the date range and export the
+transactions as CSV. Transactions are sorted by date; the order within a day
+is left as the export has it. `--transfer` receives internal transfers between
+Schwab accounts (`Journal`, `Journaled Shares`), `--bank` external ones
+(`MoneyLink Transfer`); the latter defaults to `Expenses:TBD`. Cash amounts are reported net of commission, so a trade books
+the gross amount against `--trading` and the commission against `--fee`. A
+dividend and the withholding tax withheld from it are reported as two rows and
+are booked as one transaction.
+
+The Equity Awards Center export is a different layout and has its own command,
+which carries none of the cash management flags the brokerage account needs:
+
+```
+fin import com.schwab.awards \
+  --account Assets:Investments:Schwab:Awards --award Income:Salary:Stock \
+  --transfer Assets:Investments:Schwab --trading Expenses:Trading \
+  --fee Expenses:Fees awards.csv
+```
+
+Here `--account` is the awards account, `--award` the income account the
+vested shares are credited to, and `--transfer` the brokerage account the
+sale proceeds are journalled to. All deposits of a day form one `Award`
+transaction, which the export lists before the sale it funded. Rows without a
+date hold the lot details of the row above and are ignored.
+
+Both exports report that journal of the proceeds, once from each side, so
+importing both files yields the transfer twice; the two transactions are
+identical and one of each pair is meant to be dropped by hand.
+
+Each command checks the header and refuses the other command's export, rather
+than reading its columns at the wrong offsets.
+
+```
 fin import ch.viac --commodity VIAC --portfolio 1.234.567.890.01 summary.json
 ```
 
