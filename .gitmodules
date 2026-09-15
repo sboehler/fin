@@ -1,3 +1,4 @@
 [submodule "testdata/private"]
 	path = testdata/private
-	url = ../fin-testdata.git
+	url = shuttle:/data/repos/fin-private-testdata
+	branch = master
