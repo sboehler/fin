@@ -29,6 +29,16 @@ start" in the overview dashboard, and save the response of the `summary` XHR
 call. Omit `--portfolio` to value the account total instead of a single
 portfolio.
 
+```
+fin import ch.truewealth --commodity TRUEWEALTH evolution.json
+```
+
+True Wealth is valued the same way, one `price` directive per day from the
+portfolio's end-of-day value. Open app.truewealth.ch, show the performance
+chart over the portfolio's full history, and save the response of the
+`evolution` XHR call. The export names the currency it reports in, so unlike
+VIAC it is not assumed to be francs.
+
 Cash amounts are booked in cents while the statement reports them with up to
 nine decimals; the difference accumulated over the period is booked to the
 `--rounding` account at the period end, so the generated cash assertions hold

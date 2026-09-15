@@ -5,6 +5,7 @@ use clap::Subcommand;
 pub mod cashbackcards;
 pub mod interactivebrokers;
 pub mod postfinance;
+pub mod truewealth;
 pub mod viac;
 
 #[derive(Subcommand)]
@@ -25,6 +26,12 @@ pub enum Commands {
     Viac(viac::Command),
 
     #[command(
+        name = "ch.truewealth",
+        about = "Import True Wealth portfolio values from a JSON evolution export."
+    )]
+    TrueWealth(truewealth::Command),
+
+    #[command(
         name = "ch.cashback-cards",
         about = "Import Swisscard Cashback Cards statement."
     )]
@@ -37,6 +44,7 @@ impl Commands {
             Commands::Postfinance(command) => command.run(w),
             Commands::InteractiveBrokers(command) => command.run(w),
             Commands::Viac(command) => command.run(w),
+            Commands::TrueWealth(command) => command.run(w),
             Commands::CashbackCards(command) => command.run(w),
         }
     }
