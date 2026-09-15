@@ -6,31 +6,61 @@
   };
 
   outputs =
-    { nixpkgs, ... }:
+    { self, nixpkgs, ... }:
     let
+      inherit (nixpkgs) lib;
       systems = [
         "x86_64-linux"
         "aarch64-linux"
         "x86_64-darwin"
         "aarch64-darwin"
       ];
-      createDevShell =
-        system:
-        let
-          pkgs = import nixpkgs { inherit system; };
-        in
-        {
-          default = pkgs.mkShell {
-            name = "fin";
-            nativeBuildInputs = with pkgs; [
-              git
-              python3
-              rustup
-            ];
-          };
-        };
+      forAllSystems =
+        f: lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
     in
     {
-      devShells = nixpkgs.lib.genAttrs systems createDevShell;
+      packages = forAllSystems (pkgs: rec {
+        default = fin;
+        fin = pkgs.rustPlatform.buildRustPackage {
+          pname = "fin";
+          version = (lib.importTOML ./Cargo.toml).package.version;
+
+          # Only the inputs cargo actually needs, so that edits to the README
+          # or the flake itself do not trigger a rebuild. `testdata/public`
+          # feeds the golden tests in `checkPhase`; `testdata/private` is a
+          # submodule and is not part of the flake source, which the golden
+          # test tolerates by skipping missing roots.
+          src = lib.fileset.toSource {
+            root = ./.;
+            fileset = lib.fileset.unions [
+              ./Cargo.toml
+              ./Cargo.lock
+              ./src
+              ./tests
+              ./testdata/public
+            ];
+          };
+
+          cargoLock.lockFile = ./Cargo.lock;
+
+          meta = {
+            description = "Plain-text accounting tool";
+            homepage = "https://github.com/sboehler/fin";
+            license = lib.licenses.asl20;
+            mainProgram = "fin";
+          };
+        };
+      });
+
+      devShells = forAllSystems (pkgs: {
+        default = pkgs.mkShell {
+          name = "fin";
+          nativeBuildInputs = with pkgs; [
+            git
+            python3
+            rustup
+          ];
+        };
+      });
     };
 }

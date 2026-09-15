@@ -6,7 +6,7 @@ use fin::commands;
 #[derive(Parser)]
 #[command(name = "fin")]
 #[command(author = "Silvio Böhler")]
-#[command(version = "0.0.1")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "Command line accounting tool.", long_about = None)]
 struct Cli {
     #[command(subcommand)]
