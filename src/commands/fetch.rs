@@ -30,15 +30,33 @@ impl Command {
             .build_global()
             .unwrap();
         let config = File::open(&self.config)?;
-        let entries = serde_yaml::from_reader(config)?;
+        let entries: Vec<ConfigEntry> = serde_yaml::from_reader(config)?;
         let now = chrono::offset::Utc::now();
-        let quotes = fetch_quotes(&entries, Client::default(), now)?;
+        let quotes = fetch_quotes(&entries, Client::default(), now);
         let directory = self
             .config
             .parent()
             .ok_or(format!("no parent for {:?}", self.config))?;
+        // A symbol which cannot be fetched - delisted, misspelled, or a
+        // request the API refused - must not cost the quotes of all the
+        // others. Every symbol which was fetched is written, and the ones
+        // which failed are reported together at the end.
+        let mut failures = Vec::new();
         for (entry, quotes) in entries.iter().zip(quotes) {
-            write_quotes(directory, entry, quotes)?;
+            let written =
+                quotes.and_then(|quotes| write_quotes(directory, entry, quotes).map_err(err));
+            if let Err(e) = written {
+                failures.push(format!("{}: {e}", entry.symbol));
+            }
+        }
+        if !failures.is_empty() {
+            return Err(format!(
+                "{} of {} symbols failed:\n{}",
+                failures.len(),
+                entries.len(),
+                failures.join("\n")
+            )
+            .into());
         }
         Ok(())
     }
@@ -52,11 +70,13 @@ struct ConfigEntry {
     pub symbol: String,
 }
 
+/// Fetches the quotes of the last year for every entry, in the order of
+/// `entries`, reporting per entry whether it could be fetched.
 fn fetch_quotes(
-    entries: &Vec<ConfigEntry>,
+    entries: &[ConfigEntry],
     client: Client,
     now: chrono::DateTime<chrono::Utc>,
-) -> Result<Vec<Vec<Quote>>, String> {
+) -> Vec<Result<Vec<Quote>, String>> {
     let bar = ProgressBar::new(u64::from_usize(entries.len()).unwrap()).with_style(
         ProgressStyle::with_template(
             "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
@@ -69,11 +89,15 @@ fn fetch_quotes(
         .map(|config| {
             let one_year_ago = now.checked_sub_days(Days::new(365)).unwrap();
             bar.set_message(format!("fetching {}", config.symbol));
-            client
-                .fetch(&config.symbol, now, one_year_ago)
-                .map_err(|e| format!("error fetching {}: {}", config.symbol, e))
+            client.fetch(&config.symbol, one_year_ago, now).map_err(err)
         })
         .collect()
+}
+
+/// Failures are collected rather than returned, and `Box<dyn Error>` is
+/// neither `Send` nor worth keeping around, so they are kept as messages.
+fn err(e: Box<dyn Error>) -> String {
+    e.to_string()
 }
 
 fn write_quotes(
