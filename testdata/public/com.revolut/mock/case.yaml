@@ -1,0 +1,10 @@
+args:
+  - com.revolut
+  - --account
+  - Assets:Revolut
+  - --fee
+  - Expenses:Fees
+  - --trading
+  - Expenses:Trading
+  - chf.csv
+  - eur.csv

@@ -5,6 +5,7 @@ use clap::Subcommand;
 pub mod cashbackcards;
 pub mod interactivebrokers;
 pub mod postfinance;
+pub mod revolut;
 pub mod schwab;
 pub mod truewealth;
 pub mod viac;
@@ -39,6 +40,12 @@ pub enum Commands {
     SchwabAwards(schwab::AwardsCommand),
 
     #[command(
+        name = "com.revolut",
+        about = "Import Revolut CSV account statements, one per currency."
+    )]
+    Revolut(revolut::Command),
+
+    #[command(
         name = "ch.truewealth",
         about = "Import True Wealth portfolio values from a JSON evolution export."
     )]
@@ -59,6 +66,7 @@ impl Commands {
             Commands::Viac(command) => command.run(w),
             Commands::Schwab(command) => command.run(w),
             Commands::SchwabAwards(command) => command.run(w),
+            Commands::Revolut(command) => command.run(w),
             Commands::TrueWealth(command) => command.run(w),
             Commands::CashbackCards(command) => command.run(w),
         }

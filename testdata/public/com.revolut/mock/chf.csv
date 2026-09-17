@@ -1,0 +1,5 @@
+Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+Card Payment,Current,2026-01-10 14:23:45,2026-01-11 03:50:34,Backblaze,-12.52,0.13,CHF,COMPLETED,935.82
+Card Payment,Current,2026-01-12 22:05:15,,Etsy,-1.00,0.00,CHF,REVERTED,
+Exchange,Current,2026-01-19 20:40:40,2026-01-19 20:40:40,Exchanged to EUR,-200.00,0.00,CHF,COMPLETED,735.82
+Topup,Current,2026-01-24 15:20:42,2026-01-24 15:20:42,Payment from J. Doe,300.00,0.00,CHF,COMPLETED,1035.82

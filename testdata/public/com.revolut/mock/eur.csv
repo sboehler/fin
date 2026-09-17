@@ -1,0 +1,4 @@
+Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+Exchange,Current,2026-01-19 20:40:40,2026-01-19 20:40:40,Exchanged to EUR,214.98,0.00,EUR,COMPLETED,215.18
+Card Payment,Current,2026-01-20 20:41:22,2026-01-21 03:46:05,PocketBook,-11.99,0.00,EUR,COMPLETED,203.19
+Exchange,Current,2026-02-15 19:59:17,2026-02-15 19:59:17,Exchanged to EUR,0.57,0.00,EUR,COMPLETED,203.76

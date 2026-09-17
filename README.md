@@ -60,6 +60,23 @@ Each command checks the header and refuses the other command's export, rather
 than reading its columns at the wrong offsets.
 
 ```
+fin import com.revolut \
+  --account Assets:Revolut --fee Expenses:Fees --trading Expenses:Trading \
+  chf.csv eur.csv usd.csv
+```
+
+Revolut keeps one balance per currency and exports one CSV per currency; open
+each account in the app and download its statement. Pass all of them to one
+invocation: a currency exchange moves money between two of those balances and
+is reported twice, once in each statement, and the two legs are matched into
+a single transaction booked against `--trading`. They are recognized by the
+time the exchange was started, which both rows carry; a leg whose counterpart
+is missing, because the other statement was not passed, is imported on its
+own against `Expenses:TBD`. Fees are charged on top of the amount and go to
+`--fee`. Rows which never completed, reverted or still pending, are skipped.
+English and German exports are both read, and may be mixed.
+
+```
 fin import ch.viac --commodity VIAC --portfolio 1.234.567.890.01 summary.json
 ```
 
