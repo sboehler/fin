@@ -3,21 +3,27 @@
     {
       "data": [
         {
+          "category": "hub",
           "name": "Assets:Bank"
         },
         {
+          "category": "hub",
           "name": "Assets:Broker"
         },
         {
+          "category": "sink",
           "name": "Expenses:Food"
         },
         {
+          "category": "sink",
           "name": "Expenses:Housing"
         },
         {
+          "category": "source",
           "name": "Income:Dividends"
         },
         {
+          "category": "source",
           "name": "Income:Salary"
         }
       ],

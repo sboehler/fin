@@ -3,18 +3,23 @@
     {
       "data": [
         {
+          "category": "hub",
           "name": "Assets:Bank:Checking"
         },
         {
+          "category": "hub",
           "name": "Assets:Bank:Savings"
         },
         {
+          "category": "hub",
           "name": "Assets:Broker"
         },
         {
+          "category": "sink",
           "name": "Expenses:Housing:Rent"
         },
         {
+          "category": "source",
           "name": "Income:Salary"
         }
       ],

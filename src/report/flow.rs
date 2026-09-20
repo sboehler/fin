@@ -22,7 +22,7 @@ use rust_decimal::{Decimal, prelude::ToPrimitive};
 use serde_json::json;
 
 use crate::model::{
-    entities::{AccountID, CommodityID},
+    entities::{AccountID, AccountType, CommodityID},
     journal::Journal,
 };
 
@@ -35,10 +35,48 @@ pub struct Edge {
     pub value: Decimal,
 }
 
+/// The role an account plays in a flow chart. Renderers colour by this rather
+/// than by account type: a sankey distinguishes where money comes from, where
+/// it sits and where it goes, and three categories is also as many as a
+/// categorical palette can keep apart for colour-blind readers when every node
+/// is compared against every other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Category {
+    Source,
+    Hub,
+    Sink,
+}
+
+impl Category {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Category::Source => "source",
+            Category::Hub => "hub",
+            Category::Sink => "sink",
+        }
+    }
+}
+
+impl From<AccountType> for Category {
+    fn from(account_type: AccountType) -> Self {
+        match account_type {
+            AccountType::Income => Category::Source,
+            AccountType::Expenses => Category::Sink,
+            AccountType::Assets | AccountType::Liabilities | AccountType::Equity => Category::Hub,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node {
+    pub name: String,
+    pub category: Category,
+}
+
 #[derive(Debug, Default)]
 pub struct FlowReport {
-    /// Account names, sorted. [`Edge`] endpoints index into this.
-    pub nodes: Vec<String>,
+    /// Accounts, sorted by name. [`Edge`] endpoints index into this.
+    pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
     /// Non-fatal problems to report on stderr, e.g. cycles that were broken.
     pub warnings: Vec<String>,
@@ -58,13 +96,18 @@ impl FlowReport {
                 "nodeAlign": "justify",
                 "emphasis": { "focus": "adjacency" },
                 "lineStyle": { "color": "gradient", "curveness": 0.5 },
+                // `category` is not an ECharts field: the renderer maps it to a
+                // colour, so the palette lives with the theme rather than here.
                 "data": self.nodes.iter()
-                    .map(|name| json!({ "name": name }))
+                    .map(|node| json!({
+                        "name": node.name,
+                        "category": node.category.as_str(),
+                    }))
                     .collect::<Vec<_>>(),
                 "links": self.edges.iter()
                     .map(|edge| json!({
-                        "source": self.nodes[edge.from],
-                        "target": self.nodes[edge.to],
+                        "source": self.nodes[edge.from].name,
+                        "target": self.nodes[edge.to].name,
                         "value": to_f64(edge.value),
                     }))
                     .collect::<Vec<_>>(),
@@ -169,7 +212,10 @@ impl FlowBuilder {
 
         let nodes = nodes
             .into_iter()
-            .map(|account| registry.account_name(account))
+            .map(|account| Node {
+                name: registry.account_name(account),
+                category: account.account_type.into(),
+            })
             .collect::<Vec<_>>();
         let warnings = Self::break_cycles(nodes.len(), &nodes, &mut edges);
         let nodes = Self::compact(nodes, &mut edges);
@@ -207,7 +253,7 @@ impl FlowBuilder {
     /// Drops nodes that no longer have any edge and reindexes the remaining
     /// ones. Both `min` pruning and cycle breaking can orphan a node, and a
     /// node without edges renders as a stray zero-height bar.
-    fn compact(nodes: Vec<String>, edges: &mut [Edge]) -> Vec<String> {
+    fn compact(nodes: Vec<Node>, edges: &mut [Edge]) -> Vec<Node> {
         let mut used = vec![false; nodes.len()];
         for edge in edges.iter() {
             used[edge.from] = true;
@@ -215,10 +261,10 @@ impl FlowBuilder {
         }
         let mut indices = vec![0; nodes.len()];
         let mut kept = Vec::new();
-        for (i, name) in nodes.into_iter().enumerate() {
+        for (i, node) in nodes.into_iter().enumerate() {
             if used[i] {
                 indices[i] = kept.len();
-                kept.push(name);
+                kept.push(node);
             }
         }
         for edge in edges.iter_mut() {
@@ -230,7 +276,7 @@ impl FlowBuilder {
 
     /// Drops the smallest edge of each remaining cycle until the graph is a
     /// DAG, which is what the sankey layout needs.
-    fn break_cycles(len: usize, names: &[String], edges: &mut Vec<Edge>) -> Vec<String> {
+    fn break_cycles(len: usize, nodes: &[Node], edges: &mut Vec<Edge>) -> Vec<String> {
         let mut warnings = Vec::new();
         while let Some(cycle) = find_cycle(len, edges) {
             let weakest = *cycle
@@ -239,13 +285,13 @@ impl FlowBuilder {
                 .expect("a cycle has at least one edge");
             let path = cycle
                 .iter()
-                .map(|i| names[edges[*i].from].as_str())
+                .map(|i| nodes[edges[*i].from].name.as_str())
                 .collect::<Vec<_>>()
                 .join(" -> ");
             let dropped = &edges[weakest];
             warnings.push(format!(
                 "dropped {} -> {} ({}) to break cycle {path}",
-                names[dropped.from], names[dropped.to], dropped.value
+                nodes[dropped.from].name, nodes[dropped.to].name, dropped.value
             ));
             edges.remove(weakest);
         }
@@ -305,7 +351,6 @@ fn visit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::entities::AccountType;
     use pretty_assertions::assert_eq;
 
     fn account(id: usize) -> AccountID {
@@ -327,8 +372,13 @@ mod tests {
         }
     }
 
-    fn names(n: usize) -> Vec<String> {
-        (0..n).map(|i| format!("A{i}")).collect()
+    fn nodes(n: usize) -> Vec<Node> {
+        (0..n)
+            .map(|i| Node {
+                name: format!("A{i}"),
+                category: Category::Hub,
+            })
+            .collect()
     }
 
     #[test]
@@ -375,7 +425,7 @@ mod tests {
     fn break_cycles_drops_the_weakest_edge() {
         // 0 -> 1 -> 2 -> 0, with 1 -> 2 the weakest.
         let mut edges = vec![edge(0, 1, 30), edge(1, 2, 10), edge(2, 0, 20)];
-        let warnings = FlowBuilder::break_cycles(3, &names(3), &mut edges);
+        let warnings = FlowBuilder::break_cycles(3, &nodes(3), &mut edges);
         assert_eq!(edges, vec![edge(0, 1, 30), edge(2, 0, 20)]);
         assert_eq!(warnings.len(), 1);
         assert!(
@@ -389,7 +439,7 @@ mod tests {
     fn break_cycles_leaves_a_dag_untouched() {
         let mut edges = vec![edge(0, 1, 30), edge(1, 2, 10), edge(0, 2, 20)];
         let expected = edges.clone();
-        assert!(FlowBuilder::break_cycles(3, &names(3), &mut edges).is_empty());
+        assert!(FlowBuilder::break_cycles(3, &nodes(3), &mut edges).is_empty());
         assert_eq!(edges, expected);
     }
 
@@ -402,7 +452,7 @@ mod tests {
             edge(2, 3, 5),
             edge(3, 2, 40),
         ];
-        let warnings = FlowBuilder::break_cycles(4, &names(4), &mut edges);
+        let warnings = FlowBuilder::break_cycles(4, &nodes(4), &mut edges);
         assert_eq!(edges, vec![edge(0, 1, 30), edge(3, 2, 40)]);
         assert_eq!(warnings.len(), 2);
     }
@@ -411,15 +461,18 @@ mod tests {
     fn compact_drops_orphaned_nodes_and_reindexes() {
         // Node 1 has no edges left after pruning; 0 and 2 survive.
         let mut edges = vec![edge(0, 2, 10)];
-        let kept = FlowBuilder::compact(names(3), &mut edges);
-        assert_eq!(kept, vec!["A0".to_string(), "A2".to_string()]);
+        let kept = FlowBuilder::compact(nodes(3), &mut edges);
+        assert_eq!(
+            kept.iter().map(|n| n.name.as_str()).collect::<Vec<_>>(),
+            vec!["A0", "A2"]
+        );
         assert_eq!(edges, vec![edge(0, 1, 10)]);
     }
 
     #[test]
     fn break_cycles_handles_a_self_loop() {
         let mut edges = vec![edge(0, 0, 10), edge(0, 1, 20)];
-        FlowBuilder::break_cycles(2, &names(2), &mut edges);
+        FlowBuilder::break_cycles(2, &nodes(2), &mut edges);
         assert_eq!(edges, vec![edge(0, 1, 20)]);
     }
 }

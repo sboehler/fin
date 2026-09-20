@@ -1,4 +1,5 @@
 use crate::model::build_journal;
+use crate::report::echarts::render_html;
 use crate::report::flow::FlowBuilder;
 use crate::report::mapping::{AccountMapper, Mapping};
 use crate::syntax::parse_files;
@@ -24,7 +25,9 @@ impl Commands {
 
 #[derive(Clone, Copy, ValueEnum)]
 pub enum Format {
-    /// The ECharts option object describing the chart.
+    /// A self-contained HTML page.
+    Html,
+    /// The ECharts option object the HTML page is built from.
     Json,
 }
 
@@ -51,7 +54,7 @@ pub struct Sankey {
     #[arg(long)]
     min: Option<Decimal>,
 
-    #[arg(long, value_enum, default_value_t = Format::Json)]
+    #[arg(long, value_enum, default_value_t = Format::Html)]
     format: Format,
 
     /// Output file. Defaults to stdout.
@@ -72,7 +75,7 @@ impl Sankey {
         journal.process(valuation)?;
         let mapper = AccountMapper::new(journal.registry(), self.mapping.clone(), &self.vaccounts)?;
         let builder = FlowBuilder {
-            from: self.from,
+            from: self.from.or(journal.min_transaction_date()),
             to: self.to.unwrap_or_else(|| Local::now().date_naive()),
             mapper,
             valuated: valuation.is_some(),
@@ -85,6 +88,17 @@ impl Sankey {
         let option = report.to_sankey_option();
         let out = match self.format {
             Format::Json => serde_json::to_string_pretty(&option)? + "\n",
+            Format::Html => {
+                let period = match builder.from {
+                    Some(from) => format!("{from} to {}", builder.to),
+                    None => format!("through {}", builder.to),
+                };
+                let subtitle = match &self.valuation {
+                    Some(commodity) => format!("{period} · valued in {commodity}"),
+                    None => period,
+                };
+                render_html(&option, "Account flows", &subtitle)?
+            }
         };
         match &self.output {
             Some(path) => std::fs::write(path, out)?,

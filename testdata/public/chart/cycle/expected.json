@@ -3,15 +3,19 @@
     {
       "data": [
         {
+          "category": "hub",
           "name": "Assets:Broker"
         },
         {
+          "category": "hub",
           "name": "Assets:Checking"
         },
         {
+          "category": "hub",
           "name": "Assets:Savings"
         },
         {
+          "category": "source",
           "name": "Income:Salary"
         }
       ],

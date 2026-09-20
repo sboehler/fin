@@ -190,6 +190,36 @@ the model's mistakes rather than yours. Raise `--min-confidence` to see fewer
 and better ones, and prefer `--only-income-expenses` — without it the list
 fills with transfers between your own accounts, where the model has no way of
 knowing whose card a payment settles.
+## Charts
+
+```
+fin chart sankey journal.fin --valuation CHF -m 2,Expenses -m 2,Assets -o flows.html
+```
+
+Renders the flows between accounts over a period as a sankey diagram. Every
+booking carries its counter-account, so the journal is already a flow graph;
+the chart shows it after netting flows that run both ways between the same
+pair of accounts.
+
+The account projection flags are the same as `fin balance`'s: `-m LEVEL,REGEX`
+shortens matching accounts to `LEVEL` segments and `-r` substitutes virtual
+accounts. `-m` is what makes the chart readable — collapsing the asset
+accounts turns the raw graph into an income statement, with the accounts money
+actually flowed through as the hub. Use `--min` to prune small flows.
+
+Flows in different commodities cannot be added up, so a journal using more
+than one commodity needs `--valuation`. Note that `--valuation` also books
+unrealized gains against the valuation account, which then show up as a source
+of income in the chart.
+
+Sankey layout requires an acyclic graph. Flows that run both ways between two
+accounts are netted into one, and any cycle left after that has its smallest
+flow dropped, which is reported on stderr.
+
+The output is a self-contained HTML file: the ECharts bundle in `vendor/`
+(Apache-2.0) is inlined, so the chart works offline and keeps working wherever
+the file is copied. `--format json` emits just the ECharts option object
+instead.
 
 ## Golden tests
 
@@ -203,7 +233,12 @@ names, and `expected.journal`. Regenerate the expected output with
 UPDATE_GOLDEN=1 cargo test --test golden
 ```
 
-There are two roots:
+The chart reports have their own cases in `testdata/public/chart/<case>/`, with
+a `chart.yaml` manifest and an `expected.json` holding the ECharts option
+object (see `tests/chart.rs`); regenerate them the same way with
+`UPDATE_GOLDEN=1 cargo test --test chart`.
+
+The importer roots are two:
 
 - `testdata/public`: mock cases, checked into this repository.
 - `testdata/private`: real bank statements, kept in the **private** git
