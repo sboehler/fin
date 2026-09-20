@@ -1,0 +1,18 @@
+# --fan routes each flow through its level-2 ancestor: the two Lohn accounts
+# converge on Income:Lohn before reaching the bank, and spending diverges from
+# Expenses:Wohnen into the accounts it lands in.
+args:
+  [
+    sankey,
+    ../fan.fin,
+    --valuation,
+    CHF,
+    --to,
+    "2025-12-31",
+    --fan,
+    "2,Income",
+    --fan,
+    "2,Expenses",
+    --format,
+    json,
+  ]

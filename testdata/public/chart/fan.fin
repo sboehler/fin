@@ -1,0 +1,26 @@
+2025-01-01 open Income:Lohn:FirmaA
+2025-01-01 open Income:Lohn:FirmaB
+2025-01-01 open Income:Zinsen:Bank
+2025-01-01 open Assets:Bank
+2025-01-01 open Expenses:Wohnen:Miete
+2025-01-01 open Expenses:Wohnen:Strom
+2025-01-01 open Expenses:Essen:Laden
+2025-01-01 open Equity:Equity
+
+2025-01-25 "Lohn A"
+Income:Lohn:FirmaA Assets:Bank      5000.00 CHF
+
+2025-01-25 "Lohn B"
+Income:Lohn:FirmaB Assets:Bank      3000.00 CHF
+
+2025-01-31 "Zinsen"
+Income:Zinsen:Bank Assets:Bank       100.00 CHF
+
+2025-01-31 "Miete"
+Assets:Bank Expenses:Wohnen:Miete   1800.00 CHF
+
+2025-01-31 "Strom"
+Assets:Bank Expenses:Wohnen:Strom    120.00 CHF
+
+2025-01-31 "Einkauf"
+Assets:Bank Expenses:Essen:Laden     400.00 CHF

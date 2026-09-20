@@ -21,6 +21,24 @@ pub struct Mapping {
     level: usize,
 }
 
+impl Mapping {
+    pub fn level(&self) -> usize {
+        self.level
+    }
+
+    /// The ancestor `account` is shortened to, or `None` when this mapping
+    /// does not apply or `account` is already at or above that level.
+    pub fn ancestor(&self, registry: &Registry, account: AccountID) -> Option<AccountID> {
+        let name = registry.account_name(account);
+        if !self.regex.is_match(&name) {
+            return None;
+        }
+        registry
+            .shorten(account, self.level)
+            .filter(|ancestor| *ancestor != account)
+    }
+}
+
 impl FromStr for Mapping {
     type Err = String;
 

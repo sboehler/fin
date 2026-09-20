@@ -1,0 +1,126 @@
+{
+  "series": [
+    {
+      "data": [
+        {
+          "category": "hub",
+          "name": "Assets:Bank"
+        },
+        {
+          "category": "sink",
+          "name": "Expenses:Essen"
+        },
+        {
+          "category": "sink",
+          "name": "Expenses:Essen:Laden"
+        },
+        {
+          "category": "sink",
+          "name": "Expenses:Wohnen"
+        },
+        {
+          "category": "sink",
+          "name": "Expenses:Wohnen:Miete"
+        },
+        {
+          "category": "sink",
+          "name": "Expenses:Wohnen:Strom"
+        },
+        {
+          "category": "source",
+          "name": "Income:Lohn"
+        },
+        {
+          "category": "source",
+          "name": "Income:Lohn:FirmaA"
+        },
+        {
+          "category": "source",
+          "name": "Income:Lohn:FirmaB"
+        },
+        {
+          "category": "source",
+          "name": "Income:Zinsen"
+        },
+        {
+          "category": "source",
+          "name": "Income:Zinsen:Bank"
+        },
+        {
+          "category": "hub",
+          "name": "Net change"
+        }
+      ],
+      "emphasis": {
+        "focus": "adjacency"
+      },
+      "lineStyle": {
+        "color": "gradient",
+        "curveness": 0.5
+      },
+      "links": [
+        {
+          "source": "Assets:Bank",
+          "target": "Expenses:Essen",
+          "value": 400.0
+        },
+        {
+          "source": "Assets:Bank",
+          "target": "Expenses:Wohnen",
+          "value": 1920.0
+        },
+        {
+          "source": "Assets:Bank",
+          "target": "Net change",
+          "value": 5780.0
+        },
+        {
+          "source": "Expenses:Essen",
+          "target": "Expenses:Essen:Laden",
+          "value": 400.0
+        },
+        {
+          "source": "Expenses:Wohnen",
+          "target": "Expenses:Wohnen:Miete",
+          "value": 1800.0
+        },
+        {
+          "source": "Expenses:Wohnen",
+          "target": "Expenses:Wohnen:Strom",
+          "value": 120.0
+        },
+        {
+          "source": "Income:Lohn",
+          "target": "Assets:Bank",
+          "value": 8000.0
+        },
+        {
+          "source": "Income:Lohn:FirmaA",
+          "target": "Income:Lohn",
+          "value": 5000.0
+        },
+        {
+          "source": "Income:Lohn:FirmaB",
+          "target": "Income:Lohn",
+          "value": 3000.0
+        },
+        {
+          "source": "Income:Zinsen",
+          "target": "Assets:Bank",
+          "value": 100.0
+        },
+        {
+          "source": "Income:Zinsen:Bank",
+          "target": "Income:Zinsen",
+          "value": 100.0
+        }
+      ],
+      "nodeAlign": "justify",
+      "type": "sankey"
+    }
+  ],
+  "tooltip": {
+    "trigger": "item",
+    "triggerOn": "mousemove"
+  }
+}

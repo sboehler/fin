@@ -12,6 +12,9 @@
 //!   is what keeps the chart down to a readable number of nodes,
 //! - edges that became self-edges under that projection are dropped,
 //! - flows between the same two accounts are netted against each other,
+//! - flows are routed through the ancestors named by `fan`, so that a tree of
+//!   accounts reads as one: income converges on its categories, spending
+//!   diverges from them,
 //! - edges below `min` are pruned,
 //! - any remaining cycles are broken, since sankey layout needs a DAG.
 
@@ -24,9 +27,10 @@ use serde_json::json;
 use crate::model::{
     entities::{AccountID, AccountType, CommodityID},
     journal::Journal,
+    registry::Registry,
 };
 
-use super::mapping::AccountMapper;
+use super::mapping::{AccountMapper, Mapping};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edge {
@@ -132,6 +136,8 @@ pub struct FlowBuilder {
     /// quantities.
     pub valuated: bool,
     pub min: Option<Decimal>,
+    /// Ancestors to route flows through, so a tree of accounts reads as one.
+    pub fan: Vec<Mapping>,
     /// Whether to give each hub account's retained amount an explicit edge, so
     /// that the chart conserves.
     pub balance: bool,
@@ -189,7 +195,10 @@ impl FlowBuilder {
             *flows.entry((source, target)).or_default() += amount;
         }
 
-        let flows = Self::net(flows);
+        // Netted twice: once over the accounts themselves, and again after
+        // the fan, which can put two accounts that never faced each other on
+        // opposite sides of the same pair of ancestors.
+        let flows = Self::net(self.expand(registry, Self::net(flows)));
         let mut nodes = flows
             .keys()
             .flat_map(|(source, target)| [*source, *target])
@@ -234,6 +243,51 @@ impl FlowBuilder {
             edges,
             warnings,
         })
+    }
+
+    /// Routes each flow through the ancestors named by `fan` instead of
+    /// letting it run straight to the other end, so that a tree of accounts
+    /// reads as a tree: income converges on its categories before reaching the
+    /// accounts it lands in, and spending diverges from them.
+    ///
+    /// Which way a chain points falls out of which end it hangs off. On the
+    /// source side it runs from the account up to its shallowest ancestor, on
+    /// the target side from the shallowest ancestor back down -- so income
+    /// fans in and expenses fan out without either being named as such.
+    fn expand(
+        &self,
+        registry: &Registry,
+        flows: HashMap<(AccountID, AccountID), Decimal>,
+    ) -> HashMap<(AccountID, AccountID), Decimal> {
+        if self.fan.is_empty() {
+            return flows;
+        }
+        let mut expanded = HashMap::new();
+        for ((source, target), value) in flows {
+            let mut path = vec![source];
+            path.extend(self.ancestors(registry, source).into_iter().rev());
+            path.extend(self.ancestors(registry, target));
+            path.push(target);
+            path.dedup();
+            for hop in path.windows(2) {
+                // Several accounts can share an ancestor, so the hops they
+                // have in common accumulate rather than being drawn twice.
+                *expanded.entry((hop[0], hop[1])).or_default() += value;
+            }
+        }
+        expanded
+    }
+
+    /// The ancestors `account` is routed through, shallowest first.
+    fn ancestors(&self, registry: &Registry, account: AccountID) -> Vec<AccountID> {
+        let mut ancestors = self
+            .fan
+            .iter()
+            .filter_map(|fan| fan.ancestor(registry, account).map(|a| (fan.level(), a)))
+            .collect::<Vec<_>>();
+        ancestors.sort();
+        ancestors.dedup();
+        ancestors.into_iter().map(|(_, account)| account).collect()
     }
 
     /// Money that stays put is not a flow, so it has nowhere to go in the
@@ -533,6 +587,114 @@ mod tests {
             name: name.to_string(),
             category,
         }
+    }
+
+    fn builder(fan: &[&str]) -> FlowBuilder {
+        FlowBuilder {
+            from: None,
+            to: NaiveDate::from_ymd_opt(2025, 12, 31).unwrap(),
+            mapper: AccountMapper::default(),
+            valuated: true,
+            min: None,
+            fan: fan.iter().map(|f| f.parse().unwrap()).collect(),
+            balance: false,
+        }
+    }
+
+    #[test]
+    fn expand_fans_a_source_in_and_a_target_out() {
+        let registry = Registry::new();
+        let wage = registry.account_id("Income:Lohn:FirmaA").unwrap();
+        let bank = registry.account_id("Assets:Bank").unwrap();
+        let rent = registry.account_id("Expenses:Wohnen:Miete").unwrap();
+        let lohn = registry.account_id("Income:Lohn").unwrap();
+        let wohnen = registry.account_id("Expenses:Wohnen").unwrap();
+
+        let builder = builder(&["2,Income", "2,Expenses"]);
+        let flows = HashMap::from([((wage, bank), dec(100)), ((bank, rent), dec(30))]);
+        assert_eq!(
+            builder.expand(&registry, flows),
+            HashMap::from([
+                ((wage, lohn), dec(100)),
+                ((lohn, bank), dec(100)),
+                ((bank, wohnen), dec(30)),
+                ((wohnen, rent), dec(30)),
+            ])
+        );
+    }
+
+    #[test]
+    fn expand_accumulates_a_shared_ancestor() {
+        let registry = Registry::new();
+        let a = registry.account_id("Income:Lohn:FirmaA").unwrap();
+        let b = registry.account_id("Income:Lohn:FirmaB").unwrap();
+        let bank = registry.account_id("Assets:Bank").unwrap();
+        let lohn = registry.account_id("Income:Lohn").unwrap();
+
+        let flows = HashMap::from([((a, bank), dec(50)), ((b, bank), dec(30))]);
+        assert_eq!(
+            builder(&["2,Income"]).expand(&registry, flows),
+            HashMap::from([
+                ((a, lohn), dec(50)),
+                ((b, lohn), dec(30)),
+                ((lohn, bank), dec(80)),
+            ])
+        );
+    }
+
+    #[test]
+    fn expand_chains_several_levels_deepest_last_on_the_target() {
+        let registry = Registry::new();
+        let bank = registry.account_id("Assets:Bank").unwrap();
+        let leaf = registry.account_id("Expenses:A:B:C").unwrap();
+        let two = registry.account_id("Expenses:A").unwrap();
+        let three = registry.account_id("Expenses:A:B").unwrap();
+
+        let flows = HashMap::from([((bank, leaf), dec(10))]);
+        assert_eq!(
+            builder(&["3,Expenses", "2,Expenses"]).expand(&registry, flows),
+            HashMap::from([
+                ((bank, two), dec(10)),
+                ((two, three), dec(10)),
+                ((three, leaf), dec(10)),
+            ])
+        );
+    }
+
+    #[test]
+    fn netting_after_the_fan_collapses_a_pair_the_fan_created() {
+        // Two expense accounts that never faced each other: one is paid out
+        // of the bank, the other pays back into it. Fanning puts both on the
+        // same ancestor, which is the first point at which they oppose.
+        let registry = Registry::new();
+        let bank = registry.account_id("Assets:Bank").unwrap();
+        let buy = registry.account_id("Expenses:Inv:Buy").unwrap();
+        let sell = registry.account_id("Expenses:Inv:Sell").unwrap();
+        let inv = registry.account_id("Expenses:Inv").unwrap();
+
+        let flows = HashMap::from([((bank, buy), dec(1000)), ((sell, bank), dec(300))]);
+        let expanded = builder(&["2,Expenses"]).expand(&registry, flows);
+        assert_eq!(
+            FlowBuilder::net(expanded),
+            HashMap::from([
+                ((bank, inv), dec(700)),
+                ((inv, buy), dec(1000)),
+                ((sell, inv), dec(300)),
+            ])
+        );
+    }
+
+    #[test]
+    fn expand_skips_an_account_already_at_the_fan_level() {
+        let registry = Registry::new();
+        let salary = registry.account_id("Income:Salary").unwrap();
+        let bank = registry.account_id("Assets:Bank").unwrap();
+
+        let flows = HashMap::from([((salary, bank), dec(10))]);
+        assert_eq!(
+            builder(&["2,Income"]).expand(&registry, flows.clone()),
+            flows
+        );
     }
 
     #[test]

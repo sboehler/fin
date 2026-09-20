@@ -207,6 +207,24 @@ accounts. `-m` is what makes the chart readable — collapsing the asset
 accounts turns the raw graph into an income statement, with the accounts money
 actually flowed through as the hub. Use `--min` to prune small flows.
 
+By default every flow runs straight from one account to the other, so income
+accounts all arrive at the same node and expenses all leave from it. `--fan
+LEVEL,REGEX` routes matching flows through their `LEVEL`-segment ancestor
+instead, which makes the account tree visible: income converges on its
+categories before reaching the accounts it lands in, and spending diverges
+from them.
+
+```
+fin chart sankey journal.fin -v CHF -m3,Income -m3,Expenses \
+  --fan 2,Income --fan 2,Expenses
+```
+
+turns `Income:Lohn:FirmaA` and `Income:Lohn:FirmaB` into two flows meeting at
+`Income:Lohn`, and `Expenses:Wohnen` into one flow splitting into the accounts
+below it. Which way a chain points is not something to configure: it follows
+from which end of the flow the account hangs off. The flag is repeatable, so
+several levels chain.
+
 Flows in different commodities cannot be added up, so a journal using more
 than one commodity needs `--valuation`. Note that `--valuation` also books
 unrealized gains against the valuation account, which then show up as a source

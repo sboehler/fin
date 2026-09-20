@@ -54,6 +54,11 @@ pub struct Sankey {
     #[arg(long)]
     min: Option<Decimal>,
 
+    /// Route flows through their LEVEL-segment ancestor, so income converges
+    /// on its categories and spending diverges from them. Repeatable.
+    #[arg(long, value_name = "LEVEL,REGEX")]
+    fan: Vec<Mapping>,
+
     /// Omit the synthetic "Net change" and "Opening balance" flows that show
     /// what each account retained over the period.
     #[arg(long)]
@@ -85,6 +90,7 @@ impl Sankey {
             mapper,
             valuated: valuation.is_some(),
             min: self.min,
+            fan: self.fan.clone(),
             balance: !self.no_balance,
         };
         let report = builder.build(&journal)?;
