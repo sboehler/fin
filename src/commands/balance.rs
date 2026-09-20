@@ -1,6 +1,7 @@
 use crate::model::build_journal;
 use crate::model::entities::Interval;
-use crate::report::balance::{Mapping, ReportAmount, ReportBuilder};
+use crate::report::balance::{ReportAmount, ReportBuilder};
+use crate::report::mapping::{AccountMapper, Mapping};
 use crate::report::table::TextRenderer;
 use crate::syntax::parse_files;
 use chrono::{Local, NaiveDate};
@@ -59,33 +60,23 @@ impl Command {
             .map(|s| journal.registry().commodity_id(s))
             .transpose()?;
         journal.process(valuation)?;
-        let virtual_ids = self
-            .vaccounts
-            .iter()
-            .map(|name| journal.registry().account_id(name))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mapper = AccountMapper::new(
+            journal.registry(),
+            self.mapping.clone(),
+            &self.vaccounts,
+        )?;
         let builder = ReportBuilder {
             from: self.from,
             to: self.to.unwrap_or_else(|| Local::now().date_naive()),
             num_periods: self.last,
             period: self.period.to_interval(),
-            mapping: self.mapping.clone(),
+            mapper,
             cumulative: !self.diff,
             show_commodities: self.show_commodities.clone(),
             report_amount: match self.quantity {
                 true => ReportAmount::Quantity,
                 false => ReportAmount::Value,
             },
-            account_map: virtual_ids
-                .iter()
-                .flat_map(|id| {
-                    journal
-                        .registry()
-                        .get_patterns(id)
-                        .into_iter()
-                        .map(|regex| (regex, *id))
-                })
-                .collect(),
         };
         let report = builder.build(&journal);
         let renderer = TextRenderer::new(report.to_table(), self.round.unwrap_or_default());

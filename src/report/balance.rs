@@ -4,7 +4,6 @@ use std::{
     iter::{self, repeat_n},
     ops::{Deref, Neg},
     rc::Rc,
-    str::FromStr,
 };
 
 use chrono::NaiveDate;
@@ -17,6 +16,7 @@ use crate::model::{
     registry::Registry,
 };
 
+use super::mapping::AccountMapper;
 use super::table::{Cell, Row, Table};
 
 struct Aligner {
@@ -267,11 +267,10 @@ pub struct ReportBuilder {
     pub to: NaiveDate,
     pub num_periods: Option<usize>,
     pub period: Interval,
-    pub mapping: Vec<Mapping>,
+    pub mapper: AccountMapper,
     pub cumulative: bool,
     pub report_amount: ReportAmount,
     pub show_commodities: Vec<Regex>,
-    pub account_map: Vec<(Regex, AccountID)>,
 }
 
 pub enum ReportAmount {
@@ -311,22 +310,8 @@ impl ReportBuilder {
 
     fn shorten(&self, journal: &Journal, dated_positions: DatedPositions) -> DatedPositions {
         DatedPositions {
-            positions: dated_positions.map_keys(|mut account| {
-                let name = journal.registry().account_name(account);
-                for (regex, id) in &self.account_map {
-                    if regex.is_match(&name) {
-                        account = *id;
-                        break;
-                    }
-                }
-                let name = journal.registry().account_name(account);
-                for mapping in &self.mapping {
-                    if mapping.regex.is_match(&name) {
-                        return journal.registry().shorten(account, mapping.level);
-                    }
-                }
-                Some(account)
-            }),
+            positions: dated_positions
+                .map_keys(|account| self.mapper.map(journal.registry(), account)),
         }
     }
 
@@ -439,27 +424,5 @@ impl ReportBuilder {
         position: &Positions<CommodityID, Positions<NaiveDate, Decimal>>,
     ) -> Positions<NaiveDate, Decimal> {
         position.values().sum::<Positions<NaiveDate, Decimal>>()
-    }
-}
-
-#[derive(Clone)]
-pub struct Mapping {
-    regex: Regex,
-    level: usize,
-}
-
-impl FromStr for Mapping {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = s.splitn(2, ',').collect();
-        if parts.len() > 2 {
-            return Err(format!("invalid mapping: {s}"));
-        }
-        let level = parts[0]
-            .parse()
-            .map_err(|e| format!("invalid mapping: {e}"))?;
-        let regex = Regex::new(parts[1]).map_err(|e| format!("invalid mapping: {e}"))?;
-        Ok(Mapping { regex, level })
     }
 }
