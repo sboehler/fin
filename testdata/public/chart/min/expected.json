@@ -1,0 +1,58 @@
+{
+  "series": [
+    {
+      "data": [
+        {
+          "name": "Assets:Bank:Checking"
+        },
+        {
+          "name": "Assets:Bank:Savings"
+        },
+        {
+          "name": "Assets:Broker"
+        },
+        {
+          "name": "Expenses:Housing:Rent"
+        },
+        {
+          "name": "Income:Salary"
+        }
+      ],
+      "emphasis": {
+        "focus": "adjacency"
+      },
+      "lineStyle": {
+        "color": "gradient",
+        "curveness": 0.5
+      },
+      "links": [
+        {
+          "source": "Assets:Bank:Checking",
+          "target": "Assets:Bank:Savings",
+          "value": 1500.0
+        },
+        {
+          "source": "Assets:Bank:Checking",
+          "target": "Assets:Broker",
+          "value": 1500.0
+        },
+        {
+          "source": "Assets:Bank:Checking",
+          "target": "Expenses:Housing:Rent",
+          "value": 1800.0
+        },
+        {
+          "source": "Income:Salary",
+          "target": "Assets:Bank:Checking",
+          "value": 13000.0
+        }
+      ],
+      "nodeAlign": "justify",
+      "type": "sankey"
+    }
+  ],
+  "tooltip": {
+    "trigger": "item",
+    "triggerOn": "mousemove"
+  }
+}

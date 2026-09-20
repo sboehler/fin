@@ -1,0 +1,66 @@
+{
+  "series": [
+    {
+      "data": [
+        {
+          "name": "Assets:Bank"
+        },
+        {
+          "name": "Assets:Broker"
+        },
+        {
+          "name": "Expenses:Food"
+        },
+        {
+          "name": "Expenses:Housing"
+        },
+        {
+          "name": "Income:Dividends"
+        },
+        {
+          "name": "Income:Salary"
+        }
+      ],
+      "emphasis": {
+        "focus": "adjacency"
+      },
+      "lineStyle": {
+        "color": "gradient",
+        "curveness": 0.5
+      },
+      "links": [
+        {
+          "source": "Assets:Bank",
+          "target": "Assets:Broker",
+          "value": 1500.0
+        },
+        {
+          "source": "Assets:Bank",
+          "target": "Expenses:Food",
+          "value": 865.75
+        },
+        {
+          "source": "Assets:Bank",
+          "target": "Expenses:Housing",
+          "value": 1800.0
+        },
+        {
+          "source": "Income:Dividends",
+          "target": "Assets:Broker",
+          "value": 120.0
+        },
+        {
+          "source": "Income:Salary",
+          "target": "Assets:Bank",
+          "value": 13000.0
+        }
+      ],
+      "nodeAlign": "justify",
+      "type": "sankey"
+    }
+  ],
+  "tooltip": {
+    "trigger": "item",
+    "triggerOn": "mousemove"
+  }
+}

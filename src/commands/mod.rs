@@ -3,6 +3,7 @@ use clap::Subcommand;
 use crate::importer;
 
 mod balance;
+pub mod chart;
 mod crossvalidate;
 mod fetch;
 mod format;
@@ -18,6 +19,9 @@ pub enum Commands {
     Fetch(fetch::Command),
     Infer(infer::Command),
     Review(review::Command),
+
+    #[command(subcommand)]
+    Chart(chart::Commands),
 
     #[command(subcommand)]
     Import(importer::Commands),

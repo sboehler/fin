@@ -1,0 +1,14 @@
+# --min prunes the small flows (restaurants, dividends).
+args:
+  [
+    sankey,
+    ../journal.fin,
+    --valuation,
+    CHF,
+    --to,
+    "2025-12-31",
+    --min,
+    "1000",
+    --format,
+    json,
+  ]

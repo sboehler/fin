@@ -22,6 +22,10 @@ fn main() {
         commands::Commands::Fetch(p) => p.run(),
         commands::Commands::Infer(p) => p.run(),
         commands::Commands::Review(p) => p.run(),
+        commands::Commands::Chart(p) => {
+            let mut stdout = std::io::stdout().lock();
+            p.run(&mut stdout).and_then(|_| Ok(stdout.flush()?))
+        }
         commands::Commands::Import(importer) => {
             let mut stdout = std::io::stdout().lock();
             importer.run(&mut stdout).and_then(|_| Ok(stdout.flush()?))

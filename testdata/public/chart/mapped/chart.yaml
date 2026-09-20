@@ -1,0 +1,17 @@
+# The -m projection collapses the account tree, which is what turns the raw
+# flow graph into a readable income-statement shape.
+args:
+  [
+    sankey,
+    ../journal.fin,
+    --valuation,
+    CHF,
+    --to,
+    "2025-12-31",
+    --mapping,
+    "2,Expenses",
+    --mapping,
+    "2,Assets",
+    --format,
+    json,
+  ]

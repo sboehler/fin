@@ -1,0 +1,50 @@
+{
+  "series": [
+    {
+      "data": [
+        {
+          "name": "Assets:Broker"
+        },
+        {
+          "name": "Assets:Checking"
+        },
+        {
+          "name": "Assets:Savings"
+        },
+        {
+          "name": "Income:Salary"
+        }
+      ],
+      "emphasis": {
+        "focus": "adjacency"
+      },
+      "lineStyle": {
+        "color": "gradient",
+        "curveness": 0.5
+      },
+      "links": [
+        {
+          "source": "Assets:Checking",
+          "target": "Assets:Savings",
+          "value": 1000.0
+        },
+        {
+          "source": "Assets:Savings",
+          "target": "Assets:Broker",
+          "value": 800.0
+        },
+        {
+          "source": "Income:Salary",
+          "target": "Assets:Checking",
+          "value": 5000.0
+        }
+      ],
+      "nodeAlign": "justify",
+      "type": "sankey"
+    }
+  ],
+  "tooltip": {
+    "trigger": "item",
+    "triggerOn": "mousemove"
+  }
+}

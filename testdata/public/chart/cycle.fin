@@ -1,0 +1,17 @@
+2025-01-01 open Income:Salary
+2025-01-01 open Assets:Checking
+2025-01-01 open Assets:Savings
+2025-01-01 open Assets:Broker
+2025-01-01 open Equity:Equity
+
+2025-01-25 "Salary"
+Income:Salary Assets:Checking    5000.00 CHF
+
+2025-02-01 "Checking to savings"
+Assets:Checking Assets:Savings   1000.00 CHF
+
+2025-02-02 "Savings to broker"
+Assets:Savings Assets:Broker      800.00 CHF
+
+2025-02-03 "Broker back to checking"
+Assets:Broker Assets:Checking     600.00 CHF

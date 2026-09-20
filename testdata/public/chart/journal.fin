@@ -1,0 +1,42 @@
+2025-01-01 open Income:Salary
+2025-01-01 open Income:Dividends
+2025-01-01 open Assets:Bank:Checking
+2025-01-01 open Assets:Bank:Savings
+2025-01-01 open Assets:Broker
+2025-01-01 open Expenses:Housing:Rent
+2025-01-01 open Expenses:Food:Groceries
+2025-01-01 open Expenses:Food:Restaurants
+2025-01-01 open Equity:Equity
+
+2025-01-25 "Salary January"
+Income:Salary Assets:Bank:Checking     6500.00 CHF
+
+2025-01-31 "Rent"
+Assets:Bank:Checking Expenses:Housing:Rent     1800.00 CHF
+
+2025-01-31 "Groceries"
+Assets:Bank:Checking Expenses:Food:Groceries    420.50 CHF
+
+2025-01-31 "Dinner out"
+Assets:Bank:Checking Expenses:Food:Restaurants   95.00 CHF
+
+2025-02-05 "Transfer to savings"
+Assets:Bank:Checking Assets:Bank:Savings       2000.00 CHF
+
+2025-02-06 "Transfer back"
+Assets:Bank:Savings Assets:Bank:Checking        500.00 CHF
+
+2025-02-10 "Broker deposit"
+Assets:Bank:Checking Assets:Broker             1500.00 CHF
+
+2025-02-25 "Salary February"
+Income:Salary Assets:Bank:Checking     6500.00 CHF
+
+2025-02-28 "Dividend"
+Income:Dividends Assets:Broker           120.00 CHF
+
+2025-02-28 "Groceries"
+Assets:Bank:Checking Expenses:Food:Groceries    380.25 CHF
+
+2025-02-28 "Grocery refund"
+Expenses:Food:Groceries Assets:Bank:Checking     30.00 CHF

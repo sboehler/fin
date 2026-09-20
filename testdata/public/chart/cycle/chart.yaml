@@ -1,0 +1,4 @@
+# Checking -> Savings -> Broker -> Checking is a cycle that survives netting
+# (netting only collapses opposing flows between the same pair), so the
+# weakest edge is dropped to make the graph renderable.
+args: [sankey, ../cycle.fin, --valuation, CHF, --to, "2025-12-31", --format, json]
