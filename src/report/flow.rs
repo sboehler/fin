@@ -132,6 +132,9 @@ pub struct FlowBuilder {
     /// quantities.
     pub valuated: bool,
     pub min: Option<Decimal>,
+    /// Whether to give each hub account's retained amount an explicit edge, so
+    /// that the chart conserves.
+    pub balance: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -218,6 +221,12 @@ impl FlowBuilder {
             })
             .collect::<Vec<_>>();
         let warnings = Self::break_cycles(nodes.len(), &nodes, &mut edges);
+        let mut nodes = nodes;
+        if self.balance {
+            // After pruning and cycle breaking, so it reflects the flows that
+            // are actually drawn.
+            Self::add_balance_edges(&mut nodes, &mut edges);
+        }
         let nodes = Self::compact(nodes, &mut edges);
 
         Ok(FlowReport {
@@ -225,6 +234,68 @@ impl FlowBuilder {
             edges,
             warnings,
         })
+    }
+
+    /// Money that stays put is not a flow, so it has nowhere to go in the
+    /// chart: an account takes in more than it puts out and the difference
+    /// simply stops at the node, unlabelled. That is exactly the amount saved
+    /// (or, the other way round, drawn down), so give it an edge of its own
+    /// and let it be read like any other flow.
+    ///
+    /// Only hub accounts get one. Expenses are where money is meant to end up
+    /// and income is where it comes from, so neither is unbalanced in a way
+    /// worth drawing.
+    ///
+    /// The two synthetic nodes cannot create a cycle: one only ever has
+    /// outgoing edges and the other only incoming.
+    fn add_balance_edges(nodes: &mut Vec<Node>, edges: &mut Vec<Edge>) {
+        let mut net = vec![Decimal::ZERO; nodes.len()];
+        for edge in edges.iter() {
+            net[edge.from] -= edge.value;
+            net[edge.to] += edge.value;
+        }
+        let unbalanced = |sign: std::cmp::Ordering| -> Vec<(usize, Decimal)> {
+            net.iter()
+                .enumerate()
+                .filter(|(i, value)| {
+                    nodes[*i].category == Category::Hub && value.cmp(&&Decimal::ZERO) == sign
+                })
+                .map(|(i, value)| (i, value.abs()))
+                .collect()
+        };
+        // Both sides are collected before either synthetic node is pushed, so
+        // the scan never sees a node it just added.
+        let retained = unbalanced(std::cmp::Ordering::Greater);
+        let drawn_down = unbalanced(std::cmp::Ordering::Less);
+
+        if !retained.is_empty() {
+            let sink = Self::push_node(nodes, "Net change");
+            edges.extend(retained.into_iter().map(|(from, value)| Edge {
+                from,
+                to: sink,
+                value,
+            }));
+        }
+        if !drawn_down.is_empty() {
+            let source = Self::push_node(nodes, "Opening balance");
+            edges.extend(drawn_down.into_iter().map(|(to, value)| Edge {
+                from: source,
+                to,
+                value,
+            }));
+        }
+        edges.sort_by_key(|e| (e.from, e.to));
+    }
+
+    /// Synthetic nodes are coloured as hubs: what an account held is closer to
+    /// an asset than to income or spending. Account names cannot contain
+    /// spaces, so these cannot collide with a real one.
+    fn push_node(nodes: &mut Vec<Node>, name: &str) -> usize {
+        nodes.push(Node {
+            name: name.to_string(),
+            category: Category::Hub,
+        });
+        nodes.len() - 1
     }
 
     /// Collapses `a -> b` and `b -> a` into a single edge in the direction of
@@ -455,6 +526,68 @@ mod tests {
         let warnings = FlowBuilder::break_cycles(4, &nodes(4), &mut edges);
         assert_eq!(edges, vec![edge(0, 1, 30), edge(3, 2, 40)]);
         assert_eq!(warnings.len(), 2);
+    }
+
+    fn node(name: &str, category: Category) -> Node {
+        Node {
+            name: name.to_string(),
+            category,
+        }
+    }
+
+    #[test]
+    fn balance_edges_route_what_a_hub_retained_to_a_sink() {
+        // Income 100 -> hub, hub -> expenses 30: the other 70 stayed put.
+        let mut nodes = vec![
+            node("Income:Salary", Category::Source),
+            node("Assets:Bank", Category::Hub),
+            node("Expenses:Food", Category::Sink),
+        ];
+        let mut edges = vec![edge(0, 1, 100), edge(1, 2, 30)];
+        FlowBuilder::add_balance_edges(&mut nodes, &mut edges);
+        assert_eq!(nodes.len(), 4);
+        assert_eq!(nodes[3], node("Net change", Category::Hub));
+        assert_eq!(edges, vec![edge(0, 1, 100), edge(1, 2, 30), edge(1, 3, 70)]);
+    }
+
+    #[test]
+    fn balance_edges_route_a_drawn_down_hub_from_a_source() {
+        // The hub pays out 30 without taking anything in this period.
+        let mut nodes = vec![
+            node("Assets:Bank", Category::Hub),
+            node("Expenses:Food", Category::Sink),
+        ];
+        let mut edges = vec![edge(0, 1, 30)];
+        FlowBuilder::add_balance_edges(&mut nodes, &mut edges);
+        assert_eq!(nodes[2], node("Opening balance", Category::Hub));
+        assert_eq!(edges, vec![edge(0, 1, 30), edge(2, 0, 30)]);
+    }
+
+    #[test]
+    fn balance_edges_leave_income_and_expenses_alone() {
+        // Income is where money starts and expenses where it ends: neither is
+        // unbalanced in a way worth drawing, so nothing is added.
+        let mut nodes = vec![
+            node("Income:Salary", Category::Source),
+            node("Expenses:Food", Category::Sink),
+        ];
+        let mut edges = vec![edge(0, 1, 100)];
+        FlowBuilder::add_balance_edges(&mut nodes, &mut edges);
+        assert_eq!(nodes.len(), 2);
+        assert_eq!(edges, vec![edge(0, 1, 100)]);
+    }
+
+    #[test]
+    fn balance_edges_skip_a_hub_that_already_conserves() {
+        let mut nodes = vec![
+            node("Income:Salary", Category::Source),
+            node("Assets:Bank", Category::Hub),
+            node("Expenses:Food", Category::Sink),
+        ];
+        let mut edges = vec![edge(0, 1, 100), edge(1, 2, 100)];
+        FlowBuilder::add_balance_edges(&mut nodes, &mut edges);
+        assert_eq!(nodes.len(), 3);
+        assert_eq!(edges, vec![edge(0, 1, 100), edge(1, 2, 100)]);
     }
 
     #[test]

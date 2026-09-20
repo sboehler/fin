@@ -25,10 +25,6 @@
         {
           "category": "source",
           "name": "Income:Salary"
-        },
-        {
-          "category": "hub",
-          "name": "Net change"
         }
       ],
       "emphasis": {
@@ -53,16 +49,6 @@
           "source": "Assets:Bank",
           "target": "Expenses:Housing",
           "value": 1800.0
-        },
-        {
-          "source": "Assets:Bank",
-          "target": "Net change",
-          "value": 8834.25
-        },
-        {
-          "source": "Assets:Broker",
-          "target": "Net change",
-          "value": 1620.0
         },
         {
           "source": "Income:Dividends",

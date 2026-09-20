@@ -1,0 +1,18 @@
+# --no-balance leaves the chart non-conserving: what Assets:Bank retained
+# simply stops at the node.
+args:
+  [
+    sankey,
+    ../journal.fin,
+    --valuation,
+    CHF,
+    --to,
+    "2025-12-31",
+    --mapping,
+    "2,Expenses",
+    --mapping,
+    "2,Assets",
+    --no-balance,
+    --format,
+    json,
+  ]

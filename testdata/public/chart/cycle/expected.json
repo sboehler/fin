@@ -17,6 +17,10 @@
         {
           "category": "source",
           "name": "Income:Salary"
+        },
+        {
+          "category": "hub",
+          "name": "Net change"
         }
       ],
       "emphasis": {
@@ -28,14 +32,29 @@
       },
       "links": [
         {
+          "source": "Assets:Broker",
+          "target": "Net change",
+          "value": 800.0
+        },
+        {
           "source": "Assets:Checking",
           "target": "Assets:Savings",
           "value": 1000.0
         },
         {
+          "source": "Assets:Checking",
+          "target": "Net change",
+          "value": 4000.0
+        },
+        {
           "source": "Assets:Savings",
           "target": "Assets:Broker",
           "value": 800.0
+        },
+        {
+          "source": "Assets:Savings",
+          "target": "Net change",
+          "value": 200.0
         },
         {
           "source": "Income:Salary",

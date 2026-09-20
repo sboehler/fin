@@ -216,6 +216,15 @@ Sankey layout requires an acyclic graph. Flows that run both ways between two
 accounts are netted into one, and any cycle left after that has its smallest
 flow dropped, which is reported on stderr.
 
+Money that stays in an account is not a flow, so on its own it would simply
+stop at the node with nothing to explain the difference. Each asset,
+liability or equity account therefore gets an explicit edge for what it
+retained over the period, to a synthetic `Net change` node — or from an
+`Opening balance` node, for an account that was drawn down instead. The chart
+then conserves, and those edges add up to the change in net worth the balance
+report shows. Pass `--no-balance` to leave them out. Income and expense
+accounts get none: that is where money starts and ends.
+
 The output is a self-contained HTML file: the ECharts bundle in `vendor/`
 (Apache-2.0) is inlined, so the chart works offline and keeps working wherever
 the file is copied. `--format json` emits just the ECharts option object

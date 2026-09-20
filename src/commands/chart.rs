@@ -54,6 +54,11 @@ pub struct Sankey {
     #[arg(long)]
     min: Option<Decimal>,
 
+    /// Omit the synthetic "Net change" and "Opening balance" flows that show
+    /// what each account retained over the period.
+    #[arg(long)]
+    no_balance: bool,
+
     #[arg(long, value_enum, default_value_t = Format::Html)]
     format: Format,
 
@@ -80,6 +85,7 @@ impl Sankey {
             mapper,
             valuated: valuation.is_some(),
             min: self.min,
+            balance: !self.no_balance,
         };
         let report = builder.build(&journal)?;
         for warning in &report.warnings {

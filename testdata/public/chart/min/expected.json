@@ -21,6 +21,10 @@
         {
           "category": "source",
           "name": "Income:Salary"
+        },
+        {
+          "category": "hub",
+          "name": "Net change"
         }
       ],
       "emphasis": {
@@ -45,6 +49,21 @@
           "source": "Assets:Bank:Checking",
           "target": "Expenses:Housing:Rent",
           "value": 1800.0
+        },
+        {
+          "source": "Assets:Bank:Checking",
+          "target": "Net change",
+          "value": 8200.0
+        },
+        {
+          "source": "Assets:Bank:Savings",
+          "target": "Net change",
+          "value": 1500.0
+        },
+        {
+          "source": "Assets:Broker",
+          "target": "Net change",
+          "value": 1500.0
         },
         {
           "source": "Income:Salary",
