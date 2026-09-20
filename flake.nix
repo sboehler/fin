@@ -26,10 +26,11 @@
           version = (lib.importTOML ./Cargo.toml).package.version;
 
           # Only the inputs cargo actually needs, so that edits to the README
-          # or the flake itself do not trigger a rebuild. `testdata/public`
-          # feeds the golden tests in `checkPhase`; `testdata/private` is a
-          # submodule and is not part of the flake source, which the golden
-          # test tolerates by skipping missing roots.
+          # or the flake itself do not trigger a rebuild. `vendor` holds the
+          # JavaScript that `src/report/echarts.rs` inlines with `include_str!`.
+          # `testdata/public` feeds the golden tests in `checkPhase`;
+          # `testdata/private` is a submodule and is not part of the flake
+          # source, which the golden test tolerates by skipping missing roots.
           src = lib.fileset.toSource {
             root = ./.;
             fileset = lib.fileset.unions [
@@ -38,6 +39,7 @@
               ./src
               ./tests
               ./testdata/public
+              ./vendor
             ];
           };
 
