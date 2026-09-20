@@ -136,11 +136,17 @@
         container.className = "empty";
         container.textContent = "No flows in this period.";
       } else {
-        // Sankey needs vertical room per node, or the ribbons collapse. Fill
-        // the window when the chart is small enough to, and grow past it when
-        // there are more nodes than fit.
+        // Fill exactly the space left below the header so the page does not
+        // scroll, but never squeeze nodes below the point where their labels
+        // collide -- past that the chart scrolls and -m or --min is the fix.
+        const MIN_PER_NODE = 24;
+        const MIN_HEIGHT = 300;
+        const BOTTOM_GAP = 32; // the .viz-root bottom padding
         function height() {
-          return Math.max(420, window.innerHeight * 0.75, nodes.length * 48);
+          // offsetTop rather than getBoundingClientRect, so a scrolled page
+          // does not feed its scroll offset back into the height.
+          const available = window.innerHeight - container.offsetTop - BOTTOM_GAP;
+          return Math.max(available, MIN_HEIGHT, nodes.length * MIN_PER_NODE);
         }
         container.style.height = height() + "px";
         const chart = echarts.init(container);
