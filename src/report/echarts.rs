@@ -9,7 +9,11 @@ use serde_json::Value;
 const TEMPLATE: &str = include_str!("chart.html");
 const ECHARTS: &str = include_str!("../../vendor/echarts.min.js");
 
-pub fn render_html(option: &Value, title: &str, subtitle: &str) -> Result<String, serde_json::Error> {
+pub fn render_html(
+    option: &Value,
+    title: &str,
+    subtitle: &str,
+) -> Result<String, serde_json::Error> {
     // Account and commodity names are alphanumeric, so neither can close the
     // script element or the surrounding tags.
     Ok(TEMPLATE

@@ -60,11 +60,7 @@ impl Command {
             .map(|s| journal.registry().commodity_id(s))
             .transpose()?;
         journal.process(valuation)?;
-        let mapper = AccountMapper::new(
-            journal.registry(),
-            self.mapping.clone(),
-            &self.vaccounts,
-        )?;
+        let mapper = AccountMapper::new(journal.registry(), self.mapping.clone(), &self.vaccounts)?;
         let builder = ReportBuilder {
             from: self.from,
             to: self.to.unwrap_or_else(|| Local::now().date_naive()),
