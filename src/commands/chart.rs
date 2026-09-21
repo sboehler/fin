@@ -109,7 +109,12 @@ impl Sankey {
                     Some(commodity) => format!("{period} · valued in {commodity}"),
                     None => period,
                 };
-                render_html(&option, "Account flows", &subtitle)?
+                let commodity = self
+                    .valuation
+                    .clone()
+                    .or_else(|| report.commodity.clone())
+                    .unwrap_or_default();
+                render_html(&option, "Account flows", &subtitle, &commodity)?
             }
         };
         match &self.output {

@@ -84,6 +84,9 @@ pub struct FlowReport {
     pub edges: Vec<Edge>,
     /// Non-fatal problems to report on stderr, e.g. cycles that were broken.
     pub warnings: Vec<String>,
+    /// The commodity edge values are in, so renderers can label amounts.
+    /// `None` for an empty report, which has no flows to take it from.
+    pub commodity: Option<String>,
 }
 
 impl FlowReport {
@@ -242,6 +245,7 @@ impl FlowBuilder {
             nodes,
             edges,
             warnings,
+            commodity: commodity.map(|c| registry.commodity_name(c)),
         })
     }
 

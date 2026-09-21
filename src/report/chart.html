@@ -128,6 +128,7 @@
     </script>
     <script>
       const option = {{OPTION}};
+      const commodity = "{{COMMODITY}}";
       const root = document.querySelector(".viz-root");
       const container = document.getElementById("chart");
       const nodes = option.series[0].data;
@@ -154,6 +155,10 @@
           maximumFractionDigits: 2,
           minimumFractionDigits: 2,
         });
+        // "1'234.56 CHF" -- unitless when the report has no commodity to
+        // report, e.g. an empty period.
+        const money = (value) =>
+          commodity ? `${amount.format(value)} ${commodity}` : amount.format(value);
 
         // The palette lives in CSS so light and dark have one definition each;
         // read it back rather than duplicating the hexes here.
@@ -187,8 +192,8 @@
               textStyle: { color: colors.text },
               formatter: (p) =>
                 p.dataType === "edge"
-                  ? `${p.data.source} → ${p.data.target}<br><b>${amount.format(p.data.value)}</b>`
-                  : `<b>${p.name}</b>`,
+                  ? `<b>${p.data.source} → ${p.data.target}</b><br>${money(p.data.value)}`
+                  : `<b>${p.name}</b><br>${money(p.value)}`,
             },
             series: [
               {
