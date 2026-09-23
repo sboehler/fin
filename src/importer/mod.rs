@@ -7,6 +7,7 @@ pub mod interactivebrokers;
 pub mod postfinance;
 pub mod revolut;
 pub mod schwab;
+pub mod swissquote;
 pub mod truewealth;
 pub mod viac;
 
@@ -56,6 +57,12 @@ pub enum Commands {
         about = "Import Swisscard Cashback Cards statement."
     )]
     CashbackCards(cashbackcards::Command),
+
+    #[command(
+        name = "ch.swissquote",
+        about = "Import Swissquote transactions export."
+    )]
+    Swissquote(swissquote::Command),
 }
 
 impl Commands {
@@ -69,6 +76,7 @@ impl Commands {
             Commands::Revolut(command) => command.run(w),
             Commands::TrueWealth(command) => command.run(w),
             Commands::CashbackCards(command) => command.run(w),
+            Commands::Swissquote(command) => command.run(w),
         }
     }
 }

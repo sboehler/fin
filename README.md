@@ -77,6 +77,31 @@ own against `Expenses:TBD`. Fees are charged on top of the amount and go to
 English and German exports are both read, and may be mixed.
 
 ```
+fin import ch.swissquote \
+  --account Assets:Investments:Swissquote --dividend Income:Dividends \
+  --interest Income:Interest --tax Expenses:WithholdingTax \
+  --fee Expenses:Fees --trading Expenses:Trading transactions.csv
+```
+
+Open the transactions overview, pick the date range and export it as CSV. The
+export is Latin-1 encoded, semicolon separated and German; its `Nettobetrag`
+is the cash which moved, reported after the `Kosten` already deducted from
+it, so a trade books the gross amount against `--trading` and the fee against
+`--fee`, and a dividend the gross payment against `--dividend` and the
+withholding tax against `--tax`. A currency exchange is reported as two rows
+sharing a timestamp, which are matched into one transaction booked against
+`--trading`; an unmatched leg is booked against `--trading` on its own.
+Deposits and withdrawals, and rows whose type the importer does not know, go
+to `Expenses:TBD`. Custody fees are charged on the portfolio as a whole, so
+they are annotated `@performance()`, naming no commodity of their own.
+
+Swissquote keeps one balance per currency, and one assertion per currency is
+emitted for the last one the export reports; as with Revolut, those only hold
+if the export reaches back to the account's first booking. The rows are
+listed newest first and are reordered by their timestamp, which also orders
+the rows within a day.
+
+```
 fin import ch.viac --commodity VIAC --portfolio 1.234.567.890.01 summary.json
 ```
 
