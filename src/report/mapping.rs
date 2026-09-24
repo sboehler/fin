@@ -5,7 +5,8 @@
 //! - virtual accounts (`-r`): an account matching one of a virtual account's
 //!   patterns is replaced by that virtual account.
 //! - mappings (`-m LEVEL,REGEX`): an account whose (possibly already
-//!   substituted) name matches `REGEX` is shortened to `LEVEL` segments.
+//!   substituted) name matches `REGEX` is shortened to `LEVEL` segments. The
+//!   regex may be omitted (`-m LEVEL`), in which case every account matches.
 //!
 //! Mapping an account to `None` drops it from the report.
 
@@ -43,14 +44,11 @@ impl FromStr for Mapping {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = s.splitn(2, ',').collect();
-        if parts.len() > 2 {
-            return Err(format!("invalid mapping: {s}"));
-        }
-        let level = parts[0]
-            .parse()
-            .map_err(|e| format!("invalid mapping: {e}"))?;
-        let regex = Regex::new(parts[1]).map_err(|e| format!("invalid mapping: {e}"))?;
+        // The regex is optional: `-m LEVEL` is short for `-m LEVEL,""`, which
+        // matches every account.
+        let (level, regex) = s.split_once(',').unwrap_or((s, ""));
+        let level = level.parse().map_err(|e| format!("invalid mapping: {e}"))?;
+        let regex = Regex::new(regex).map_err(|e| format!("invalid mapping: {e}"))?;
         Ok(Mapping { regex, level })
     }
 }
