@@ -507,10 +507,16 @@ line below the date, and the bookings as groups of accounts joined by `->`:
 ```
 YYYY-MM-DD
   <description>
+  <more description>
 <credit account>
 -> <debit account> <quantity> <commodity>
 -> <debit account> <quantity> <commodity>
 ```
+
+The description runs over as many indented lines as it needs, and the line
+breaks between them are kept — by the reports, and by `fin format`, which
+re-indents every line by two spaces. A blank line ends the transaction, so
+the description cannot contain one.
 
 Credit accounts start at column zero, debit accounts start at column zero
 with an arrow. One side of a group is a single account without an amount and

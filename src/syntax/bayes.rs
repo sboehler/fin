@@ -259,7 +259,8 @@ pub fn transactions(tree: &SyntaxTree) -> impl Iterator<Item = &Transaction> {
 /// are only lowercased.
 fn tokenize(source: &str, t: &Transaction, b: BookingRef, other: &str) -> HashSet<String> {
     let quantity = &source[b.quantity.0.clone()];
-    let mut tokens = source[t.description.content.clone()]
+    let description = t.description.text(source);
+    let mut tokens = description
         .split_whitespace()
         .map(|word| word.trim_matches(|c: char| !c.is_alphanumeric()))
         .filter(|word| !word.is_empty())
@@ -408,6 +409,18 @@ Income:Salary Assets:Bank 5000.00 CHF
     fn test_infer_leaves_assigned_bookings() {
         let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:Travel 12.00 CHF\n";
         assert_eq!(infer(source), source);
+    }
+
+    /// Every line of a description is evidence, not just the first.
+    #[test]
+    fn test_tokenize_reads_every_description_line() {
+        let source =
+            "2024-01-01\n  Migros\n  Wiedikon\nAssets:Bank\n-> Expenses:Groceries 50.00 CHF\n";
+        let tree = parse_text(source).unwrap();
+        let t = transactions(&tree).next().unwrap();
+        let tokens = tokenize(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank");
+        assert!(tokens.contains("migros"), "{tokens:?}");
+        assert!(tokens.contains("wiedikon"), "{tokens:?}");
     }
 
     /// An untrained model has no candidates and changes nothing.

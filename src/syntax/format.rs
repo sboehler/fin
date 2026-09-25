@@ -55,9 +55,9 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
                     Bookings::Lines(bookings) => {
                         writeln!(
                             w,
-                            "{date} {description}",
+                            "{date} \"{description}\"",
                             date = &source[date.0.clone()],
-                            description = &source[description.range.clone()]
+                            description = description.text(source)
                         )?;
                         for b in bookings {
                             writeln!(
@@ -73,11 +73,11 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
                     }
                     Bookings::Groups(groups) => {
                         writeln!(w, "{date}", date = &source[date.0.clone()])?;
-                        writeln!(
-                            w,
-                            "  {description}",
-                            description = &source[description.content.clone()]
-                        )?;
+                        // Each line of the description keeps its own line, so
+                        // that a rewritten transaction reads as it was typed.
+                        for line in description.text(source).lines() {
+                            writeln!(w, "  {line}")?;
+                        }
                         for g in groups {
                             format_group(w, g, source, n)?;
                         }
@@ -269,6 +269,25 @@ Assets:Investments:IBKR      Expenses:Investments:Fees             1 USD
         );
     }
 
+    /// Every line of a description keeps its own line, indented by two
+    /// spaces whatever it was indented by.
+    #[test]
+    fn formats_multiline_descriptions() {
+        let source = "2026-06-24\n\
+                      \x20     Buy 11 VT\n\
+                      \tat 154.45 USD\n\
+                      Assets:IBKR\n\
+                      -> Expenses:Trading 1698.95 USD\n";
+        assert_eq!(
+            "2026-06-24\n\
+             \x20 Buy 11 VT\n\
+             \x20 at 154.45 USD\n\
+             Assets:IBKR\n\
+             -> Expenses:Trading    1698.95 USD\n",
+            format(source)
+        );
+    }
+
     /// Formatting is idempotent: the canonical form of a file formats to
     /// itself.
     #[test]
@@ -277,6 +296,7 @@ Assets:Investments:IBKR      Expenses:Investments:Fees             1 USD
 @performance(VT)
 2026-06-24
   Buy 11 VT
+  at 154.45 USD
 Assets:Investments:IBKR 1698.95 USD
 Expenses:Investments:Fees -1.00 USD
 -> Expenses:Investments:Trading

@@ -126,7 +126,7 @@ impl Command {
                     location: item.location(b.range.start),
                     confidence: c.confidence,
                     date: source[t.date.0.clone()].to_string(),
-                    description: source[t.description.content.clone()].to_string(),
+                    description: t.description.text(source).into_owned(),
                     current: current.to_string(),
                     suggested: c.account,
                 };

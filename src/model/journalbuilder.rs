@@ -142,7 +142,7 @@ impl JournalBuilder {
         let mut trx = Transaction {
             loc,
             date,
-            description: Rc::new(source.text[t.description.content.clone()].to_string()),
+            description: Rc::new(t.description.text(&source.text).into_owned()),
             bookings,
             targets: None,
         };
@@ -435,12 +435,16 @@ mod tests {
         );
     }
 
-    /// The description of a grouped transaction reaches the journal, and its
-    /// addon is read as usual.
+    /// The description of a grouped transaction reaches the journal with its
+    /// line breaks, and its addon is read as usual.
     #[test]
     fn keeps_description_and_addon() {
-        let text =
-            "@performance(VT)\n2026-06-24\n  Buy 11 VT\nAssets:IBKR\n-> Expenses:Trading 11 VT\n";
+        let text = "@performance(VT)\n\
+                    2026-06-24\n\
+                    \x20 Buy 11 VT\n\
+                    \x20 at 154.45 USD\n\
+                    Assets:IBKR\n\
+                    -> Expenses:Trading 11 VT\n";
         let tree = parse_text(text).expect("parses");
         let source = SourceFile {
             path: None,
@@ -454,7 +458,7 @@ mod tests {
             .flat_map(|day| &day.transactions)
             .next()
             .expect("a transaction");
-        assert_eq!("Buy 11 VT", *t.description);
+        assert_eq!("Buy 11 VT\nat 154.45 USD", *t.description);
         assert_eq!(1, t.targets.as_ref().expect("targets").len());
     }
 }

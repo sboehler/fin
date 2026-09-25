@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Range};
+use std::{borrow::Cow, fmt::Display, ops::Range};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Character {
@@ -267,15 +267,34 @@ pub struct Transaction {
     pub bookings: Bookings,
 }
 
-/// The description of a transaction: either quoted, on the date line, or
-/// unquoted on the indented line below it.
+/// The description of a transaction.
 #[derive(Eq, PartialEq, Debug)]
-pub struct Description {
-    /// The description as written, including the quotes if it has any.
-    pub range: Range<usize>,
-    /// The text of the description.
-    pub content: Range<usize>,
-    pub quoted: bool,
+pub enum Description {
+    /// Quoted, on the date line.
+    Quoted(QuotedString),
+    /// Unquoted, on one or more indented lines below the date. The lines are
+    /// held without their indentation.
+    Indented(Vec<Range<usize>>),
+}
+
+impl Description {
+    /// The text of the description, the lines of an indented one joined by
+    /// newlines.
+    pub fn text<'a>(&self, source: &'a str) -> Cow<'a, str> {
+        match self {
+            Description::Quoted(q) => Cow::Borrowed(&source[q.content.clone()]),
+            Description::Indented(lines) => match &lines[..] {
+                [line] => Cow::Borrowed(&source[line.clone()]),
+                lines => Cow::Owned(
+                    lines
+                        .iter()
+                        .map(|line| &source[line.clone()])
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+            },
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]

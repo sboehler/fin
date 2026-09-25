@@ -423,7 +423,7 @@ impl<'a> Parser<'a> {
         addon: Option<Addon>,
         date: Date,
     ) -> Result<Directive> {
-        let description = self.parse_quoted_description()?;
+        let description = Description::Quoted(self.parse_quoted_string()?);
         self.scanner
             .read_rest_of_line()
             .map_err(|e| scope.error(e))?;
@@ -475,32 +475,34 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_quoted_description(&self) -> Result<Description> {
-        let QuotedString { range, content } = self.parse_quoted_string()?;
-        Ok(Description {
-            range,
-            content,
-            quoted: true,
-        })
-    }
-
-    /// An unquoted description, indented below the date line and running to
-    /// the end of the line.
+    /// An unquoted description, on the indented lines below the date line. A
+    /// line which is blank, or not indented, belongs to what follows.
     fn parse_indented_description(&self) -> Result<Description> {
         let scope = self.scope(Token::Description);
-        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
-        let content = trim_end(
-            self.scanner.source,
-            self.scanner.read_until(&Character::NewLine),
-        );
-        self.scanner
-            .read_rest_of_line()
-            .map_err(|e| scope.error(e))?;
-        Ok(Description {
-            range: content.clone(),
-            content,
-            quoted: false,
-        })
+        let mut lines = Vec::new();
+        loop {
+            let rollback = self.scanner.snapshot();
+            if !Character::HorizontalSpace.is(self.scanner.current()) {
+                break;
+            }
+            self.scanner.read_space();
+            let line = trim_end(
+                self.scanner.source,
+                self.scanner.read_until(&Character::NewLine),
+            );
+            if line.is_empty() {
+                rollback();
+                break;
+            }
+            self.scanner
+                .read_rest_of_line()
+                .map_err(|e| scope.error(e))?;
+            lines.push(line);
+        }
+        if lines.is_empty() {
+            return Err(scope.token_error());
+        }
+        Ok(Description::Indented(lines))
     }
 
     /// The credit accounts of a group, at column zero, followed by its debit
@@ -923,11 +925,7 @@ mod tests {
                     range: 0..55,
                     addon: None,
                     date: Date(0..10),
-                    description: Description {
-                        range: 13..20,
-                        content: 13..20,
-                        quoted: false,
-                    },
+                    description: Description::Indented(vec![Range { start: 13, end: 20 }]),
                     bookings: Bookings::Groups(vec![Group {
                         range: 21..55,
                         credits: vec![Leg {
@@ -1006,14 +1004,48 @@ mod tests {
             );
         }
 
+        /// The text of the description of the only transaction of `text`.
+        fn description(text: &str) -> String {
+            let tree = Parser::new(text).parse().expect("parses");
+            let [Directive::Transaction(t)] = &tree.directives[..] else {
+                panic!("want a single transaction, got {:?}", tree.directives);
+            };
+            t.description.text(text).into_owned()
+        }
+
+        /// The indentation of a line, and the whitespace at its end, are not
+        /// part of the description.
         #[test]
         fn description_is_trimmed() {
             let f = "2024-12-31\n     Some message\t \nAssets:Foo\n-> Assets:Bar 1 CHF\n";
-            let tree = Parser::new(f).parse().unwrap();
-            let [Directive::Transaction(t)] = &tree.directives[..] else {
-                panic!("want a single transaction");
-            };
-            assert_eq!("Some message", &f[t.description.content.clone()]);
+            assert_eq!("Some message", description(f));
+        }
+
+        /// Several indented lines are one description, and the line breaks
+        /// between them are kept.
+        #[test]
+        fn description_spans_lines() {
+            let f = "2024-12-31\n\
+                     \x20 Buy 11 VT\n\
+                     \tat 154.45 USD\n\
+                     \x20     for the pension pot\n\
+                     Assets:Foo\n\
+                     -> Assets:Bar 1 CHF\n";
+            assert_eq!(
+                "Buy 11 VT\nat 154.45 USD\nfor the pension pot",
+                description(f)
+            );
+        }
+
+        /// A blank line ends the transaction, wherever it falls, so it never
+        /// becomes an empty line of the description.
+        #[test]
+        fn description_stops_at_a_blank_line() {
+            let f = "2024-12-31\n  Message\n   \nAssets:Foo\n-> Assets:Bar 1 CHF\n";
+            assert_eq!(
+                Some(Token::Group),
+                Parser::new(f).parse().err().map(|e| e.want)
+            );
         }
 
         #[test]
@@ -1089,11 +1121,10 @@ mod tests {
                     range: 0..53,
                     addon: None,
                     date: Date(0..10),
-                    description: Description {
+                    description: Description::Quoted(QuotedString {
                         range: 11..20,
                         content: 12..19,
-                        quoted: true,
-                    },
+                    }),
                     bookings: Bookings::Lines(vec![Booking {
                         range: 23..53,
                         credit: Account {
