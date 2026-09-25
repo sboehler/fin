@@ -499,6 +499,48 @@ Naming both:
   reports and the sankey chart are built on,
 - is more compact.
 
+#### The arrow notation
+
+The same transaction can be written with the description unquoted on the
+line below the date, and the bookings as groups of accounts joined by `->`:
+
+```
+YYYY-MM-DD
+  <description>
+<credit account>
+-> <debit account> <quantity> <commodity>
+-> <debit account> <quantity> <commodity>
+```
+
+Credit accounts start at column zero, debit accounts start at column zero
+with an arrow. One side of a group is a single account without an amount and
+the other lists accounts which each have one, which gives one booking per
+amount — so the group above is two bookings out of the same credit account.
+The single account can be either side, so
+
+```
+<credit account> <quantity> <commodity>
+<credit account> <quantity> <commodity>
+-> <debit account>
+```
+
+is two bookings into the same debit account. A transaction is one or more
+such groups, and buying a security is typically two of them:
+
+```
+@performance(VT,USD)
+2026-06-24
+  Buy 11 VT @ 154.45 USD
+Assets:Investments:IBKR
+-> Expenses:Investments:Trading    1698.95 USD
+-> Expenses:Investments:Fees          1.00 USD
+Expenses:Investments:Trading
+-> Assets:Investments:IBKR              11 VT
+```
+
+Both notations can be mixed in one file, and `fin format` keeps each
+transaction in the notation it was written in.
+
 ### Balance assertions
 
 ```
@@ -943,8 +985,9 @@ fetched, so it is reported rather than done quietly.
 fin format journal.fin prices/USD.fin
 ```
 
-Formats each file in place, aligning accounts and amounts. Comments and the
-whitespace between directives are preserved.
+Formats each file in place, aligning accounts and amounts, including across
+the two notations for transactions. Comments and the whitespace between
+directives are preserved.
 
 ### parse
 

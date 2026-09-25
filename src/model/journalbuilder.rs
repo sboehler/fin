@@ -127,10 +127,10 @@ impl JournalBuilder {
             .iter()
             .map(|a| {
                 Ok(Booking::create(
-                    self.account(&a.credit, source)?,
-                    self.account(&a.debit, source)?,
-                    self.decimal(&a.quantity, source)?,
-                    self.commodity(&a.commodity, source)?,
+                    self.account(a.credit, source)?,
+                    self.account(a.debit, source)?,
+                    self.decimal(a.quantity, source)?,
+                    self.commodity(a.commodity, source)?,
                     None,
                 ))
             })
@@ -342,5 +342,119 @@ impl JournalBuilder {
             }
         }
         res
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::syntax::parse_text;
+    use pretty_assertions::assert_eq;
+
+    /// The bookings `text` contributes to the journal, as
+    /// `(credit, debit, quantity, commodity)`.
+    fn bookings(text: &str) -> Vec<(String, String, String, String)> {
+        let tree = parse_text(text).expect("parses");
+        let source = SourceFile {
+            path: None,
+            text: text.to_string(),
+        };
+        let mut builder = JournalBuilder::new(Registry::new());
+        builder.add(&tree, &source).expect("builds");
+        let registry = &builder.registry;
+        builder
+            .days
+            .values()
+            .flat_map(|day| &day.transactions)
+            // Bookings come in (credit, debit) pairs, so each pair is read
+            // from its debit side.
+            .flat_map(|t| t.bookings.iter().skip(1).step_by(2))
+            .map(|b| {
+                (
+                    registry.account_name(b.other),
+                    registry.account_name(b.account),
+                    b.quantity.to_string(),
+                    registry.commodity_name(b.commodity),
+                )
+            })
+            .collect()
+    }
+
+    fn booking(
+        credit: &str,
+        debit: &str,
+        quantity: &str,
+        commodity: &str,
+    ) -> (String, String, String, String) {
+        (
+            credit.to_string(),
+            debit.to_string(),
+            quantity.to_string(),
+            commodity.to_string(),
+        )
+    }
+
+    /// Both notations describe the same bookings.
+    #[test]
+    fn groups_and_lines_agree() {
+        let groups = "2026-06-24\n  Buy 11 VT\n\
+                      Assets:IBKR\n\
+                      -> Expenses:Trading 1698.95 USD\n\
+                      -> Expenses:Fees 1.00 USD\n\
+                      Expenses:Trading\n\
+                      -> Assets:IBKR 11 VT\n";
+        let lines = "2026-06-24 \"Buy 11 VT\"\n\
+                     Assets:IBKR Expenses:Trading 1698.95 USD\n\
+                     Assets:IBKR Expenses:Fees 1.00 USD\n\
+                     Expenses:Trading Assets:IBKR 11 VT\n";
+        assert_eq!(
+            vec![
+                booking("Assets:IBKR", "Expenses:Trading", "1698.95", "USD"),
+                booking("Assets:IBKR", "Expenses:Fees", "1.00", "USD"),
+                booking("Expenses:Trading", "Assets:IBKR", "11", "VT"),
+            ],
+            bookings(groups)
+        );
+        assert_eq!(bookings(lines), bookings(groups));
+    }
+
+    /// A group with the amounts on the credit side books into its single
+    /// debit account, and a negative amount reverses the direction.
+    #[test]
+    fn many_credits_to_one_debit() {
+        let text = "2026-06-24\n  Rent\n\
+                    Assets:Bank 1200 CHF\n\
+                    Assets:Cash -100 CHF\n\
+                    -> Expenses:Rent\n";
+        assert_eq!(
+            vec![
+                booking("Assets:Bank", "Expenses:Rent", "1200", "CHF"),
+                booking("Expenses:Rent", "Assets:Cash", "100", "CHF"),
+            ],
+            bookings(text)
+        );
+    }
+
+    /// The description of a grouped transaction reaches the journal, and its
+    /// addon is read as usual.
+    #[test]
+    fn keeps_description_and_addon() {
+        let text =
+            "@performance(VT)\n2026-06-24\n  Buy 11 VT\nAssets:IBKR\n-> Expenses:Trading 11 VT\n";
+        let tree = parse_text(text).expect("parses");
+        let source = SourceFile {
+            path: None,
+            text: text.to_string(),
+        };
+        let mut builder = JournalBuilder::new(Registry::new());
+        builder.add(&tree, &source).expect("builds");
+        let t = builder
+            .days
+            .values()
+            .flat_map(|day| &day.transactions)
+            .next()
+            .expect("a transaction");
+        assert_eq!("Buy 11 VT", *t.description);
+        assert_eq!(1, t.targets.as_ref().expect("targets").len());
     }
 }

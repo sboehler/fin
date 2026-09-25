@@ -118,11 +118,13 @@ pub enum Token {
     Custom(String),
     Date,
     Decimal,
+    Description,
     Digit,
     Directive,
     EOF,
     Either(Vec<Token>),
     File,
+    Group,
     Include,
     Interval,
     Open,
@@ -181,6 +183,8 @@ impl Display for Token {
             Token::SubAssertion => write!(f, "subassertion"),
             Token::Performance => write!(f, "a @performance addon"),
             Token::Booking => write!(f, "a booking"),
+            Token::Group => write!(f, "a group of bookings"),
+            Token::Description => write!(f, "a description"),
             Token::Transaction => write!(f, "a transaction"),
             Token::Price => write!(f, "a 'price' directive"),
             Token::Regex => write!(f, "a regular expression"),
@@ -259,8 +263,19 @@ pub struct Transaction {
     pub range: Range<usize>,
     pub addon: Option<Addon>,
     pub date: Date,
-    pub description: QuotedString,
-    pub bookings: Vec<Booking>,
+    pub description: Description,
+    pub bookings: Bookings,
+}
+
+/// The description of a transaction: either quoted, on the date line, or
+/// unquoted on the indented line below it.
+#[derive(Eq, PartialEq, Debug)]
+pub struct Description {
+    /// The description as written, including the quotes if it has any.
+    pub range: Range<usize>,
+    /// The text of the description.
+    pub content: Range<usize>,
+    pub quoted: bool,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -306,6 +321,18 @@ pub struct SubAssertion {
     pub commodity: Commodity,
 }
 
+/// The bookings of a transaction, in either of the notations the file format
+/// allows. Use [`Bookings::iter`] to read them as bookings, whichever
+/// notation they were written in.
+#[derive(Eq, PartialEq, Debug)]
+pub enum Bookings {
+    /// One booking per line: `<credit> <debit> <quantity> <commodity>`.
+    Lines(Vec<Booking>),
+    /// Groups of credit accounts at column zero and debit accounts marked
+    /// with `->`, where one side of the group carries the amounts.
+    Groups(Vec<Group>),
+}
+
 #[derive(Eq, PartialEq, Debug)]
 pub struct Booking {
     pub range: Range<usize>,
@@ -313,6 +340,89 @@ pub struct Booking {
     pub debit: Account,
     pub quantity: Decimal,
     pub commodity: Commodity,
+}
+
+/// Credit and debit legs which together expand to one booking per leg on the
+/// side carrying the amounts; the other side is a single leg without one. The
+/// parser rejects a group of any other shape.
+#[derive(Eq, PartialEq, Debug)]
+pub struct Group {
+    pub range: Range<usize>,
+    pub credits: Vec<Leg>,
+    pub debits: Vec<Leg>,
+}
+
+/// One side of one booking of a group.
+#[derive(Eq, PartialEq, Debug)]
+pub struct Leg {
+    pub range: Range<usize>,
+    pub account: Account,
+    pub amount: Option<Amount>,
+}
+
+#[derive(Eq, PartialEq, Debug)]
+pub struct Amount {
+    pub quantity: Decimal,
+    pub commodity: Commodity,
+}
+
+/// A booking of a transaction, borrowed from whichever notation it was
+/// written in.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub struct BookingRef<'a> {
+    /// The range of the leg or line the amount was read from.
+    pub range: &'a Range<usize>,
+    pub credit: &'a Account,
+    pub debit: &'a Account,
+    pub quantity: &'a Decimal,
+    pub commodity: &'a Commodity,
+}
+
+impl Bookings {
+    pub fn iter(&self) -> Box<dyn Iterator<Item = BookingRef<'_>> + '_> {
+        match self {
+            Bookings::Lines(bookings) => Box::new(bookings.iter().map(|b| BookingRef {
+                range: &b.range,
+                credit: &b.credit,
+                debit: &b.debit,
+                quantity: &b.quantity,
+                commodity: &b.commodity,
+            })),
+            Bookings::Groups(groups) => Box::new(groups.iter().flat_map(Group::bookings)),
+        }
+    }
+}
+
+impl Group {
+    /// One booking per leg on the side carrying the amounts. Legs without an
+    /// amount on that side are skipped, which the parser rules out.
+    fn bookings(&self) -> Vec<BookingRef<'_>> {
+        match (&self.credits[..], &self.debits[..]) {
+            ([credit], debits) if credit.amount.is_none() => debits
+                .iter()
+                .filter_map(|debit| Some((debit, debit.amount.as_ref()?)))
+                .map(|(debit, amount)| BookingRef {
+                    range: &debit.range,
+                    credit: &credit.account,
+                    debit: &debit.account,
+                    quantity: &amount.quantity,
+                    commodity: &amount.commodity,
+                })
+                .collect(),
+            (credits, [debit]) => credits
+                .iter()
+                .filter_map(|credit| Some((credit, credit.amount.as_ref()?)))
+                .map(|(credit, amount)| BookingRef {
+                    range: &credit.range,
+                    credit: &credit.account,
+                    debit: &debit.account,
+                    quantity: &amount.quantity,
+                    commodity: &amount.commodity,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]

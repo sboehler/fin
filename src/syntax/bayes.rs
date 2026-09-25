@@ -16,7 +16,7 @@ use std::{
     ops::Range,
 };
 
-use super::cst::{Booking, Directive, SyntaxTree, Transaction};
+use super::cst::{BookingRef, Directive, SyntaxTree, Transaction};
 use crate::model::entities::AccountType;
 
 /// The account the model would put in place of a placeholder.
@@ -89,7 +89,7 @@ impl Model {
     /// which already mention the placeholder account carry no information and
     /// are skipped.
     pub fn train_transaction(&mut self, source: &str, t: &Transaction) {
-        for b in &t.bookings {
+        for b in t.bookings.iter() {
             let credit = &source[b.credit.range.clone()];
             let debit = &source[b.debit.range.clone()];
             if credit == self.account || debit == self.account {
@@ -100,7 +100,14 @@ impl Model {
         }
     }
 
-    fn observe(&mut self, source: &str, t: &Transaction, b: &Booking, account: &str, other: &str) {
+    fn observe(
+        &mut self,
+        source: &str,
+        t: &Transaction,
+        b: BookingRef,
+        account: &str,
+        other: &str,
+    ) {
         self.count += 1;
         *self
             .count_by_account
@@ -129,19 +136,24 @@ impl Model {
         min_confidence: f64,
     ) -> Vec<(Range<usize>, String)> {
         let mut edits = Vec::new();
+        // An account written once but shared by every booking of a group is
+        // one placeholder, so it is replaced once.
+        let mut edited = HashSet::new();
         for t in transactions(tree) {
-            for b in &t.bookings {
+            for b in t.bookings.iter() {
                 let credit = &source[b.credit.range.clone()];
                 let debit = &source[b.debit.range.clone()];
                 if credit == self.account
                     && let Some(c) = self.predict(source, t, b, debit)
                     && c.confidence >= min_confidence
+                    && edited.insert(b.credit.range.start)
                 {
                     edits.push((b.credit.range.clone(), c.account));
                 }
                 if debit == self.account
                     && let Some(c) = self.predict(source, t, b, credit)
                     && c.confidence >= min_confidence
+                    && edited.insert(b.debit.range.start)
                 {
                     edits.push((b.debit.range.clone(), c.account));
                 }
@@ -157,7 +169,7 @@ impl Model {
         &self,
         source: &str,
         t: &Transaction,
-        b: &Booking,
+        b: BookingRef,
         other: &str,
     ) -> Option<Candidate> {
         let tokens = tokenize(source, t, b, other)
@@ -245,7 +257,7 @@ pub fn transactions(tree: &SyntaxTree) -> impl Iterator<Item = &Transaction> {
 /// imported description drops out entirely. The other three are structured
 /// values whose punctuation is meaningful (`Assets:Bank`, `19.10`), so they
 /// are only lowercased.
-fn tokenize(source: &str, t: &Transaction, b: &Booking, other: &str) -> HashSet<String> {
+fn tokenize(source: &str, t: &Transaction, b: BookingRef, other: &str) -> HashSet<String> {
     let quantity = &source[b.quantity.0.clone()];
     let mut tokens = source[t.description.content.clone()]
         .split_whitespace()
@@ -363,6 +375,34 @@ Income:Salary Assets:Bank 5000.00 CHF
         );
     }
 
+    /// The placeholder is replaced in a transaction written as groups, on
+    /// either side of the arrow.
+    #[test]
+    fn test_infer_group() {
+        let source = "2024-02-01\n  Migros Zuerich\nAssets:Bank\n-> Expenses:TBD 12.00 CHF\n";
+        assert_eq!(
+            infer(source),
+            "2024-02-01\n  Migros Zuerich\nAssets:Bank\n-> Expenses:Groceries 12.00 CHF\n"
+        );
+    }
+
+    /// An account shared by every booking of a group is written once, so it is
+    /// replaced once even though it is inferred once per booking.
+    #[test]
+    fn test_infer_shared_placeholder_once() {
+        let source = "2024-02-01\n  Migros Zuerich\n\
+                      Expenses:TBD\n\
+                      -> Expenses:Groceries 12.00 CHF\n\
+                      -> Expenses:Travel 13.00 CHF\n";
+        assert_eq!(
+            infer(source),
+            "2024-02-01\n  Migros Zuerich\n\
+             Assets:Bank\n\
+             -> Expenses:Groceries 12.00 CHF\n\
+             -> Expenses:Travel 13.00 CHF\n"
+        );
+    }
+
     /// Bookings which do not mention the placeholder are left alone.
     #[test]
     fn test_infer_leaves_assigned_bookings() {
@@ -400,7 +440,7 @@ Income:Salary Assets:Bank 5000.00 CHF
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
         let c = model()
-            .predict(source, t, &t.bookings[0], "Assets:Bank")
+            .predict(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank")
             .unwrap();
         assert!(c.confidence < 0.9, "{c:?}");
     }
@@ -413,7 +453,7 @@ Income:Salary Assets:Bank 5000.00 CHF
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
         let c = model()
-            .predict(source, t, &t.bookings[0], "Assets:Bank")
+            .predict(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank")
             .unwrap();
         assert_eq!(c.account, "Expenses:Groceries");
         assert!(c.confidence > 0.9, "{c:?}");
@@ -436,7 +476,7 @@ Income:Salary Assets:Bank 5000.00 CHF
             let tree = parse_text(&source).unwrap();
             let t = transactions(&tree).next().unwrap();
             model
-                .predict(&source, t, &t.bookings[0], "Assets:Bank")
+                .predict(&source, t, t.bookings.iter().next().unwrap(), "Assets:Bank")
                 .unwrap()
                 .account
         };
@@ -470,7 +510,7 @@ Income:Salary Assets:Bank 5000.00 CHF
                       Assets:Bank Expenses:Groceries 50.00 CHF\n";
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
-        let tokens = tokenize(source, t, &t.bookings[0], "Assets:Bank");
+        let tokens = tokenize(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank");
         assert!(tokens.contains("wiedikon"), "{tokens:?}");
         assert!(!tokens.contains("wiedikon,"), "{tokens:?}");
         assert!(!tokens.contains("/"), "{tokens:?}");
@@ -530,7 +570,7 @@ Income:Salary Assets:Bank 5000.00 CHF
         let source = "2024-01-01 \"Migros\"\nAssets:Bank Expenses:Groceries 50.00 CHF\n";
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
-        let tokens = tokenize(source, t, &t.bookings[0], "Assets:Bank");
+        let tokens = tokenize(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank");
         assert!(tokens.contains("50.00"), "{tokens:?}");
         assert!(tokens.contains(&magnitude("50.00").unwrap()), "{tokens:?}");
     }

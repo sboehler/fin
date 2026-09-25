@@ -3,8 +3,9 @@ use std::ops::Range;
 use crate::syntax::cst::VirtualAccount;
 
 use super::cst::{
-    Account, Addon, Assertion, Booking, Character, Close, Commodity, Date, Decimal, Directive,
-    Include, Open, Price, QuotedString, Sequence, SubAssertion, SyntaxTree, Token, Transaction,
+    Account, Addon, Amount, Assertion, Booking, Bookings, Character, Close, Commodity, Date,
+    Decimal, Description, Directive, Group, Include, Leg, Open, Price, QuotedString, Sequence,
+    SubAssertion, SyntaxTree, Token, Transaction,
 };
 use super::error::SyntaxError;
 use super::scanner::Scanner;
@@ -307,6 +308,11 @@ impl<'a> Parser<'a> {
             Some('"') => self.parse_transaction(&scope.with(Token::Transaction), addon, date)?,
             Some('b') => self.parse_assertion(&scope.with(Token::Assertion), date)?,
             Some('c') => self.parse_close(&scope.with(Token::Close), date)?,
+            // Nothing else on the date line: the description is on the line
+            // below it, and the bookings are written as groups.
+            Some('\n') => {
+                self.parse_grouped_transaction(&scope.with(Token::Transaction), addon, date)?
+            }
             _o => Err(scope.token_error())?,
         };
         self.scanner
@@ -417,7 +423,7 @@ impl<'a> Parser<'a> {
         addon: Option<Addon>,
         date: Date,
     ) -> Result<Directive> {
-        let description = self.parse_quoted_string()?;
+        let description = self.parse_quoted_description()?;
         self.scanner
             .read_rest_of_line()
             .map_err(|e| scope.error(e))?;
@@ -436,8 +442,133 @@ impl<'a> Parser<'a> {
             addon,
             date,
             description,
-            bookings,
+            bookings: Bookings::Lines(bookings),
         }))
+    }
+
+    /// A transaction whose description sits on the indented line below the
+    /// date, and whose bookings are written as groups of credit accounts at
+    /// column zero and debit accounts marked with `->`.
+    fn parse_grouped_transaction(
+        &self,
+        scope: &Scope,
+        addon: Option<Addon>,
+        date: Date,
+    ) -> Result<Directive> {
+        self.scanner
+            .read_rest_of_line()
+            .map_err(|e| scope.error(e))?;
+        let description = self.parse_indented_description()?;
+        let mut groups = Vec::new();
+        loop {
+            groups.push(self.parse_group()?);
+            if !Character::Alphabetic.is(self.scanner.current()) {
+                break;
+            }
+        }
+        Ok(Directive::Transaction(Transaction {
+            range: scope.range(),
+            addon,
+            date,
+            description,
+            bookings: Bookings::Groups(groups),
+        }))
+    }
+
+    fn parse_quoted_description(&self) -> Result<Description> {
+        let QuotedString { range, content } = self.parse_quoted_string()?;
+        Ok(Description {
+            range,
+            content,
+            quoted: true,
+        })
+    }
+
+    /// An unquoted description, indented below the date line and running to
+    /// the end of the line.
+    fn parse_indented_description(&self) -> Result<Description> {
+        let scope = self.scope(Token::Description);
+        self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+        let content = trim_end(
+            self.scanner.source,
+            self.scanner.read_until(&Character::NewLine),
+        );
+        self.scanner
+            .read_rest_of_line()
+            .map_err(|e| scope.error(e))?;
+        Ok(Description {
+            range: content.clone(),
+            content,
+            quoted: false,
+        })
+    }
+
+    /// The credit accounts of a group, at column zero, followed by its debit
+    /// accounts, each marked with `->`. Exactly one side is a single account
+    /// without an amount; every leg on the other side has one.
+    fn parse_group(&self) -> Result<Group> {
+        let scope = self.scope(Token::Group);
+        let mut credits = Vec::new();
+        loop {
+            credits.push(self.parse_leg().map_err(|e| scope.error(e))?);
+            self.scanner
+                .read_rest_of_line()
+                .map_err(|e| scope.error(e))?;
+            if !Character::Alphabetic.is(self.scanner.current()) {
+                break;
+            }
+        }
+        let mut debits = Vec::new();
+        while self.scanner.current() == Some('-') {
+            self.scanner
+                .read_string("->")
+                .and_then(|_| self.scanner.read_space_1())
+                .map_err(|e| scope.error(e))?;
+            debits.push(self.parse_leg().map_err(|e| scope.error(e))?);
+            self.scanner
+                .read_rest_of_line()
+                .map_err(|e| scope.error(e))?;
+        }
+        let group = Group {
+            range: scope.range(),
+            credits,
+            debits,
+        };
+        if !well_shaped(&group) {
+            return Err(scope
+                .with(Token::Custom(GROUP_SHAPE.to_string()))
+                .token_error());
+        }
+        Ok(group)
+    }
+
+    /// One side of the bookings of a group: an account, and an amount unless
+    /// this is the single account the other side fans out from.
+    fn parse_leg(&self) -> Result<Leg> {
+        let scope = self.scope(Token::Booking);
+        let account = self.parse_account().map_err(|e| scope.error(e))?;
+        let mut range = scope.range();
+        self.scanner.read_space();
+        let amount = match self.scanner.current() {
+            Some(c) if c.is_ascii_digit() || c == '-' => {
+                let quantity = self
+                    .parse_decimal(Token::Quantity)
+                    .map_err(|e| scope.error(e))?;
+                self.scanner.read_space_1().map_err(|e| scope.error(e))?;
+                let commodity = self.parse_commodity().map_err(|e| scope.error(e))?;
+                range = scope.range();
+                Some(Amount {
+                    quantity,
+                    commodity,
+                })
+            }
+            _ => None,
+        };
+        Ok(Leg {
+            range,
+            account,
+            amount,
+        })
     }
 
     pub fn parse_booking(&self) -> Result<Booking> {
@@ -518,6 +649,25 @@ impl<'a> Parser<'a> {
             account,
         }))
     }
+}
+
+/// What a group must look like, for the error message when it does not.
+const GROUP_SHAPE: &str = "one account without an amount, facing accounts which all have one";
+
+/// Whether the amounts of a group sit on exactly one of its sides, so that it
+/// expands to one booking per account on that side.
+fn well_shaped(group: &Group) -> bool {
+    let fans_out = |single: &[Leg], many: &[Leg]| {
+        matches!(single, [leg] if leg.amount.is_none())
+            && !many.is_empty()
+            && many.iter().all(|l| l.amount.is_some())
+    };
+    fans_out(&group.credits, &group.debits) || fans_out(&group.debits, &group.credits)
+}
+
+/// The range without the trailing whitespace of the text it covers.
+fn trim_end(source: &str, range: Range<usize>) -> Range<usize> {
+    range.start..range.start + source[range.clone()].trim_end().len()
 }
 
 #[cfg(test)]
@@ -741,6 +891,161 @@ mod tests {
         }
     }
 
+    mod grouped_transaction {
+        use super::*;
+        use pretty_assertions::assert_eq;
+
+        /// The bookings of the only transaction of `text`, as
+        /// `(credit, debit, quantity, commodity)`.
+        fn bookings(text: &str) -> Vec<(&str, &str, &str, &str)> {
+            let tree = Parser::new(text).parse().expect("parses");
+            let [Directive::Transaction(t)] = &tree.directives[..] else {
+                panic!("want a single transaction, got {:?}", tree.directives);
+            };
+            t.bookings
+                .iter()
+                .map(|b| {
+                    (
+                        &text[b.credit.range.clone()],
+                        &text[b.debit.range.clone()],
+                        &text[b.quantity.0.clone()],
+                        &text[b.commodity.0.clone()],
+                    )
+                })
+                .collect()
+        }
+
+        #[test]
+        fn parse_group() {
+            let f = "2024-12-31\n  Message\nAssets:Foo\n-> Assets:Bar 4.23 USD\n";
+            assert_eq!(
+                Ok(Directive::Transaction(Transaction {
+                    range: 0..55,
+                    addon: None,
+                    date: Date(0..10),
+                    description: Description {
+                        range: 13..20,
+                        content: 13..20,
+                        quoted: false,
+                    },
+                    bookings: Bookings::Groups(vec![Group {
+                        range: 21..55,
+                        credits: vec![Leg {
+                            range: 21..31,
+                            account: Account {
+                                range: 21..31,
+                                segments: vec![21..27, 28..31]
+                            },
+                            amount: None,
+                        }],
+                        debits: vec![Leg {
+                            range: 35..54,
+                            account: Account {
+                                range: 35..45,
+                                segments: vec![35..41, 42..45]
+                            },
+                            amount: Some(Amount {
+                                quantity: Decimal(46..50),
+                                commodity: Commodity(51..54),
+                            }),
+                        }],
+                    }])
+                })),
+                Parser::new(f).parse_directive()
+            );
+        }
+
+        /// One credit account fans out to a debit account per amount, and the
+        /// groups of a transaction are read one after the other. The trailing
+        /// whitespace of the example is deliberate.
+        #[test]
+        fn one_credit_to_many_debits() {
+            let f = "@performance(VT,USD)\n\
+                     2026-06-24 \n\
+                     \x20 Buy 11 VT @ 154.45 USD\n\
+                     Assets:Investments:IBKR       \n\
+                     -> Expenses:Investments:Trading     1698.95 USD\n\
+                     -> Expenses:Investments:Fees           1.00 USD\n\
+                     Expenses:Investments:Trading\n\
+                     -> Assets:Investments:IBKR               11 VT\n";
+            assert_eq!(
+                vec![
+                    (
+                        "Assets:Investments:IBKR",
+                        "Expenses:Investments:Trading",
+                        "1698.95",
+                        "USD"
+                    ),
+                    (
+                        "Assets:Investments:IBKR",
+                        "Expenses:Investments:Fees",
+                        "1.00",
+                        "USD"
+                    ),
+                    (
+                        "Expenses:Investments:Trading",
+                        "Assets:Investments:IBKR",
+                        "11",
+                        "VT"
+                    ),
+                ],
+                bookings(f)
+            );
+        }
+
+        #[test]
+        fn many_credits_to_one_debit() {
+            let f =
+                "2024-12-31\n  Message\nAssets:Foo 10 CHF\nAssets:Baz -2.5 CHF\n-> Assets:Bar\n";
+            assert_eq!(
+                vec![
+                    ("Assets:Foo", "Assets:Bar", "10", "CHF"),
+                    ("Assets:Baz", "Assets:Bar", "-2.5", "CHF"),
+                ],
+                bookings(f)
+            );
+        }
+
+        #[test]
+        fn description_is_trimmed() {
+            let f = "2024-12-31\n     Some message\t \nAssets:Foo\n-> Assets:Bar 1 CHF\n";
+            let tree = Parser::new(f).parse().unwrap();
+            let [Directive::Transaction(t)] = &tree.directives[..] else {
+                panic!("want a single transaction");
+            };
+            assert_eq!("Some message", &f[t.description.content.clone()]);
+        }
+
+        #[test]
+        fn requires_a_description() {
+            let f = "2024-12-31\nAssets:Foo\n-> Assets:Bar 1 CHF\n";
+            assert_eq!(
+                Some(Token::Description),
+                Parser::new(f).parse().err().map(|e| e.want)
+            );
+        }
+
+        /// The amounts must sit on exactly one side of the group, so that it
+        /// is unambiguous which side the bookings fan out to.
+        #[test]
+        fn rejects_amounts_on_both_sides() {
+            for f in [
+                "2024-12-31\n  Message\nAssets:Foo 10 CHF\n-> Assets:Bar 10 CHF\n",
+                "2024-12-31\n  Message\nAssets:Foo\n-> Assets:Bar\n",
+                "2024-12-31\n  Message\nAssets:Foo\nAssets:Baz\n-> Assets:Bar 10 CHF\n",
+                "2024-12-31\n  Message\nAssets:Foo 10 CHF\n-> Assets:Bar\n-> Assets:Qux\n",
+                "2024-12-31\n  Message\nAssets:Foo 10 CHF\n",
+                "2024-12-31\n  Message\nAssets:Foo\n",
+            ] {
+                assert_eq!(
+                    Some(Token::Custom(GROUP_SHAPE.to_string())),
+                    Parser::new(f).parse().err().map(|e| e.want),
+                    "{f}"
+                );
+            }
+        }
+    }
+
     mod directive {
         use super::*;
         use pretty_assertions::assert_eq;
@@ -784,11 +1089,12 @@ mod tests {
                     range: 0..53,
                     addon: None,
                     date: Date(0..10),
-                    description: QuotedString {
+                    description: Description {
                         range: 11..20,
                         content: 12..19,
+                        quoted: true,
                     },
-                    bookings: vec![Booking {
+                    bookings: Bookings::Lines(vec![Booking {
                         range: 23..53,
                         credit: Account {
                             range: 23..33,
@@ -800,7 +1106,7 @@ mod tests {
                         },
                         quantity: Decimal(45..49),
                         commodity: Commodity(50..53),
-                    },]
+                    }])
                 })),
                 Parser::new(f).parse_directive()
             );

@@ -102,7 +102,7 @@ impl Command {
         let source = item.source();
         let t = item.transaction;
         let mut reviewed = 0;
-        for b in &t.bookings {
+        for b in t.bookings.iter() {
             let credit = &source[b.credit.range.clone()];
             let debit = &source[b.debit.range.clone()];
             if credit == self.account || debit == self.account {
