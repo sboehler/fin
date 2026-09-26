@@ -3,9 +3,9 @@ use std::ops::Range;
 use crate::syntax::cst::VirtualAccount;
 
 use super::cst::{
-    Account, Addon, Amount, Assertion, Booking, Bookings, Character, Close, Commodity, Date,
-    Decimal, Description, Directive, Group, Include, Leg, Open, Price, QuotedString, Sequence,
-    SubAssertion, SyntaxTree, Token, Transaction,
+    Account, Addon, Amount, Arrow, Assertion, Booking, Bookings, Character, Close, Commodity, Date,
+    Decimal, Description, Direction, Directive, Group, Include, Leg, Open, Price, QuotedString,
+    Sequence, SubAssertion, SyntaxTree, Token, Transaction,
 };
 use super::error::SyntaxError;
 use super::scanner::Scanner;
@@ -505,14 +505,14 @@ impl<'a> Parser<'a> {
         Ok(Description::Indented(lines))
     }
 
-    /// The credit accounts of a group, at column zero, followed by its debit
-    /// accounts, each marked with `->`. Exactly one side is a single account
-    /// without an amount; every leg on the other side has one.
+    /// The accounts of a group at column zero, followed by the accounts
+    /// facing them, each marked with an arrow. Exactly one side is a single
+    /// account without an amount; every leg on the other side has one.
     fn parse_group(&self) -> Result<Group> {
         let scope = self.scope(Token::Group);
-        let mut credits = Vec::new();
+        let mut accounts = Vec::new();
         loop {
-            credits.push(self.parse_leg().map_err(|e| scope.error(e))?);
+            accounts.push(self.parse_leg().map_err(|e| scope.error(e))?);
             self.scanner
                 .read_rest_of_line()
                 .map_err(|e| scope.error(e))?;
@@ -520,21 +520,30 @@ impl<'a> Parser<'a> {
                 break;
             }
         }
-        let mut debits = Vec::new();
-        while self.scanner.current() == Some('-') {
+        let mut arrows = Vec::new();
+        loop {
+            let direction = match self.scanner.current() {
+                Some('-') => Direction::Out,
+                Some('<') => Direction::In,
+                _ => break,
+            };
             self.scanner
-                .read_string("->")
+                .read_string(match direction {
+                    Direction::Out => "->",
+                    Direction::In => "<-",
+                })
                 .and_then(|_| self.scanner.read_space_1())
                 .map_err(|e| scope.error(e))?;
-            debits.push(self.parse_leg().map_err(|e| scope.error(e))?);
+            let leg = self.parse_leg().map_err(|e| scope.error(e))?;
             self.scanner
                 .read_rest_of_line()
                 .map_err(|e| scope.error(e))?;
+            arrows.push(Arrow { direction, leg });
         }
         let group = Group {
             range: scope.range(),
-            credits,
-            debits,
+            accounts,
+            arrows,
         };
         if !well_shaped(&group) {
             return Err(scope
@@ -659,12 +668,14 @@ const GROUP_SHAPE: &str = "one account without an amount, facing accounts which 
 /// Whether the amounts of a group sit on exactly one of its sides, so that it
 /// expands to one booking per account on that side.
 fn well_shaped(group: &Group) -> bool {
-    let fans_out = |single: &[Leg], many: &[Leg]| {
+    let fans_out = |single: &[&Leg], many: &[&Leg]| {
         matches!(single, [leg] if leg.amount.is_none())
             && !many.is_empty()
-            && many.iter().all(|l| l.amount.is_some())
+            && many.iter().all(|leg| leg.amount.is_some())
     };
-    fans_out(&group.credits, &group.debits) || fans_out(&group.debits, &group.credits)
+    let accounts = group.accounts.iter().collect::<Vec<_>>();
+    let arrows = group.arrows.iter().map(|a| &a.leg).collect::<Vec<_>>();
+    fans_out(&accounts, &arrows) || fans_out(&arrows, &accounts)
 }
 
 /// The range without the trailing whitespace of the text it covers.
@@ -928,7 +939,7 @@ mod tests {
                     description: Description::Indented(vec![Range { start: 13, end: 20 }]),
                     bookings: Bookings::Groups(vec![Group {
                         range: 21..55,
-                        credits: vec![Leg {
+                        accounts: vec![Leg {
                             range: 21..31,
                             account: Account {
                                 range: 21..31,
@@ -936,16 +947,19 @@ mod tests {
                             },
                             amount: None,
                         }],
-                        debits: vec![Leg {
-                            range: 35..54,
-                            account: Account {
-                                range: 35..45,
-                                segments: vec![35..41, 42..45]
+                        arrows: vec![Arrow {
+                            direction: Direction::Out,
+                            leg: Leg {
+                                range: 35..54,
+                                account: Account {
+                                    range: 35..45,
+                                    segments: vec![35..41, 42..45]
+                                },
+                                amount: Some(Amount {
+                                    quantity: Decimal(46..50),
+                                    commodity: Commodity(51..54),
+                                }),
                             },
-                            amount: Some(Amount {
-                                quantity: Decimal(46..50),
-                                commodity: Commodity(51..54),
-                            }),
                         }],
                     }])
                 })),
@@ -953,9 +967,9 @@ mod tests {
             );
         }
 
-        /// One credit account fans out to a debit account per amount, and the
-        /// groups of a transaction are read one after the other. The trailing
-        /// whitespace of the example is deliberate.
+        /// One account fans out to an account per amount, and the groups of a
+        /// transaction are read one after the other. The trailing whitespace
+        /// of the example is deliberate.
         #[test]
         fn one_credit_to_many_debits() {
             let f = "@performance(VT,USD)\n\
@@ -1002,6 +1016,51 @@ mod tests {
                 ],
                 bookings(f)
             );
+        }
+
+        /// `<-` reverses its own booking, so a group can collect what flows
+        /// out of an account and what flows into it at once.
+        #[test]
+        fn arrows_point_both_ways() {
+            let f = "2024-12-31\n  Message\n\
+                     Assets:A\n\
+                     -> Assets:B 5 CHF\n\
+                     <- Assets:C 10 CHF\n\
+                     <- Assets:B 4 VT\n";
+            assert_eq!(
+                vec![
+                    ("Assets:A", "Assets:B", "5", "CHF"),
+                    ("Assets:C", "Assets:A", "10", "CHF"),
+                    ("Assets:B", "Assets:A", "4", "VT"),
+                ],
+                bookings(f)
+            );
+        }
+
+        /// A single `<-` gives its direction to every account facing it.
+        #[test]
+        fn one_credit_behind_the_arrow() {
+            let f = "2024-12-31\n  Message\n\
+                     Assets:A 5 CHF\n\
+                     Assets:B 4 CHF\n\
+                     <- Assets:C\n";
+            assert_eq!(
+                vec![
+                    ("Assets:C", "Assets:A", "5", "CHF"),
+                    ("Assets:C", "Assets:B", "4", "CHF"),
+                ],
+                bookings(f)
+            );
+        }
+
+        /// Reversing the arrow of a group of one booking is the same as
+        /// swapping its accounts.
+        #[test]
+        fn reversing_the_arrow_swaps_the_accounts() {
+            let out = "2024-12-31\n  Message\nAssets:A\n-> Assets:B 5 CHF\n";
+            let into = "2024-12-31\n  Message\nAssets:A\n<- Assets:B 5 CHF\n";
+            assert_eq!(vec![("Assets:A", "Assets:B", "5", "CHF")], bookings(out));
+            assert_eq!(vec![("Assets:B", "Assets:A", "5", "CHF")], bookings(into));
         }
 
         /// The text of the description of the only transaction of `text`.
@@ -1068,6 +1127,8 @@ mod tests {
                 "2024-12-31\n  Message\nAssets:Foo 10 CHF\n-> Assets:Bar\n-> Assets:Qux\n",
                 "2024-12-31\n  Message\nAssets:Foo 10 CHF\n",
                 "2024-12-31\n  Message\nAssets:Foo\n",
+                "2024-12-31\n  Message\nAssets:Foo 10 CHF\n<- Assets:Bar 10 CHF\n",
+                "2024-12-31\n  Message\nAssets:Foo\n<- Assets:Bar\n",
             ] {
                 assert_eq!(
                     Some(Token::Custom(GROUP_SHAPE.to_string())),

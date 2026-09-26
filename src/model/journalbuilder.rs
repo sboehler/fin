@@ -435,6 +435,23 @@ mod tests {
         );
     }
 
+    /// A reversed arrow books the other way round, which is the same as
+    /// swapping the accounts of the group.
+    #[test]
+    fn reversed_arrows_book_the_other_way() {
+        let text = "2026-06-24\n  Rebalance\n\
+                    Assets:IBKR\n\
+                    -> Expenses:Trading 5 CHF\n\
+                    <- Income:Dividends 10 CHF\n";
+        assert_eq!(
+            vec![
+                booking("Assets:IBKR", "Expenses:Trading", "5", "CHF"),
+                booking("Income:Dividends", "Assets:IBKR", "10", "CHF"),
+            ],
+            bookings(text)
+        );
+    }
+
     /// The description of a grouped transaction reaches the journal with its
     /// line breaks, and its addon is read as usual.
     #[test]

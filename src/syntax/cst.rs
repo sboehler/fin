@@ -347,8 +347,8 @@ pub struct SubAssertion {
 pub enum Bookings {
     /// One booking per line: `<credit> <debit> <quantity> <commodity>`.
     Lines(Vec<Booking>),
-    /// Groups of credit accounts at column zero and debit accounts marked
-    /// with `->`, where one side of the group carries the amounts.
+    /// Groups of accounts at column zero and accounts marked with an arrow,
+    /// where one side of the group carries the amounts.
     Groups(Vec<Group>),
 }
 
@@ -361,14 +361,37 @@ pub struct Booking {
     pub commodity: Commodity,
 }
 
-/// Credit and debit legs which together expand to one booking per leg on the
-/// side carrying the amounts; the other side is a single leg without one. The
-/// parser rejects a group of any other shape.
+/// Accounts at column zero and accounts marked with an arrow, which together
+/// expand to one booking per leg on the side carrying the amounts; the other
+/// side is a single leg without one. The parser rejects a group of any other
+/// shape.
 #[derive(Eq, PartialEq, Debug)]
 pub struct Group {
     pub range: Range<usize>,
-    pub credits: Vec<Leg>,
-    pub debits: Vec<Leg>,
+    /// The accounts written at column zero.
+    pub accounts: Vec<Leg>,
+    /// The accounts written with an arrow, which the accounts at column zero
+    /// face.
+    pub arrows: Vec<Arrow>,
+}
+
+/// An account facing the accounts at column zero of its group, and the arrow
+/// which says which way its bookings flow.
+#[derive(Eq, PartialEq, Debug)]
+pub struct Arrow {
+    pub direction: Direction,
+    pub leg: Leg,
+}
+
+/// Which way the bookings of an arrow flow, seen from the account at column
+/// zero.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum Direction {
+    /// `->`: the account at column zero is credited, the account the arrow
+    /// names is debited.
+    Out,
+    /// `<-`: the other way round.
+    In,
 }
 
 /// One side of one booking of a group.
@@ -413,35 +436,45 @@ impl Bookings {
 }
 
 impl Group {
-    /// One booking per leg on the side carrying the amounts. Legs without an
-    /// amount on that side are skipped, which the parser rules out.
+    /// One booking per leg on the side carrying the amounts. A leg without an
+    /// amount on that side is skipped, which the parser rules out.
     fn bookings(&self) -> Vec<BookingRef<'_>> {
-        match (&self.credits[..], &self.debits[..]) {
-            ([credit], debits) if credit.amount.is_none() => debits
+        match (&self.accounts[..], &self.arrows[..]) {
+            // One account at column zero, which every arrow faces.
+            ([account], arrows) if account.amount.is_none() => arrows
                 .iter()
-                .filter_map(|debit| Some((debit, debit.amount.as_ref()?)))
-                .map(|(debit, amount)| BookingRef {
-                    range: &debit.range,
-                    credit: &credit.account,
-                    debit: &debit.account,
-                    quantity: &amount.quantity,
-                    commodity: &amount.commodity,
-                })
+                .filter_map(|arrow| booking(account, arrow))
                 .collect(),
-            (credits, [debit]) => credits
+            // One arrow, which every account at column zero faces.
+            (accounts, [arrow]) => accounts
                 .iter()
-                .filter_map(|credit| Some((credit, credit.amount.as_ref()?)))
-                .map(|(credit, amount)| BookingRef {
-                    range: &credit.range,
-                    credit: &credit.account,
-                    debit: &debit.account,
-                    quantity: &amount.quantity,
-                    commodity: &amount.commodity,
-                })
+                .filter_map(|account| booking(account, arrow))
                 .collect(),
             _ => Vec::new(),
         }
     }
+}
+
+/// The booking between an account at column zero and an account an arrow
+/// names: the amount is whichever of the two has one, and the arrow says which
+/// of them is credited.
+fn booking<'a>(account: &'a Leg, arrow: &'a Arrow) -> Option<BookingRef<'a>> {
+    let (range, amount) = match (&account.amount, &arrow.leg.amount) {
+        (None, Some(amount)) => (&arrow.leg.range, amount),
+        (Some(amount), None) => (&account.range, amount),
+        _ => return None,
+    };
+    let (credit, debit) = match arrow.direction {
+        Direction::Out => (&account.account, &arrow.leg.account),
+        Direction::In => (&arrow.leg.account, &account.account),
+    };
+    Some(BookingRef {
+        range,
+        credit,
+        debit,
+        quantity: &amount.quantity,
+        commodity: &amount.commodity,
+    })
 }
 
 #[derive(Eq, PartialEq, Debug)]

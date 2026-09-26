@@ -3,8 +3,8 @@ use std::io::{self, Result, Write};
 use crate::syntax::cst::VirtualAccount;
 
 use super::cst::{
-    Addon, Assertion, Bookings, Close, Directive, Group, Include, Leg, Open, Price, SubAssertion,
-    SyntaxTree, Transaction,
+    Addon, Assertion, Bookings, Close, Direction, Directive, Group, Include, Leg, Open, Price,
+    SubAssertion, SyntaxTree, Transaction,
 };
 
 pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::Result<()> {
@@ -158,20 +158,27 @@ fn initialize(tree: &SyntaxTree, source: &str) -> usize {
         .unwrap_or_default()
 }
 
-/// The credit accounts of a group, then its debit accounts marked with `->`.
-/// The amounts of both shapes of group end up in the same column, which is
-/// why the arrow counts towards the width of the account it precedes.
+/// The accounts of a group at column zero, then the accounts facing them with
+/// their arrows. The amounts of both shapes of group end up in the same
+/// column, which is why the arrow counts towards the width of the account it
+/// precedes.
 fn format_group(w: &mut impl Write, g: &Group, source: &str, width: usize) -> Result<()> {
-    for leg in &g.credits {
-        format_leg(w, leg, source, "", width + ARROW.len())?;
+    for leg in &g.accounts {
+        format_leg(w, leg, source, "", width + ARROW_WIDTH)?;
     }
-    for leg in &g.debits {
-        format_leg(w, leg, source, ARROW, width)?;
+    for arrow in &g.arrows {
+        let prefix = match arrow.direction {
+            Direction::Out => "-> ",
+            Direction::In => "<- ",
+        };
+        format_leg(w, &arrow.leg, source, prefix, width)?;
     }
     Ok(())
 }
 
-const ARROW: &str = "-> ";
+/// The width of an arrow and the space after it. Both arrows are the same
+/// width, so neither disturbs the alignment.
+const ARROW_WIDTH: usize = 3;
 
 fn format_leg(
     w: &mut impl Write,
@@ -284,6 +291,25 @@ Assets:Investments:IBKR      Expenses:Investments:Fees             1 USD
              \x20 at 154.45 USD\n\
              Assets:IBKR\n\
              -> Expenses:Trading    1698.95 USD\n",
+            format(source)
+        );
+    }
+
+    /// Both arrows are kept as they were written, and both are the same
+    /// width, so the amounts stay in one column.
+    #[test]
+    fn formats_both_arrows() {
+        let source = "2026-06-24\n\
+                      \x20 Rebalance\n\
+                      Assets:IBKR\n\
+                      ->   Expenses:Trading 5 CHF\n\
+                      <-  Income:Dividends 10 CHF\n";
+        assert_eq!(
+            "2026-06-24\n\
+             \x20 Rebalance\n\
+             Assets:IBKR\n\
+             -> Expenses:Trading          5 CHF\n\
+             <- Income:Dividends         10 CHF\n",
             format(source)
         );
     }

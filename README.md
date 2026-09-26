@@ -502,15 +502,16 @@ Naming both:
 #### The arrow notation
 
 The same transaction can be written with the description unquoted on the
-line below the date, and the bookings as groups of accounts joined by `->`:
+line below the date, and the bookings as groups of accounts joined by
+arrows:
 
 ```
 YYYY-MM-DD
   <description>
   <more description>
-<credit account>
--> <debit account> <quantity> <commodity>
--> <debit account> <quantity> <commodity>
+<account>
+-> <account> <quantity> <commodity>
+-> <account> <quantity> <commodity>
 ```
 
 The description runs over as many indented lines as it needs, and the line
@@ -518,20 +519,35 @@ breaks between them are kept — by the reports, and by `fin format`, which
 re-indents every line by two spaces. A blank line ends the transaction, so
 the description cannot contain one.
 
-Credit accounts start at column zero, debit accounts start at column zero
-with an arrow. One side of a group is a single account without an amount and
+One account of a group starts at column zero, the accounts facing it start at
+column zero with an arrow. One side is a single account without an amount and
 the other lists accounts which each have one, which gives one booking per
-amount — so the group above is two bookings out of the same credit account.
-The single account can be either side, so
+amount — so the group above is two bookings out of the account at column
+zero. The single account can be either side, so
 
 ```
-<credit account> <quantity> <commodity>
-<credit account> <quantity> <commodity>
--> <debit account>
+<account> <quantity> <commodity>
+<account> <quantity> <commodity>
+-> <account>
 ```
 
-is two bookings into the same debit account. A transaction is one or more
-such groups, and buying a security is typically two of them:
+is two bookings into the account behind the arrow.
+
+The arrow points from the credit account to the debit account, and `<-`
+reverses that, so a group can collect what flows out of an account and what
+flows into it at once:
+
+```
+Assets:Bank
+-> Expenses:Fees          1.00 CHF
+<- Income:Interest        4.20 CHF
+```
+
+Each arrow carries the direction of its own booking, and where a group has a
+single arrow it gives its direction to every account facing it.
+
+A transaction is one or more such groups, and buying a security is typically
+two of them:
 
 ```
 @performance(VT,USD)
