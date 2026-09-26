@@ -1,41 +1,59 @@
-2025-02-01 "Deposit 5000 CHF"
-Expenses:TBD            Assets:IBKR                   5000 CHF
+2025-02-01
+  Deposit 5000 CHF
+Assets:IBKR
+<- Expenses:TBD                  5000 CHF
 
 @performance(USD,CHF)
-2025-03-01 "Buy 1000 USD @ 0.9 CHF"
-Expenses:Trading        Assets:IBKR                   1000 USD
-Assets:IBKR             Expenses:Trading            900.00 CHF
-Assets:IBKR             Expenses:Fees                  1.8 CHF
+2025-03-01
+  Buy 1000 USD @ 0.9 CHF
+Assets:IBKR
+<- Expenses:Trading              1000 USD
+-> Expenses:Fees                  1.8 CHF
+-> Expenses:Trading            900.00 CHF
 
 @performance(USD,CHF)
-2025-03-02 "Buy 1000 USD @ 0.9 CHF"
-Expenses:Trading        Assets:IBKR                   1000 USD
-Assets:IBKR             Expenses:Trading            900.00 CHF
-Assets:IBKR             Expenses:Fees                  1.8 CHF
+2025-03-02
+  Buy 1000 USD @ 0.9 CHF
+Assets:IBKR
+<- Expenses:Trading              1000 USD
+-> Expenses:Fees                  1.8 CHF
+-> Expenses:Trading            900.00 CHF
 
 @performance(VTI,USD)
-2025-03-03 "Buy 10 VTI @ 250.123 USD"
-Expenses:Trading        Assets:IBKR                     10 VTI
-Assets:IBKR             Expenses:Trading           2501.23 USD
-Assets:IBKR             Expenses:Fees                    1 USD
+2025-03-03
+  Buy 10 VTI @ 250.123 USD
+Assets:IBKR
+<- Expenses:Trading                10 VTI
+-> Expenses:Fees                    1 USD
+-> Expenses:Trading           2501.23 USD
 
 @performance(VTI)
-2025-04-01 "VTI(US9229087690) Cash Dividend USD 0.5 per Share (Ordinary Dividend)"
-Income:Dividends        Assets:IBKR                      5 USD
+2025-04-01
+  VTI(US9229087690) Cash Dividend USD 0.5 per Share (Ordinary Dividend)
+Assets:IBKR
+<- Income:Dividends                 5 USD
 
 @performance(VTI)
-2025-04-01 "VTI(US9229087690) Cash Dividend USD 0.5 per Share - US Tax"
-Assets:IBKR             Expenses:WithholdingTax       0.75 USD
+2025-04-01
+  VTI(US9229087690) Cash Dividend USD 0.5 per Share - US Tax
+Assets:IBKR
+-> Expenses:WithholdingTax       0.75 USD
 
 @performance(USD)
-2025-05-06 "USD Debit Interest for Apr-2025"
-Assets:IBKR             Expenses:Interest             0.73 USD
+2025-05-06
+  USD Debit Interest for Apr-2025
+Assets:IBKR
+-> Expenses:Interest             0.73 USD
 
-2025-06-01 "Withdrawal Fee"
-Assets:IBKR             Expenses:Fees                   11 CHF
+2025-06-01
+  Withdrawal Fee
+Assets:IBKR
+-> Expenses:Fees                   11 CHF
 
-2025-12-31 "Rounding differences CHF"
-Assets:IBKR             Expenses:Rounding             0.01 CHF
+2025-12-31
+  Rounding differences CHF
+Assets:IBKR
+-> Expenses:Rounding             0.01 CHF
 
 2025-12-31 balance Assets:IBKR 10 VTI
 2025-12-31 balance Assets:IBKR -498.71 USD

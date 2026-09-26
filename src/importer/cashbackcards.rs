@@ -256,11 +256,15 @@ mod tests {
         import(&source, "Liabilities:Card", &mut out).unwrap();
         assert_eq!(
             String::from_utf8(out).unwrap(),
-            "2026-06-07 \"APPLE / Belastung\"\n\
-             Liabilities:Card Expenses:TBD          29.90 CHF\n\
+            "2026-06-07\n\
+             \x20 APPLE / Belastung\n\
+             Liabilities:Card\n\
+             -> Expenses:TBD          29.90 CHF\n\
              \n\
-             2026-06-08 \"ZAHLUNG / Gutschrift\"\n\
-             Expenses:TBD     Liabilities:Card     100.00 CHF\n"
+             2026-06-08\n\
+             \x20 ZAHLUNG / Gutschrift\n\
+             Liabilities:Card\n\
+             <- Expenses:TBD         100.00 CHF\n"
         );
     }
 }

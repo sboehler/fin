@@ -9,6 +9,7 @@ use self::{
     sourcefile::SourceFile,
 };
 
+pub mod arrows;
 pub mod bayes;
 pub mod cst;
 pub mod error;

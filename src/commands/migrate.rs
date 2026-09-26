@@ -3,9 +3,7 @@ use std::{error::Error, fs, io::Write, path::PathBuf};
 use clap::Args;
 
 use crate::syntax::{
-    format::format_file,
-    migrate::{DEFAULT_WIDTH, migrate},
-    parse_file, parse_text,
+    arrows::DEFAULT_WIDTH, format::format_file, migrate::migrate, parse_file, parse_text,
 };
 
 /// Rewrites the transactions of a journal from the old notation, one booking

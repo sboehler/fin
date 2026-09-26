@@ -1,19 +1,29 @@
-2026-01-11 "Backblaze"
-Assets:Revolut   Expenses:TBD          12.52 CHF
-Assets:Revolut   Expenses:Fees          0.13 CHF
+2026-01-11
+  Backblaze
+Assets:Revolut
+-> Expenses:Fees          0.13 CHF
+-> Expenses:TBD          12.52 CHF
 
-2026-01-19 "Exchanged to EUR"
-Assets:Revolut   Expenses:Trading     200.00 CHF
-Expenses:Trading Assets:Revolut       214.98 EUR
+2026-01-19
+  Exchanged to EUR
+Assets:Revolut
+<- Expenses:Trading     214.98 EUR
+-> Expenses:Trading     200.00 CHF
 
-2026-01-21 "PocketBook"
-Assets:Revolut   Expenses:TBD          11.99 EUR
+2026-01-21
+  PocketBook
+Assets:Revolut
+-> Expenses:TBD          11.99 EUR
 
-2026-01-24 "Payment from J. Doe"
-Expenses:TBD     Assets:Revolut       300.00 CHF
+2026-01-24
+  Payment from J. Doe
+Assets:Revolut
+<- Expenses:TBD         300.00 CHF
 
-2026-02-15 "Exchanged to EUR"
-Expenses:TBD     Assets:Revolut         0.57 EUR
+2026-02-15
+  Exchanged to EUR
+Assets:Revolut
+<- Expenses:TBD           0.57 EUR
 
 2026-01-24 balance Assets:Revolut 1035.82 CHF
 2026-02-15 balance Assets:Revolut 203.76 EUR

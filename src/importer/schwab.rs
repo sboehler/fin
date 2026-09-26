@@ -643,16 +643,19 @@ mod tests {
 
     #[test]
     fn test_buy() {
-        // Cash leaves the account first, then the shares arrive.
+        // The shares arrive and the cash leaves, both through the trading
+        // account, so the purchase is one group around the brokerage account.
         assert_eq!(
             import_to_string(
                 "\"01/15/2024\",\"Buy\",\"AAA\",\"FUND A\",\"10\",\"$12.50\",\"\",\"-$125.00\"\n"
             )
             .unwrap(),
             "@performance(USD,AAA)\n\
-             2024-01-15 \"Buy\"\n\
-             Assets:Schwab    Expenses:Trading     125.00 USD\n\
-             Expenses:Trading Assets:Schwab            10 AAA\n"
+             2024-01-15\n\
+             \x20 Buy\n\
+             Assets:Schwab\n\
+             <- Expenses:Trading         10 AAA\n\
+             -> Expenses:Trading     125.00 USD\n"
         );
     }
 
@@ -666,18 +669,20 @@ mod tests {
             )
             .unwrap(),
             "@performance(USD,BBB)\n\
-             2024-02-20 \"Sell\"\n\
-             Assets:Schwab    Expenses:Trading          4 BBB\n\
-             Assets:Schwab    Expenses:Fees          0.25 USD\n\
-             Expenses:Trading Assets:Schwab        120.00 USD\n"
+             2024-02-20\n\
+             \x20 Sell\n\
+             Assets:Schwab\n\
+             <- Expenses:Trading     120.00 USD\n\
+             -> Expenses:Fees          0.25 USD\n\
+             -> Expenses:Trading          4 BBB\n"
         );
     }
 
     #[test]
     fn test_dividend_joins_the_withholding_tax() {
         // Three rows on one day: the payment and its tax become a single
-        // transaction, whose payment leg is booked first whichever row came
-        // first; the reinvestment stays separate.
+        // transaction whichever row came first; the reinvestment stays
+        // separate.
         assert_eq!(
             import_to_string(
                 "\"03/10/2024\",\"Reinvest Shares\",\"AAA\",\"FUND A\",\"1.6\",\"$10.625\",\"\",\"-$17.00\"\n\
@@ -686,14 +691,18 @@ mod tests {
             )
             .unwrap(),
             "@performance(USD,AAA)\n\
-             2024-03-10 \"Dividend Reinvestment\"\n\
-             Assets:Schwab    Expenses:Trading      17.00 USD\n\
-             Expenses:Trading Assets:Schwab           1.6 AAA\n\
+             2024-03-10\n\
+             \x20 Dividend Reinvestment\n\
+             Assets:Schwab\n\
+             <- Expenses:Trading        1.6 AAA\n\
+             -> Expenses:Trading      17.00 USD\n\
              \n\
              @performance(AAA)\n\
-             2024-03-10 \"Dividend\"\n\
-             Income:Dividends Assets:Schwab         20.00 USD\n\
-             Assets:Schwab    Expenses:Tax           3.00 USD\n"
+             2024-03-10\n\
+             \x20 Dividend\n\
+             Assets:Schwab\n\
+             <- Income:Dividends      20.00 USD\n\
+             -> Expenses:Tax           3.00 USD\n"
         );
     }
 
@@ -705,8 +714,10 @@ mod tests {
             )
             .unwrap(),
             "@performance(BBB)\n\
-             2024-04-05 \"Dividend\"\n\
-             Income:Dividends Assets:Schwab          8.40 USD\n"
+             2024-04-05\n\
+             \x20 Dividend\n\
+             Assets:Schwab\n\
+             <- Income:Dividends       8.40 USD\n"
         );
     }
 
@@ -721,14 +732,20 @@ mod tests {
                  \"07/04/2024\",\"Journal\",\"\",\"JOURNAL FRM ...000\",\"\",\"\",\"\",\"$250.00\"\n"
             )
             .unwrap(),
-            "2024-05-02 \"Transfer\"\n\
-             Assets:Schwab Assets:Bank       500.00 USD\n\
+            "2024-05-02\n\
+             \x20 Transfer\n\
+             Assets:Schwab\n\
+             -> Assets:Bank       500.00 USD\n\
              \n\
-             2024-06-03 \"Transfer\"\n\
-             Assets:Awards Assets:Schwab       12.5 AAA\n\
+             2024-06-03\n\
+             \x20 Transfer\n\
+             Assets:Awards\n\
+             -> Assets:Schwab       12.5 AAA\n\
              \n\
-             2024-07-04 \"Transfer\"\n\
-             Assets:Awards Assets:Schwab     250.00 USD\n"
+             2024-07-04\n\
+             \x20 Transfer\n\
+             Assets:Awards\n\
+             -> Assets:Schwab     250.00 USD\n"
         );
     }
 
@@ -739,8 +756,10 @@ mod tests {
                 "\"08/09/2024\",\"Credit Interest\",\"\",\"SCHWAB1 INT\",\"\",\"\",\"\",\"$0.03\"\n"
             )
             .unwrap(),
-            "2024-08-09 \"Interest\"\n\
-             Income:Interest Assets:Schwab         0.03 USD\n"
+            "2024-08-09\n\
+             \x20 Interest\n\
+             Assets:Schwab\n\
+             <- Income:Interest       0.03 USD\n"
         );
     }
 
@@ -774,18 +793,24 @@ mod tests {
             ]);
         assert_eq!(
             import_awards_to_string(&rows).unwrap(),
-            "2024-09-11 \"Award\"\n\
-             Income:Awards    Assets:Schwab           3.5 AAA\n\
-             Income:Awards    Assets:Schwab          7.25 AAA\n\
+            "2024-09-11\n\
+             \x20 Award\n\
+             Assets:Schwab\n\
+             <- Income:Awards           3.5 AAA\n\
+             <- Income:Awards          7.25 AAA\n\
              \n\
              @performance(USD,AAA)\n\
-             2024-09-11 \"Sell\"\n\
-             Assets:Schwab    Expenses:Trading      10.75 AAA\n\
-             Assets:Schwab    Expenses:Fees          0.10 USD\n\
-             Expenses:Trading Assets:Schwab        200.00 USD\n\
+             2024-09-11\n\
+             \x20 Sell\n\
+             Assets:Schwab\n\
+             <- Expenses:Trading     200.00 USD\n\
+             -> Expenses:Fees          0.10 USD\n\
+             -> Expenses:Trading      10.75 AAA\n\
              \n\
-             2024-09-12 \"Transfer\"\n\
-             Assets:Schwab    Assets:Awards        200.00 USD\n"
+             2024-09-12\n\
+             \x20 Transfer\n\
+             Assets:Schwab\n\
+             -> Assets:Awards        200.00 USD\n"
         );
     }
 

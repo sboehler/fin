@@ -745,8 +745,9 @@ instead.
 
 ### import
 
-Importers write journal directives to stdout. They are named after the
-institution's domain, reversed:
+Importers write journal directives to stdout, transactions in [the arrow
+notation](#the-arrow-notation) and laid out as `fin format` would write them.
+They are named after the institution's domain, reversed:
 
 | Command | Export |
 | --- | --- |

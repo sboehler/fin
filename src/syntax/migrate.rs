@@ -1,11 +1,8 @@
-use std::{cmp::Reverse, ops::Range};
+use std::ops::Range;
 
+use super::arrows::{self, Flow};
 use super::bayes::apply;
 use super::cst::{Addon, Booking, Bookings, Directive, SyntaxTree, Transaction};
-use crate::model::entities::AccountType;
-
-/// The width a description is wrapped to, indentation included.
-pub const DEFAULT_WIDTH: usize = 80;
 
 /// Rewrites the transactions written one booking per line into the arrow
 /// notation. Everything else in the file, transactions already written as
@@ -30,177 +27,41 @@ pub fn migrate(source: &str, tree: &SyntaxTree, width: usize) -> String {
     apply(source, edits)
 }
 
-/// One booking of the old notation, with its sign normalized: a negative
-/// quantity is the same booking the other way round, and only then does the
-/// direction of an arrow say where the money went.
-#[derive(Clone, Copy)]
-struct Flow<'a> {
-    credit: &'a str,
-    debit: &'a str,
-    quantity: &'a str,
-    commodity: &'a str,
-}
-
-impl<'a> Flow<'a> {
-    fn new(source: &'a str, b: &Booking) -> Self {
-        let (credit, debit) = (
-            &source[b.credit.range.clone()],
-            &source[b.debit.range.clone()],
-        );
-        let quantity = &source[b.quantity.0.clone()];
-        let (credit, debit, quantity) = match quantity.strip_prefix('-') {
-            Some(positive) => (debit, credit, positive),
-            None => (credit, debit, quantity),
-        };
-        Flow {
-            credit,
-            debit,
-            quantity,
-            commodity: &source[b.commodity.0.clone()],
-        }
-    }
-
-    /// The account on the other side of `account`, and whether `account` is
-    /// the credit, which is the way the arrow will point.
-    fn other(&self, account: &str) -> Option<(&'a str, bool)> {
-        if self.credit == account {
-            Some((self.debit, true))
-        } else if self.debit == account {
-            Some((self.credit, false))
-        } else {
-            None
-        }
-    }
-}
-
-/// The transaction in the arrow notation, or `None` if it cannot be written
-/// in it: a description is mandatory there, and an empty one would be lost.
+/// The transaction in the arrow notation, from the text it was written in.
 fn transaction(
     source: &str,
     t: &Transaction,
     bookings: &[Booking],
     width: usize,
 ) -> Option<String> {
-    let description = t.description.text(source);
-    if description.trim().is_empty() || bookings.is_empty() {
-        return None;
-    }
-    let mut lines = Vec::new();
-    if let Some(Addon::Performance { range, .. } | Addon::Accrual { range, .. }) = &t.addon {
-        lines.push(source[range.clone()].to_string());
-    }
-    lines.push(source[t.date.0.clone()].to_string());
-    lines.extend(
-        wrap(&description, width.saturating_sub(INDENT.len())).map(|l| INDENT.to_string() + l),
-    );
-    let flows = bookings.iter().map(|b| Flow::new(source, b)).collect();
-    for group in groups(flows) {
-        lines.extend(group);
-    }
+    let addon = t.addon.as_ref().map(|a| match a {
+        Addon::Performance { range, .. } | Addon::Accrual { range, .. } => &source[range.clone()],
+    });
+    let flows = bookings.iter().map(|b| flow(source, b)).collect();
+    let lines = arrows::transaction(
+        addon,
+        &source[t.date.0.clone()],
+        &t.description.text(source),
+        flows,
+        width,
+    )?;
     Some(lines.join("\n"))
 }
 
-/// What a description line is indented by.
-const INDENT: &str = "  ";
-
-/// The lines of every group of the transaction, the largest group first.
-fn groups(mut flows: Vec<Flow>) -> Vec<Vec<String>> {
-    let mut groups = Vec::new();
-    while !flows.is_empty() {
-        let account = hub(&flows);
-        let (mine, rest): (Vec<_>, Vec<_>) = flows
-            .iter()
-            .copied()
-            .partition(|f| f.other(account).is_some());
-        groups.push((mine.len(), group(account, &mine)));
-        flows = rest;
-    }
-    // The hub of a group is the account of most of the remaining bookings, so
-    // the groups come out largest first already; sorting says so out loud.
-    groups.sort_by(|(a, _), (b, _)| b.cmp(a));
-    groups.into_iter().map(|(_, lines)| lines).collect()
-}
-
-/// The account the group is written around: the one appearing in the most
-/// bookings. Of two accounts appearing equally often, the one money sits in
-/// is the one the reader is looking for, and of two of those, the one written
-/// first.
-fn hub<'a>(flows: &[Flow<'a>]) -> &'a str {
-    let accounts = flows.iter().flat_map(|f| [f.credit, f.debit]);
-    accounts
-        .clone()
-        .max_by_key(|a| {
-            (
-                flows.iter().filter(|f| f.other(a).is_some()).count(),
-                is_al(a),
-                // Earliest first, so that the credit of a lone booking
-                // between two accounts of the same kind leads it.
-                Reverse(accounts.clone().position(|b| b == *a)),
-            )
-        })
-        .expect("a group has at least one booking")
-}
-
-fn is_al(account: &str) -> bool {
-    AccountType::try_from(account.split(':').next().unwrap_or_default())
-        .is_ok_and(|account_type| account_type.is_al())
-}
-
-/// The hub at column zero, then the accounts facing it: those it receives
-/// from first, then those it pays, each side by account name.
-fn group(account: &str, flows: &[Flow]) -> Vec<String> {
-    let mut lines = vec![account.to_string()];
-    let legs = flows
-        .iter()
-        .filter_map(|f| f.other(account).map(|o| (o, f)));
-    for (arrow, hub_credits) in [("<-", false), ("->", true)] {
-        let mut side: Vec<_> = legs
-            .clone()
-            .filter(|((_, c), _)| *c == hub_credits)
-            .map(|((other, _), f)| (other, f))
-            .collect();
-        // By account, so that a long group can be read down its accounts.
-        // Two bookings of one account keep the order they were written in.
-        side.sort_by_key(|&(other, _)| other);
-        for (other, f) in side {
-            lines.push(format!(
-                "{arrow} {other} {quantity} {commodity}",
-                quantity = f.quantity,
-                commodity = f.commodity
-            ));
-        }
-    }
-    lines
-}
-
-/// The text broken into lines of at most `width` characters, at the spaces
-/// between words. A word longer than `width` gets a line of its own rather
-/// than being cut in two.
-fn wrap(text: &str, width: usize) -> impl Iterator<Item = &str> {
-    let mut rest = text.trim();
-    std::iter::from_fn(move || {
-        if rest.is_empty() {
-            return None;
-        }
-        let end = match rest.char_indices().map(|(i, _)| i).nth(width) {
-            // The rest fits on one line.
-            None => rest.len(),
-            // Break at the last space which fits, or at the first one beyond
-            // the width if there is none.
-            Some(limit) => rest[..limit]
-                .rfind(char::is_whitespace)
-                .or_else(|| rest[limit..].find(char::is_whitespace).map(|i| i + limit))
-                .unwrap_or(rest.len()),
-        };
-        let (line, tail) = rest.split_at(end);
-        rest = tail.trim_start();
-        Some(line.trim_end())
-    })
+/// The booking as a flow between its two accounts.
+fn flow<'a>(source: &'a str, b: &Booking) -> Flow<'a> {
+    Flow::new(
+        &source[b.credit.range.clone()],
+        &source[b.debit.range.clone()],
+        &source[b.quantity.0.clone()],
+        &source[b.commodity.0.clone()],
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::syntax::arrows::DEFAULT_WIDTH;
     use crate::syntax::parse_text;
     use pretty_assertions::assert_eq;
 
@@ -387,16 +248,6 @@ Assets:Bank Expenses:Food 1 CHF
              Assets:Bank\n\
              -> Expenses:Food 1 CHF\n",
             migrated(source)
-        );
-    }
-
-    /// A word longer than the width keeps a line of its own rather than being
-    /// cut in two.
-    #[test]
-    fn long_words_are_left_whole() {
-        assert_eq!(
-            vec!["a", "0123456789012345", "b"],
-            wrap("a 0123456789012345 b", 10).collect::<Vec<_>>()
         );
     }
 

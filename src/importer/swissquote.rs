@@ -715,10 +715,12 @@ mod tests {
         assert_eq!(
             import_to_string(&[BUY]),
             "@performance(VWRL,CHF)\n\
-             2026-03-25 \"288382377 Kauf 13 x VWRL Vanguard All-World IE00B3RBWM25 @ 128.98 CHF\"\n\
-             Expenses:Trading  Assets:Swissquote         13 VWRL\n\
-             Assets:Swissquote Expenses:Trading     1676.75 CHF\n\
-             Assets:Swissquote Expenses:Fees          14.37 CHF\n\
+             2026-03-25\n\
+             \x20 288382377 Kauf 13 x VWRL Vanguard All-World IE00B3RBWM25 @ 128.98 CHF\n\
+             Assets:Swissquote\n\
+             <- Expenses:Trading          13 VWRL\n\
+             -> Expenses:Fees          14.37 CHF\n\
+             -> Expenses:Trading     1676.75 CHF\n\
              \n\
              2026-03-25 balance Assets:Swissquote 123.21 CHF\n"
         );
@@ -733,10 +735,12 @@ mod tests {
         assert_eq!(
             import_to_string(&[sell]),
             "@performance(VWRL,CHF)\n\
-             2026-03-25 \"288382377 Verkauf 13 x VWRL Vanguard All-World IE00B3RBWM25 @ 128.98 CHF\"\n\
-             Assets:Swissquote Expenses:Trading          13 VWRL\n\
-             Expenses:Trading  Assets:Swissquote    1691.12 CHF\n\
-             Assets:Swissquote Expenses:Fees          14.37 CHF\n\
+             2026-03-25\n\
+             \x20 288382377 Verkauf 13 x VWRL Vanguard All-World IE00B3RBWM25 @ 128.98 CHF\n\
+             Assets:Swissquote\n\
+             <- Expenses:Trading     1691.12 CHF\n\
+             -> Expenses:Fees          14.37 CHF\n\
+             -> Expenses:Trading          13 VWRL\n\
              \n\
              2026-03-25 balance Assets:Swissquote 123.21 CHF\n"
         );
@@ -791,9 +795,11 @@ mod tests {
         assert_eq!(
             import_to_string(&[dividend]),
             "@performance(VWRL)\n\
-             2026-07-01 \"Dividende VWRL Vanguard All-World IE00B3RBWM25\"\n\
-             Income:Dividends  Assets:Swissquote     100.00 USD\n\
-             Assets:Swissquote Expenses:Tax           15.00 USD\n\
+             2026-07-01\n\
+             \x20 Dividende VWRL Vanguard All-World IE00B3RBWM25\n\
+             Assets:Swissquote\n\
+             <- Income:Dividends      100.00 USD\n\
+             -> Expenses:Tax           15.00 USD\n\
              \n\
              2026-07-01 balance Assets:Swissquote 3210.97 USD\n"
         );
@@ -825,9 +831,11 @@ mod tests {
         assert_eq!(
             import_to_string(&[credit, debit]),
             "@performance(CHF,USD)\n\
-             2026-03-25 \"Forex-Gutschrift 1776.32 CHF / Forex-Belastung -2273.45 USD\"\n\
-             Expenses:Trading  Assets:Swissquote    1776.32 CHF\n\
-             Assets:Swissquote Expenses:Trading     2273.45 USD\n\
+             2026-03-25\n\
+             \x20 Forex-Gutschrift 1776.32 CHF / Forex-Belastung -2273.45 USD\n\
+             Assets:Swissquote\n\
+             <- Expenses:Trading     1776.32 CHF\n\
+             -> Expenses:Trading     2273.45 USD\n\
              \n\
              2026-03-25 balance Assets:Swissquote 1814.33 CHF\n\
              2026-03-25 balance Assets:Swissquote 0.00 USD\n"
@@ -857,8 +865,9 @@ mod tests {
         other[12] = "USD";
         let journal = import_to_string(&[credit, other]);
         assert_eq!(journal.matches("Forex-Gutschrift").count(), 2);
+        // Money into the account, so the arrow points back at it.
         assert!(
-            journal.contains("Expenses:Trading  Assets:Swissquote     100.00 CHF"),
+            journal.contains("Assets:Swissquote\n<- Expenses:Trading      100.00 CHF"),
             "{journal}"
         );
     }
@@ -884,18 +893,26 @@ mod tests {
         assert_eq!(
             import_to_string(&[CUSTODY_FEE, deposit, interest, unknown]),
             "@performance()\n\
-             2026-06-30 \"Depotgebühren\"\n\
-             Assets:Swissquote Expenses:Fees          54.05 CHF\n\
+             2026-06-30\n\
+             \x20 Depotgebühren\n\
+             Assets:Swissquote\n\
+             -> Expenses:Fees          54.05 CHF\n\
              \n\
-             2026-06-30 \"Einzahlung\"\n\
-             Expenses:TBD      Assets:Swissquote    1000.00 CHF\n\
+             2026-06-30\n\
+             \x20 Einzahlung\n\
+             Assets:Swissquote\n\
+             <- Expenses:TBD         1000.00 CHF\n\
              \n\
              @performance(CHF)\n\
-             2026-06-30 \"Zins\"\n\
-             Income:Interest   Assets:Swissquote       0.19 CHF\n\
+             2026-06-30\n\
+             \x20 Zins\n\
+             Assets:Swissquote\n\
+             <- Income:Interest         0.19 CHF\n\
              \n\
-             2026-06-30 \"Stempelsteuer\"\n\
-             Assets:Swissquote Expenses:TBD            1.00 CHF\n\
+             2026-06-30\n\
+             \x20 Stempelsteuer\n\
+             Assets:Swissquote\n\
+             -> Expenses:TBD            1.00 CHF\n\
              \n\
              2026-06-30 balance Assets:Swissquote 15.11 CHF\n"
         );
@@ -909,14 +926,12 @@ mod tests {
         later[0] = "30-06-2026 15:00:00";
         later[2] = "Auszahlung";
         let journal = import_to_string(&[later, CUSTODY_FEE]);
-        let types = journal
+        // The descriptions are what the arrow notation indents.
+        let descriptions = journal
             .lines()
-            .filter(|l| l.starts_with("2026-06-30 \""))
+            .filter_map(|l| l.strip_prefix("  "))
             .collect::<Vec<_>>();
-        assert_eq!(
-            types,
-            vec!["2026-06-30 \"Depotgebühren\"", "2026-06-30 \"Auszahlung\""]
-        );
+        assert_eq!(descriptions, vec!["Depotgebühren", "Auszahlung"]);
     }
 
     /// One assertion per currency, for the balance after the last row

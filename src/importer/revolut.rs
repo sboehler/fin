@@ -565,12 +565,16 @@ Topup,Current,2026-01-12 14:23:45,2026-01-12 14:23:45,Payment from M.,100.00,0.0
         );
         assert_eq!(
             import_to_string(&[("chf.csv", &source)]),
-            "2026-01-11 \"Backblaze\"\n\
-             Assets:Revolut Expenses:TBD        12.52 CHF\n\
-             Assets:Revolut Expenses:Fees        0.13 CHF\n\
+            "2026-01-11\n\
+             \x20 Backblaze\n\
+             Assets:Revolut\n\
+             -> Expenses:Fees        0.13 CHF\n\
+             -> Expenses:TBD        12.52 CHF\n\
              \n\
-             2026-01-12 \"Payment from M.\"\n\
-             Expenses:TBD   Assets:Revolut     100.00 CHF\n\
+             2026-01-12\n\
+             \x20 Payment from M.\n\
+             Assets:Revolut\n\
+             <- Expenses:TBD       100.00 CHF\n\
              \n\
              2026-01-12 balance Assets:Revolut 1035.82 CHF\n"
         );
@@ -587,12 +591,14 @@ Umtausch,Giro,2026-08-07 09:49:54,2026-08-07 09:49:54,Umgetauscht in EUR,-500.00
             "{DE_HEADER}\
 Umtausch,Giro,2026-08-07 09:49:54,2026-08-07 09:49:54,Umgetauscht in EUR,533.54,0.00,EUR,ABGESCHLOSSEN,559.43\n"
         );
-        let expected = "2026-08-07 \"Umgetauscht in EUR\"\n\
-             Assets:Revolut   Expenses:Trading     500.00 CHF\n\
-             Expenses:Trading Assets:Revolut       533.54 EUR\n\
-             \n\
-             2026-08-07 balance Assets:Revolut 1896.03 CHF\n\
-             2026-08-07 balance Assets:Revolut 559.43 EUR\n";
+        let expected = "2026-08-07\n\
+                        \x20 Umgetauscht in EUR\n\
+                        Assets:Revolut\n\
+                        <- Expenses:Trading     533.54 EUR\n\
+                        -> Expenses:Trading     500.00 CHF\n\
+                        \n\
+                        2026-08-07 balance Assets:Revolut 1896.03 CHF\n\
+                        2026-08-07 balance Assets:Revolut 559.43 EUR\n";
         assert_eq!(
             import_to_string(&[("chf.csv", &chf), ("eur.csv", &eur)]),
             expected
@@ -614,8 +620,10 @@ Umtausch,Giro,2026-08-07 09:49:54,2026-08-07 09:49:54,Umgetauscht in EUR,-500.00
         );
         assert_eq!(
             import_to_string(&[("chf.csv", &chf)]),
-            "2026-08-07 \"Umgetauscht in EUR\"\n\
-             Assets:Revolut Expenses:TBD       500.00 CHF\n\
+            "2026-08-07\n\
+             \x20 Umgetauscht in EUR\n\
+             Assets:Revolut\n\
+             -> Expenses:TBD       500.00 CHF\n\
              \n\
              2026-08-07 balance Assets:Revolut 1896.03 CHF\n"
         );
