@@ -102,7 +102,7 @@ impl JournalBuilder {
             let regex = Regex::new(&source.text[pattern.clone()]).map_err(|_| SyntaxError {
                 range: pattern.clone(),
                 want: cst::Token::Regex,
-                source: None,
+                context: None,
             })?;
             regexes.push(regex);
         }
@@ -111,7 +111,7 @@ impl JournalBuilder {
             .map_err(|_| SyntaxError {
                 range: a.range.clone(),
                 want: cst::Token::VirtualAccount,
-                source: None,
+                context: None,
             })?;
         Ok(())
     }
@@ -225,7 +225,7 @@ impl JournalBuilder {
             SyntaxError {
                 range: date.0.clone(),
                 want: cst::Token::Date,
-                source: None,
+                context: None,
             }
         })
     }
@@ -239,7 +239,7 @@ impl JournalBuilder {
             SyntaxError {
                 range: decimal.0.clone(),
                 want: cst::Token::Decimal,
-                source: None,
+                context: None,
             }
         })
     }
@@ -259,7 +259,7 @@ impl JournalBuilder {
             _ => Err(SyntaxError {
                 range: d.clone(),
                 want: cst::Token::Decimal,
-                source: None,
+                context: None,
             }),
         }
     }
@@ -274,7 +274,7 @@ impl JournalBuilder {
             .map_err(|_| SyntaxError {
                 range: commodity.0.clone(),
                 want: cst::Token::Commodity,
-                source: None,
+                context: None,
             })
     }
 
@@ -288,7 +288,7 @@ impl JournalBuilder {
             .map_err(|_| SyntaxError {
                 range: account.range.clone(),
                 want: cst::Token::Account,
-                source: None,
+                context: None,
             })
     }
 

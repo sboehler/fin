@@ -1,5 +1,6 @@
 use super::cst::{Character, Sequence, Token};
 use super::error::SyntaxError;
+use super::scope::Scope;
 use std::ops::Range;
 use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 
@@ -7,42 +8,26 @@ use std::{cell::RefCell, iter::Peekable, str::CharIndices};
 pub struct Scanner<'a> {
     pub source: &'a str,
     chars: RefCell<Peekable<CharIndices<'a>>>,
+    /// The productions in progress, outermost first. A failed read names
+    /// every one of them, so no caller has to say what it was doing.
+    stack: RefCell<Vec<Frame>>,
 }
 
-pub type Result<T> = std::result::Result<T, SyntaxError>;
-
-struct Scope<'a, 'b> {
-    s: &'a Scanner<'b>,
+/// A production in progress: what it is, and where it began.
+#[derive(Clone)]
+struct Frame {
+    token: Token,
     start: usize,
 }
 
-impl Scope<'_, '_> {
-    fn character_error(&self, want: &Character) -> SyntaxError {
-        SyntaxError {
-            range: self.s.range(self.start),
-            want: Token::Sequence(Sequence::One(want.clone())),
-            source: None,
-        }
-    }
-
-    fn error(&self, want: &Sequence) -> SyntaxError {
-        SyntaxError {
-            range: self.s.range(self.start),
-            want: Token::Sequence(want.clone()),
-            source: None,
-        }
-    }
-
-    fn range(&self) -> Range<usize> {
-        self.start..self.s.pos()
-    }
-}
+pub type Result<T> = std::result::Result<T, SyntaxError>;
 
 impl<'a> Scanner<'a> {
     pub fn new(text: &'a str) -> Scanner<'a> {
         Scanner {
             source: text,
             chars: RefCell::new(text.char_indices().peekable()),
+            stack: RefCell::new(Vec::new()),
         }
     }
 
@@ -57,11 +42,65 @@ impl<'a> Scanner<'a> {
         start..self.pos()
     }
 
-    fn scope(&self) -> Scope<'_, 'a> {
-        Scope {
-            s: self,
-            start: self.pos(),
+    /// Begins a production where the scanner stands. It ends when the scope
+    /// is dropped.
+    pub fn enter(&self, token: Token) -> Scope<'_, 'a> {
+        self.enter_at(token, self.pos())
+    }
+
+    /// Begins a production over text which began earlier: a price directive
+    /// begins at its date, not at the word `price`.
+    pub fn enter_at(&self, token: Token, start: usize) -> Scope<'_, 'a> {
+        let depth = {
+            let mut stack = self.stack.borrow_mut();
+            stack.push(Frame { token, start });
+            stack.len() - 1
+        };
+        Scope::new(self, start, depth)
+    }
+
+    /// Notes that the production at `depth` has ended, however it ended.
+    /// Truncating rather than popping re-establishes the invariant even if
+    /// something above was left behind.
+    pub fn unwind(&self, depth: usize) {
+        self.stack.borrow_mut().truncate(depth);
+    }
+
+    pub fn depth(&self) -> usize {
+        self.stack.borrow().len()
+    }
+
+    /// What the production at `depth` is parsing.
+    pub fn token(&self, depth: usize) -> Token {
+        self.stack.borrow()[depth].token.clone()
+    }
+
+    /// A failure which wanted `want`, from `start` to here, inside the
+    /// innermost `depth` productions.
+    pub fn error(&self, depth: usize, start: usize, want: Token) -> SyntaxError {
+        let mut context = None;
+        for frame in self.stack.borrow().iter().take(depth) {
+            context = Some(Box::new(SyntaxError {
+                range: frame.start..self.pos(),
+                want: frame.token.clone(),
+                context,
+            }));
         }
+        SyntaxError {
+            range: self.range(start),
+            want,
+            context,
+        }
+    }
+
+    /// The read from `start` to here wanted `ch` and did not get it.
+    fn character_error(&self, start: usize, ch: &Character) -> SyntaxError {
+        self.sequence_error(start, &Sequence::One(ch.clone()))
+    }
+
+    /// The read from `start` to here wanted `seq` and did not get it.
+    fn sequence_error(&self, start: usize, seq: &Sequence) -> SyntaxError {
+        self.error(self.depth(), start, Token::Sequence(seq.clone()))
     }
 
     pub fn current(&self) -> Option<char> {
@@ -80,100 +119,101 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn read_while_1(&self, ch: &Character) -> Result<Range<usize>> {
-        let scope = self.scope();
+        let start = self.pos();
         if !ch.is(self.current()) {
             self.advance();
-            return Err(scope.character_error(ch));
+            return Err(self.character_error(start, ch));
         }
         Ok(self.read_while(ch))
     }
 
     pub fn read_while(&self, ch: &Character) -> Range<usize> {
-        let scope = self.scope();
+        let start = self.pos();
         while ch.is(self.current()) {
             self.advance();
         }
-        scope.range()
+        self.range(start)
     }
 
     pub fn read_until(&self, ch: &Character) -> Range<usize> {
-        let scope = self.scope();
+        let start = self.pos();
         while !ch.is(self.current()) {
             self.advance();
         }
-        scope.range()
+        self.range(start)
     }
 
     pub fn read_char(&self, ch: &Character) -> Result<Range<usize>> {
-        let scope = self.scope();
+        let start = self.pos();
         let c = self.advance();
         if ch.is(c) {
-            Ok(scope.range())
+            Ok(self.range(start))
         } else {
-            Err(scope.character_error(ch))
+            Err(self.character_error(start, ch))
         }
     }
 
     pub fn read_string(&self, str: &str) -> Result<Range<usize>> {
-        let scope = self.scope();
+        let start = self.pos();
         for c in str.chars() {
             self.read_char(&Character::Char(c))?;
         }
-        Ok(scope.range())
+        Ok(self.range(start))
     }
 
     pub fn read_sequence(&self, seq: &Sequence) -> Result<Range<usize>> {
-        let scope = self.scope();
+        let start = self.pos();
         match seq {
             Sequence::One(ch) => {
                 self.read_char(ch)?;
-                Ok(scope.range())
+                Ok(self.range(start))
             }
             Sequence::OneOf(seqs) => {
                 for s in seqs {
                     let rollback = self.snapshot();
                     if self.read_sequence(s).is_ok() {
-                        return Ok(scope.range());
+                        return Ok(self.range(start));
                     }
                     rollback();
                 }
                 self.advance();
-                Err(scope.error(seq))
+                Err(self.sequence_error(start, seq))
             }
             Sequence::NumberOf(n, char) => {
                 for _ in 0..*n {
-                    self.read_char(char).map_err(|_| scope.error(seq))?;
+                    self.read_char(char)
+                        .map_err(|_| self.sequence_error(start, seq))?;
                 }
-                Ok(scope.range())
+                Ok(self.range(start))
             }
             Sequence::String(s) => {
                 for c in s.chars() {
                     self.read_char(&Character::Char(c))
-                        .map_err(|_| scope.error(seq))?;
+                        .map_err(|_| self.sequence_error(start, seq))?;
                 }
-                Ok(scope.range())
+                Ok(self.range(start))
             }
         }
     }
 
     pub fn read_eol(&self) -> Result<Range<usize>> {
-        let scope = self.scope();
+        let start = self.pos();
         let c = self.advance();
         match c {
-            None | Some('\n') => Ok(scope.range()),
-            _ => {
-                Err(scope
-                    .character_error(&Character::OneOf(vec![Character::NewLine, Character::EOF])))
-            }
+            None | Some('\n') => Ok(self.range(start)),
+            _ => Err(self.character_error(
+                start,
+                &Character::OneOf(vec![Character::NewLine, Character::EOF]),
+            )),
         }
     }
 
     pub fn read_space_1(&self) -> Result<Range<usize>> {
-        let scope = self.scope();
+        let start = self.pos();
         match self.current() {
             Some(ch) if !ch.is_ascii_whitespace() => {
                 self.advance();
-                Err(scope.character_error(&Character::HorizontalSpace))
+                Err(self.character_error(start, &Character::HorizontalSpace))
             }
             _ => Ok(self.read_space()),
         }
@@ -184,10 +224,10 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn read_rest_of_line(&self) -> Result<Range<usize>> {
-        let scope = self.scope();
+        let start = self.pos();
         self.read_while(&Character::HorizontalSpace);
         self.read_eol()?;
-        Ok(scope.range())
+        Ok(self.range(start))
     }
 }
 
@@ -222,7 +262,7 @@ mod test_scanner {
             Err(SyntaxError {
                 range: 7..7,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
-                source: None,
+                context: None,
             }),
             s.read_while_1(&Character::Char('q'))
         );
@@ -238,7 +278,7 @@ mod test_scanner {
             Err(SyntaxError {
                 range: 1..2,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
-                source: None,
+                context: None,
             }),
             s.clone().read_char(&Character::Char('q'))
         );
@@ -257,7 +297,7 @@ mod test_scanner {
             Err(SyntaxError {
                 range: 2..3,
                 want: Token::Sequence(Sequence::One(Character::Char('q'))),
-                source: None,
+                context: None,
             }),
             s.clone().read_char(&Character::Char('q'))
         );
@@ -294,7 +334,7 @@ mod test_scanner {
                     Character::NewLine,
                     Character::EOF
                 ]))),
-                source: None,
+                context: None,
             }),
             s.clone().read_rest_of_line()
         );
@@ -320,7 +360,7 @@ mod test_scanner {
             Err(SyntaxError {
                 range: 2..4,
                 want: Token::Sequence(Sequence::NumberOf(3, Character::Any)),
-                source: None,
+                context: None,
             }),
             s.read_sequence(&Sequence::NumberOf(3, Character::Any))
         );
@@ -338,7 +378,7 @@ mod test_scanner {
                     Character::NewLine,
                     Character::EOF
                 ]))),
-                source: None,
+                context: None,
             }),
             s.clone().read_eol()
         );
@@ -361,7 +401,7 @@ mod test_scanner {
             Err(SyntaxError {
                 range: 5..6,
                 want: Token::Sequence(Sequence::One(Character::HorizontalSpace)),
-                source: None,
+                context: None,
             }),
             s.clone().read_space_1()
         );

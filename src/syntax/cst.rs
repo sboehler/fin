@@ -123,7 +123,6 @@ pub enum Token {
     Directive,
     EOF,
     Either(Vec<Token>),
-    File,
     Group,
     Include,
     Interval,
@@ -193,7 +192,6 @@ impl Display for Token {
             Token::AccountType => write!(f, "an account type"),
             Token::VirtualAccount => write!(f, "a virtual account"),
             Token::Commodity => write!(f, "a commodity"),
-            Token::File => write!(f, "a source file"),
             Token::Account => write!(f, "an account"),
             Token::Sequence(seq) => write!(f, "{seq}"),
         }

@@ -17,6 +17,7 @@ pub mod format;
 pub mod migrate;
 mod parser;
 mod scanner;
+mod scope;
 pub mod sourcefile;
 
 /// Parses a journal held in memory. Unlike [`parse_file`], includes are not

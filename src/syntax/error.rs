@@ -4,11 +4,14 @@ use thiserror::Error;
 
 use super::{cst::Token, sourcefile::SourceFile};
 
+/// What the parser wanted and did not get, and the productions it was in the
+/// middle of when that happened. The head is the failure itself; `context`
+/// widens one production at a time, out to the directive it began with.
 #[derive(Error, Debug, Eq, PartialEq)]
 pub struct SyntaxError {
     pub range: Range<usize>,
     pub want: Token,
-    pub source: Option<Box<SyntaxError>>,
+    pub context: Option<Box<SyntaxError>>,
 }
 
 impl std::fmt::Display for SyntaxError {
@@ -19,26 +22,32 @@ impl std::fmt::Display for SyntaxError {
 }
 
 impl SyntaxError {
+    /// The failure, pointed at in its line, and then the productions it
+    /// happened inside, innermost first.
     pub fn full_error(&self, f: &mut std::fmt::Formatter, file: &SourceFile) -> std::fmt::Result {
         let (line, col) = file.position(self.range.start);
         writeln!(f)?;
         if let Some(p) = &file.path {
             writeln!(f, "In file \"{}\"", p.to_string_lossy())?;
         }
-        write!(
-            f,
-            "Line {line}, column {col}: while parsing {want}",
-            want = self.want
-        )?;
-        writeln!(f)?;
+        writeln!(f, "Line {line}, column {col}:")?;
         writeln!(f)?;
         file.fmt_range(f, &self.range)?;
-        writeln!(f, "{}^ want {}", " ".repeat(col + 6), self.want,)?;
-        writeln!(f)?;
-        if let Some(e) = &self.source {
-            e.full_error(f, file)?;
+        writeln!(f, "{}^ want {}", " ".repeat(col + 6), self.want)?;
+        let mut context = self.context.as_deref();
+        if context.is_some() {
+            writeln!(f)?;
         }
-        Ok(())
+        while let Some(e) = context {
+            let (line, col) = file.position(e.range.start);
+            writeln!(
+                f,
+                "  while parsing {want}, from line {line}, column {col}",
+                want = e.want
+            )?;
+            context = e.context.as_deref();
+        }
+        writeln!(f)
     }
 }
 
