@@ -5,22 +5,24 @@ use std::{error::Error, time::Duration};
 
 use chrono::{DateTime, NaiveDate, Utc};
 use chrono_tz::Tz;
-use reqwest::{StatusCode, Url, header::HeaderMap};
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
+use ureq::{Agent, http::StatusCode};
 
 pub struct Client {
-    client: reqwest::blocking::Client,
+    agent: Agent,
 }
 
 impl Default for Client {
     fn default() -> Self {
-        let mut headers = HeaderMap::new();
-        headers.insert("User-Agent", Self::USER_AGENT.parse().unwrap());
         Self {
-            client: reqwest::blocking::ClientBuilder::new()
-                .default_headers(headers)
-                .timeout(Self::TIMEOUT)
+            agent: Agent::config_builder()
+                .user_agent(Self::USER_AGENT)
+                .timeout_global(Some(Self::TIMEOUT))
+                // A response which is not a 200 carries a body saying why, so
+                // the status is read off it rather than raised as an error.
+                .http_status_as_error(false)
                 .build()
-                .unwrap(),
+                .into(),
         }
     }
 }
@@ -41,9 +43,9 @@ impl Client {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<Vec<Quote>, Box<dyn Error>> {
-        let url = Self::create_url(sym, start, end)?;
-        let response = self.client.get(url).send()?;
-        let result = Self::parse(response.status(), &response.text()?)?;
+        let mut response = self.agent.get(Self::create_url(sym, start, end)).call()?;
+        let status = response.status();
+        let result = Self::parse(status, &response.body_mut().read_to_string()?)?;
         Self::quotes(result)
     }
 
@@ -118,25 +120,32 @@ impl Client {
             .ok_or_else(|| format!("{status}: the response holds no data").into())
     }
 
-    fn create_url(
-        sym: &str,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> Result<Url, Box<dyn Error>> {
-        let period1 = start.timestamp().to_string();
-        let period2 = end.timestamp().to_string();
-        let params = vec![
-            ("events", "history"),
-            ("interval", "1d"),
-            ("period1", &period1),
-            ("period2", &period2),
-        ];
-
-        let mut url = Url::parse_with_params(Self::YAHOO_URL, &params)?;
-        url.path_segments_mut().unwrap().push(sym);
-        Ok(url)
+    fn create_url(sym: &str, start: DateTime<Utc>, end: DateTime<Utc>) -> String {
+        format!(
+            "{url}/{sym}?events=history&interval=1d&period1={period1}&period2={period2}",
+            url = Self::YAHOO_URL,
+            sym = utf8_percent_encode(sym, SYMBOL),
+            period1 = start.timestamp(),
+            period2 = end.timestamp(),
+        )
     }
 }
+
+/// What a symbol has to have escaped to stand in the path of the URL. A
+/// symbol may hold a `^` (`^GSPC`) or a `=` (`USDCHF=X`), which belong in a
+/// path segment as they are.
+const SYMBOL: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'%')
+    .add(b'/')
+    .add(b'<')
+    .add(b'>')
+    .add(b'?')
+    .add(b'`')
+    .add(b'{')
+    .add(b'}');
 
 /// The `i`th value of one of the parallel arrays of a chart, if it holds one.
 fn at<T: Copy>(values: &[Option<T>], i: usize) -> Option<T> {
@@ -241,10 +250,20 @@ mod tests {
     fn test_create_url() -> Result<(), Box<dyn Error>> {
         let start = DateTime::parse_from_rfc3339("2023-10-01T12:09:14Z")?;
         let end = DateTime::parse_from_rfc3339("2024-10-01T12:09:14Z")?;
+        let url = |sym| Client::create_url(sym, start.into(), end.into());
         assert_eq!(
-            Client::create_url("GOOG", start.into(), end.into())?.as_str(),
+            url("GOOG"),
             "https://query2.finance.yahoo.com/v8/finance/chart/GOOG?events=history&interval=1d&period1=1696162154&period2=1727784554"
         );
+        // The characters a symbol carries stand in the path as they are; one
+        // which would end the path is escaped.
+        assert!(url("^GSPC").contains("/chart/^GSPC?"), "{}", url("^GSPC"));
+        assert!(
+            url("USDCHF=X").contains("/chart/USDCHF=X?"),
+            "{}",
+            url("USDCHF=X")
+        );
+        assert!(url("a/b").contains("/chart/a%2Fb?"), "{}", url("a/b"));
         Ok(())
     }
 
