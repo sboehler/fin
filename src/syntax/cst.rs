@@ -172,7 +172,6 @@ impl Display for Token {
                         std::cmp::Ordering::Greater => (),
                     }
                 }
-                writeln!(f)?;
                 Ok(())
             }
             Token::Addon => write!(f, "an addon (@)"),
@@ -262,35 +261,33 @@ pub struct Transaction {
     pub addon: Option<Addon>,
     pub date: Date,
     pub description: Description,
-    pub bookings: Bookings,
+    pub groups: Vec<Group>,
 }
 
-/// The description of a transaction.
-#[derive(Eq, PartialEq, Debug)]
-pub enum Description {
-    /// Quoted, on the date line.
-    Quoted(QuotedString),
-    /// Unquoted, on one or more indented lines below the date. The lines are
-    /// held without their indentation.
-    Indented(Vec<Range<usize>>),
+impl Transaction {
+    /// The bookings of the transaction, one per leg carrying an amount.
+    pub fn bookings(&self) -> impl Iterator<Item = BookingRef<'_>> {
+        self.groups.iter().flat_map(Group::bookings)
+    }
 }
+
+/// The description of a transaction, on one or more indented lines below the
+/// date. The lines are held without their indentation.
+#[derive(Eq, PartialEq, Debug)]
+pub struct Description(pub Vec<Range<usize>>);
 
 impl Description {
-    /// The text of the description, the lines of an indented one joined by
-    /// newlines.
+    /// The text of the description, its lines joined by newlines.
     pub fn text<'a>(&self, source: &'a str) -> Cow<'a, str> {
-        match self {
-            Description::Quoted(q) => Cow::Borrowed(&source[q.content.clone()]),
-            Description::Indented(lines) => match &lines[..] {
-                [line] => Cow::Borrowed(&source[line.clone()]),
-                lines => Cow::Owned(
-                    lines
-                        .iter()
-                        .map(|line| &source[line.clone()])
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                ),
-            },
+        match &self.0[..] {
+            [line] => Cow::Borrowed(&source[line.clone()]),
+            lines => Cow::Owned(
+                lines
+                    .iter()
+                    .map(|line| &source[line.clone()])
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
         }
     }
 }
@@ -335,27 +332,6 @@ pub struct SubAssertion {
     pub range: Range<usize>,
     pub account: Account,
     pub balance: Decimal,
-    pub commodity: Commodity,
-}
-
-/// The bookings of a transaction, in either of the notations the file format
-/// allows. Use [`Bookings::iter`] to read them as bookings, whichever
-/// notation they were written in.
-#[derive(Eq, PartialEq, Debug)]
-pub enum Bookings {
-    /// One booking per line: `<credit> <debit> <quantity> <commodity>`.
-    Lines(Vec<Booking>),
-    /// Groups of accounts at column zero and accounts marked with an arrow,
-    /// where one side of the group carries the amounts.
-    Groups(Vec<Group>),
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct Booking {
-    pub range: Range<usize>,
-    pub credit: Account,
-    pub debit: Account,
-    pub quantity: Decimal,
     pub commodity: Commodity,
 }
 
@@ -406,31 +382,15 @@ pub struct Amount {
     pub commodity: Commodity,
 }
 
-/// A booking of a transaction, borrowed from whichever notation it was
-/// written in.
+/// A booking of a transaction, borrowed from the group it was written in.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct BookingRef<'a> {
-    /// The range of the leg or line the amount was read from.
+    /// The range of the leg the amount was read from.
     pub range: &'a Range<usize>,
     pub credit: &'a Account,
     pub debit: &'a Account,
     pub quantity: &'a Decimal,
     pub commodity: &'a Commodity,
-}
-
-impl Bookings {
-    pub fn iter(&self) -> Box<dyn Iterator<Item = BookingRef<'_>> + '_> {
-        match self {
-            Bookings::Lines(bookings) => Box::new(bookings.iter().map(|b| BookingRef {
-                range: &b.range,
-                credit: &b.credit,
-                debit: &b.debit,
-                quantity: &b.quantity,
-                commodity: &b.commodity,
-            })),
-            Bookings::Groups(groups) => Box::new(groups.iter().flat_map(Group::bookings)),
-        }
-    }
 }
 
 impl Group {

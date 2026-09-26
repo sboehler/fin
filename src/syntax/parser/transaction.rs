@@ -1,45 +1,19 @@
 use std::ops::Range;
 
 use crate::syntax::cst::{
-    Addon, Amount, Arrow, Booking, Bookings, Character, Date, Description, Direction, Directive,
-    Group, Leg, Token, Transaction,
+    Addon, Amount, Arrow, Character, Date, Description, Direction, Directive, Group, Leg, Token,
+    Transaction,
 };
 use crate::syntax::scanner::Scanner;
 use crate::syntax::scope::Scope;
 
 use super::Result;
-use super::lexical::{account, commodity, decimal, quoted_string};
-
-pub(super) fn transaction(scope: &Scope, addon: Option<Addon>, date: Date) -> Result<Directive> {
-    let s = scope.scanner();
-    let scope = scope.with(Token::Transaction);
-    let description = Description::Quoted(quoted_string(s)?);
-    s.read_rest_of_line()?;
-    let mut bookings = Vec::new();
-    loop {
-        bookings.push(booking(s)?);
-        s.read_rest_of_line()?;
-        if !s.current().is_some_and(char::is_alphanumeric) {
-            break;
-        }
-    }
-    Ok(Directive::Transaction(Transaction {
-        range: scope.range(),
-        addon,
-        date,
-        description,
-        bookings: Bookings::Lines(bookings),
-    }))
-}
+use super::lexical::{account, commodity, decimal};
 
 /// A transaction whose description sits on the indented line below the
 /// date, and whose bookings are written as groups of credit accounts at
 /// column zero and debit accounts marked with `->`.
-pub(super) fn grouped_transaction(
-    scope: &Scope,
-    addon: Option<Addon>,
-    date: Date,
-) -> Result<Directive> {
+pub(super) fn transaction(scope: &Scope, addon: Option<Addon>, date: Date) -> Result<Directive> {
     let s = scope.scanner();
     let scope = scope.with(Token::Transaction);
     s.read_rest_of_line()?;
@@ -56,7 +30,7 @@ pub(super) fn grouped_transaction(
         addon,
         date,
         description,
-        bookings: Bookings::Groups(groups),
+        groups,
     }))
 }
 
@@ -82,7 +56,7 @@ fn indented_description(s: &Scanner) -> Result<Description> {
     if lines.is_empty() {
         return Err(scope.token_error());
     }
-    Ok(Description::Indented(lines))
+    Ok(Description(lines))
 }
 
 /// The accounts of a group at column zero, followed by the accounts
@@ -152,24 +126,6 @@ fn leg(s: &Scanner) -> Result<Leg> {
     })
 }
 
-fn booking(s: &Scanner) -> Result<Booking> {
-    let scope = s.enter(Token::Booking);
-    let credit = account(s)?;
-    s.read_space_1()?;
-    let debit = account(s)?;
-    s.read_space_1()?;
-    let quantity = decimal(s, Token::Quantity)?;
-    s.read_space_1()?;
-    let commodity = commodity(s)?;
-    Ok(Booking {
-        range: scope.range(),
-        credit,
-        debit,
-        quantity,
-        commodity,
-    })
-}
-
 /// What a group must look like, for the error message when it does not.
 const GROUP_SHAPE: &str = "one account without an amount, facing accounts which all have one";
 
@@ -196,9 +152,8 @@ mod tests {
     use super::super::directive::directive;
     use super::super::parse;
     use super::*;
-    use crate::syntax::cst::{Account, Commodity, Date, Decimal, QuotedString};
+    use crate::syntax::cst::{Account, Commodity, Date, Decimal};
     use crate::syntax::scanner::Scanner;
-    use pretty_assertions::assert_eq;
 
     mod grouped_transaction {
         use super::*;
@@ -211,8 +166,7 @@ mod tests {
             let [Directive::Transaction(t)] = &tree.directives[..] else {
                 panic!("want a single transaction, got {:?}", tree.directives);
             };
-            t.bookings
-                .iter()
+            t.bookings()
                 .map(|b| {
                     (
                         &text[b.credit.range.clone()],
@@ -232,8 +186,8 @@ mod tests {
                     range: 0..55,
                     addon: None,
                     date: Date(0..10),
-                    description: Description::Indented(vec![Range { start: 13, end: 20 }]),
-                    bookings: Bookings::Groups(vec![Group {
+                    description: Description(vec![Range { start: 13, end: 20 }]),
+                    groups: vec![Group {
                         range: 21..55,
                         accounts: vec![Leg {
                             range: 21..31,
@@ -257,7 +211,7 @@ mod tests {
                                 }),
                             },
                         }],
-                    }])
+                    }]
                 })),
                 directive(&Scanner::new(f))
             );
@@ -442,33 +396,11 @@ mod tests {
         }
     }
 
+    /// The description goes on the line below the date: quoted on the date
+    /// line, as the journal used to allow, it is not a transaction.
     #[test]
-    fn parse_transaction() {
-        let f = "2024-12-31 \"Message\"  \nAssets:Foo Assets:Bar 4.23 USD";
-        assert_eq!(
-            Ok(Directive::Transaction(Transaction {
-                range: 0..53,
-                addon: None,
-                date: Date(0..10),
-                description: Description::Quoted(QuotedString {
-                    range: 11..20,
-                    content: 12..19,
-                }),
-                bookings: Bookings::Lines(vec![Booking {
-                    range: 23..53,
-                    credit: Account {
-                        range: 23..33,
-                        segments: vec![23..29, 30..33]
-                    },
-                    debit: Account {
-                        range: 34..44,
-                        segments: vec![34..40, 41..44]
-                    },
-                    quantity: Decimal(45..49),
-                    commodity: Commodity(50..53),
-                }])
-            })),
-            directive(&Scanner::new(f))
-        );
+    fn rejects_a_quoted_description() {
+        let f = "2024-12-31 \"Message\"\nAssets:Foo Assets:Bar 4.23 USD\n";
+        assert!(directive(&Scanner::new(f)).is_err());
     }
 }

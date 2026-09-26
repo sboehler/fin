@@ -7,7 +7,7 @@ use crate::syntax::scope::Scope;
 
 use super::Result;
 use super::lexical::{account, commodity, date, decimal, interval, quoted_string};
-use super::transaction::{grouped_transaction, transaction};
+use super::transaction::transaction;
 
 pub(super) fn directive(s: &Scanner) -> Result<Directive> {
     let scope = s.enter(Token::Directive);
@@ -32,11 +32,23 @@ fn command(scope: &Scope) -> Result<Directive> {
     let command = match s.current() {
         Some('p') => price(scope, date)?,
         Some('o') => open(scope, date)?,
-        Some('"') => transaction(scope, addon, date)?,
         Some('b') => assertion(scope, date)?,
         Some('c') => close(scope, date)?,
-        Some('\n') => grouped_transaction(scope, addon, date)?,
-        _o => Err(scope.token_error())?,
+        Some('\n') => transaction(scope, addon, date)?,
+        // Naming what may follow a date, and pointing at what does, is what
+        // tells a journal written in the notation which quoted its description
+        // on the date line what is wrong with it.
+        _o => {
+            let scope = s.enter(Token::Either(vec![
+                Token::Price,
+                Token::Open,
+                Token::Assertion,
+                Token::Close,
+                Token::Transaction,
+            ]));
+            s.advance();
+            Err(scope.token_error())?
+        }
     };
     s.read_rest_of_line()?;
     Ok(command)
@@ -160,23 +172,19 @@ fn open(scope: &Scope, date: Date) -> Result<Directive> {
     }))
 }
 
+/// The accounts a balance directive asserts, one per line below its date.
 fn assertion(scope: &Scope, date: Date) -> Result<Directive> {
     let s = scope.scanner();
     let scope = scope.with(Token::Assertion);
     s.read_string("balance")?;
-    s.read_space_1()?;
+    s.read_rest_of_line()?;
     let mut assertions = Vec::new();
-    if let Some('\n') = s.current() {
-        s.read_rest_of_line()?;
-        loop {
-            assertions.push(sub_assertion(s)?);
-            s.read_rest_of_line()?;
-            if !Character::AlphaNum.is(s.current()) {
-                break;
-            }
-        }
-    } else {
+    loop {
         assertions.push(sub_assertion(s)?);
+        s.read_rest_of_line()?;
+        if !Character::AlphaNum.is(s.current()) {
+            break;
+        }
     }
     Ok(Directive::Assertion(Assertion {
         range: scope.range(),
@@ -329,10 +337,10 @@ mod tests {
 
     #[test]
     fn parse_assertion() {
-        let f = "2024-03-01 balance Assets:Foo 500.1 BAR";
+        let f = "2024-03-01 balance\nAssets:Foo 500.1 BAR\n";
         assert_eq!(
             Ok(Directive::Assertion(Assertion {
-                range: 0..39,
+                range: 0..40,
                 date: Date(0..10),
                 assertions: vec![SubAssertion {
                     range: 19..39,
@@ -346,5 +354,13 @@ mod tests {
             })),
             directive(&Scanner::new(f))
         )
+    }
+
+    /// The accounts of a balance directive are written below its date: one
+    /// named on the date line is not a journal.
+    #[test]
+    fn parse_assertion_on_one_line() {
+        let f = "2024-03-01 balance Assets:Foo 500.1 BAR\n";
+        assert!(directive(&Scanner::new(f)).is_err());
     }
 }

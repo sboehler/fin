@@ -35,12 +35,13 @@ impl<'a, W: Write> Printer<'a, W> {
     /// below them, separated by blank lines and laid out by the formatter so
     /// that what is imported reads as `fin format` would write it.
     pub fn journal(&mut self, ts: &[Transaction], assertions: &[Assertion]) -> std::io::Result<()> {
-        let mut blocks = ts.iter().map(|t| self.transaction(t)).collect::<Vec<_>>();
-        if !assertions.is_empty() {
-            // The assertions are one block: the formatter writes each of them
-            // as a group, and the ones which share a date as one directive.
-            blocks.push(assertions.iter().map(|a| self.assertion(a)).collect());
-        }
+        let mut blocks = ts
+            .iter()
+            .map(|t| self.transaction(t))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        // One block per assertion: the formatter writes the ones which share a
+        // date as one directive.
+        blocks.extend(assertions.iter().map(|a| self.assertion(a)));
         let text = blocks.join("\n");
         // Formatting means parsing, which is also what says that the printer
         // wrote a journal rather than something merely journal-shaped.
@@ -50,10 +51,10 @@ impl<'a, W: Write> Printer<'a, W> {
         format_file(self.writer, &text, &tree)
     }
 
-    /// One assertion, on the single line the formatter reads it from.
+    /// One assertion, as the two lines it is written on.
     fn assertion(&self, a: &Assertion) -> String {
         format!(
-            "{date} balance {account} {balance} {commodity}\n",
+            "{date} balance\n{account} {balance} {commodity}\n",
             date = a.date,
             account = self.registry.account_name(a.account),
             balance = a.balance,
@@ -62,7 +63,7 @@ impl<'a, W: Write> Printer<'a, W> {
     }
 
     /// One transaction, as the lines it is written on.
-    fn transaction(&self, t: &Transaction) -> String {
+    fn transaction(&self, t: &Transaction) -> std::io::Result<String> {
         let addon = t.targets.as_ref().map(|targets| {
             let names = targets
                 .iter()
@@ -78,17 +79,18 @@ impl<'a, W: Write> Printer<'a, W> {
             })
             .collect();
         let date = t.date.to_string();
-        let lines = arrows::transaction(
-            addon.as_deref(),
-            &date,
-            &t.description,
-            flows,
-            DEFAULT_WIDTH,
-        )
-        // The arrow notation writes the description below the date and so
-        // needs one: a transaction without it keeps the older notation.
-        .unwrap_or_else(|| quoted(addon.as_deref(), &date, &t.description, &bookings));
-        lines.join("\n") + "\n"
+        // The description goes below the date, so there has to be one: a
+        // transaction without it gets a placeholder, which says as little as
+        // the description it stands for.
+        let description = match t.description.trim() {
+            "" => NO_DESCRIPTION,
+            description => description,
+        };
+        let lines = arrows::transaction(addon.as_deref(), &date, description, flows, DEFAULT_WIDTH)
+            .ok_or_else(|| {
+                std::io::Error::other(format!("a transaction on {date} has no bookings"))
+            })?;
+        Ok(lines.join("\n") + "\n")
     }
 
     /// The bookings of the transaction as `[credit, debit, quantity,
@@ -111,22 +113,8 @@ impl<'a, W: Write> Printer<'a, W> {
     }
 }
 
-/// A transaction in the older notation: the description quoted on the date
-/// line, and one line per booking naming both of its accounts.
-fn quoted(
-    addon: Option<&str>,
-    date: &str,
-    description: &str,
-    bookings: &[[String; 4]],
-) -> Vec<String> {
-    let mut lines = Vec::new();
-    lines.extend(addon.map(str::to_string));
-    lines.push(format!("{date} \"{description}\""));
-    for [credit, debit, quantity, commodity] in bookings {
-        lines.push(format!("{credit} {debit} {quantity} {commodity}"));
-    }
-    lines
-}
+/// What the description of a transaction which has none is written as.
+const NO_DESCRIPTION: &str = "-";
 
 #[cfg(test)]
 mod tests {
@@ -229,29 +217,20 @@ Assets:Bank
         );
     }
 
-    /// The arrow notation writes the description below the date and so needs
-    /// one; a transaction without it keeps the older notation, which the
-    /// journal still allows.
+    /// The description goes below the date, so a transaction without one gets
+    /// a placeholder rather than being written in a way the journal no longer
+    /// has: an empty description says as little as the placeholder does.
     #[test]
-    fn keeps_transactions_without_a_description() {
+    fn writes_a_placeholder_description() {
         assert_eq!(
             "\
-2026-06-24 \"\"
-Assets:Bank   Expenses:Food          1 CHF
-
 2026-06-24
-  Groceries
+  -
 Assets:Bank
--> Expenses:Food      42.50 CHF
+-> Expenses:Food          1 CHF
 ",
             printed(
-                &[
-                    ("", &[("Assets:Bank", "Expenses:Food", "1", "CHF")]),
-                    (
-                        "Groceries",
-                        &[("Assets:Bank", "Expenses:Food", "42.50", "CHF")]
-                    ),
-                ],
+                &[("", &[("Assets:Bank", "Expenses:Food", "1", "CHF")])],
                 &[]
             )
         );

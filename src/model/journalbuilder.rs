@@ -123,8 +123,7 @@ impl JournalBuilder {
     ) -> std::result::Result<(), SyntaxError> {
         let date = self.date(&t.date, source)?;
         let bookings = t
-            .bookings
-            .iter()
+            .bookings()
             .map(|a| {
                 Ok(Booking::create(
                     self.account(a.credit, source)?,
@@ -394,19 +393,16 @@ mod tests {
         )
     }
 
-    /// Both notations describe the same bookings.
+    /// The groups of a transaction expand to one booking per amount, in the
+    /// order they are written in.
     #[test]
-    fn groups_and_lines_agree() {
+    fn groups_expand_to_their_bookings() {
         let groups = "2026-06-24\n  Buy 11 VT\n\
                       Assets:IBKR\n\
                       -> Expenses:Trading 1698.95 USD\n\
                       -> Expenses:Fees 1.00 USD\n\
                       Expenses:Trading\n\
                       -> Assets:IBKR 11 VT\n";
-        let lines = "2026-06-24 \"Buy 11 VT\"\n\
-                     Assets:IBKR Expenses:Trading 1698.95 USD\n\
-                     Assets:IBKR Expenses:Fees 1.00 USD\n\
-                     Expenses:Trading Assets:IBKR 11 VT\n";
         assert_eq!(
             vec![
                 booking("Assets:IBKR", "Expenses:Trading", "1698.95", "USD"),
@@ -415,7 +411,6 @@ mod tests {
             ],
             bookings(groups)
         );
-        assert_eq!(bookings(lines), bookings(groups));
     }
 
     /// A group with the amounts on the credit side books into its single

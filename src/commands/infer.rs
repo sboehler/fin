@@ -136,7 +136,7 @@ impl Command {
     fn predictions(&self, model: &Model, item: &Item) -> Vec<Prediction> {
         let (source, t) = (item.source(), item.transaction);
         let mut results = Vec::new();
-        for b in t.bookings.iter() {
+        for b in t.bookings() {
             let credit = &source[b.credit.range.clone()];
             let debit = &source[b.debit.range.clone()];
             if credit == self.account || debit == self.account {
@@ -195,7 +195,7 @@ fn report(title: &str, results: &[&Prediction]) {
 fn count_placeholders(source: &str, account: &str) -> Result<usize, Box<dyn Error>> {
     let tree = parse_text(source)?;
     Ok(transactions(&tree)
-        .flat_map(|t| t.bookings.iter())
+        .flat_map(|t| t.bookings())
         .flat_map(|b| [b.credit, b.debit])
         .filter(|a| source[a.range.clone()] == *account)
         .count())

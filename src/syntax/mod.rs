@@ -14,7 +14,6 @@ pub mod bayes;
 pub mod cst;
 pub mod error;
 pub mod format;
-pub mod migrate;
 mod parser;
 mod scanner;
 mod scope;

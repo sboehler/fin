@@ -89,7 +89,7 @@ impl Model {
     /// which already mention the placeholder account carry no information and
     /// are skipped.
     pub fn train_transaction(&mut self, source: &str, t: &Transaction) {
-        for b in t.bookings.iter() {
+        for b in t.bookings() {
             let credit = &source[b.credit.range.clone()];
             let debit = &source[b.debit.range.clone()];
             if credit == self.account || debit == self.account {
@@ -140,7 +140,7 @@ impl Model {
         // one placeholder, so it is replaced once.
         let mut edited = HashSet::new();
         for t in transactions(tree) {
-            for b in t.bookings.iter() {
+            for b in t.bookings() {
                 let credit = &source[b.credit.range.clone()];
                 let debit = &source[b.debit.range.clone()];
                 if credit == self.account
@@ -294,17 +294,25 @@ mod tests {
     use crate::syntax::parse_text;
     use pretty_assertions::assert_eq;
 
-    const TRAINING: &str = r#"2024-01-01 "Migros Zuerich"
-Assets:Bank Expenses:Groceries 50.00 CHF
+    const TRAINING: &str = r#"2024-01-01
+  Migros Zuerich
+Assets:Bank
+-> Expenses:Groceries 50.00 CHF
 
-2024-01-02 "Migros Bern"
-Assets:Bank Expenses:Groceries 25.00 CHF
+2024-01-02
+  Migros Bern
+Assets:Bank
+-> Expenses:Groceries 25.00 CHF
 
-2024-01-03 "SBB Ticket"
-Assets:Bank Expenses:Travel 10.00 CHF
+2024-01-03
+  SBB Ticket
+Assets:Bank
+-> Expenses:Travel 10.00 CHF
 
-2024-01-04 "Salary"
-Income:Salary Assets:Bank 5000.00 CHF
+2024-01-04
+  Salary
+Income:Salary
+-> Assets:Bank 5000.00 CHF
 "#;
 
     fn model() -> Model {
@@ -324,55 +332,55 @@ Income:Salary Assets:Bank 5000.00 CHF
 
     #[test]
     fn test_infer() {
-        let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
+        let source = "2024-02-01\n  Migros Zuerich\nAssets:Bank\n-> Expenses:TBD 12.00 CHF\n";
         assert_eq!(
             infer(source),
-            "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:Groceries 12.00 CHF\n"
+            "2024-02-01\n  Migros Zuerich\nAssets:Bank\n-> Expenses:Groceries 12.00 CHF\n"
         );
     }
 
     /// The description decides between accounts seen with the same counterpart.
     #[test]
     fn test_infer_uses_description() {
-        let source = "2024-02-01 \"SBB Ticket\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
+        let source = "2024-02-01\n  SBB Ticket\nAssets:Bank\n-> Expenses:TBD 12.00 CHF\n";
         assert_eq!(
             infer(source),
-            "2024-02-01 \"SBB Ticket\"\nAssets:Bank Expenses:Travel 12.00 CHF\n"
+            "2024-02-01\n  SBB Ticket\nAssets:Bank\n-> Expenses:Travel 12.00 CHF\n"
         );
     }
 
     /// The placeholder is replaced on whichever side it appears.
     #[test]
     fn test_infer_credit_side() {
-        let source = "2024-02-01 \"Salary\"\nExpenses:TBD Assets:Bank 5000.00 CHF\n";
+        let source = "2024-02-01\n  Salary\nExpenses:TBD\n-> Assets:Bank 5000.00 CHF\n";
         assert_eq!(
             infer(source),
-            "2024-02-01 \"Salary\"\nIncome:Salary Assets:Bank 5000.00 CHF\n"
+            "2024-02-01\n  Salary\nIncome:Salary\n-> Assets:Bank 5000.00 CHF\n"
         );
     }
 
     /// The account on the other side of the booking is never its own counterpart.
     #[test]
     fn test_infer_excludes_other_account() {
-        let source = "2024-02-01 \"Migros Zuerich\"\nExpenses:Groceries Expenses:TBD 12.00 CHF\n";
+        let source =
+            "2024-02-01\n  Migros Zuerich\nExpenses:Groceries\n-> Expenses:TBD 12.00 CHF\n";
         let result = infer(source);
-        assert!(
-            !result.contains("Expenses:Groceries Expenses:Groceries"),
-            "{result}"
-        );
+        assert!(!result.contains("-> Expenses:Groceries"), "{result}");
     }
 
     /// Several placeholders in one file are all replaced.
     #[test]
     fn test_infer_multiple_bookings() {
-        let source = "2024-02-01 \"Migros Zuerich\"\n\
-                      Assets:Bank Expenses:TBD 12.00 CHF\n\
-                      Assets:Bank Expenses:TBD 13.00 CHF\n";
+        let source = "2024-02-01\n  Migros Zuerich\n\
+                      Assets:Bank\n\
+                      -> Expenses:TBD 12.00 CHF\n\
+                      -> Expenses:TBD 13.00 CHF\n";
         assert_eq!(
             infer(source),
-            "2024-02-01 \"Migros Zuerich\"\n\
-             Assets:Bank Expenses:Groceries 12.00 CHF\n\
-             Assets:Bank Expenses:Groceries 13.00 CHF\n"
+            "2024-02-01\n  Migros Zuerich\n\
+             Assets:Bank\n\
+             -> Expenses:Groceries 12.00 CHF\n\
+             -> Expenses:Groceries 13.00 CHF\n"
         );
     }
 
@@ -407,7 +415,7 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// Bookings which do not mention the placeholder are left alone.
     #[test]
     fn test_infer_leaves_assigned_bookings() {
-        let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:Travel 12.00 CHF\n";
+        let source = "2024-02-01\n  Migros Zuerich\nAssets:Bank\n-> Expenses:Travel 12.00 CHF\n";
         assert_eq!(infer(source), source);
     }
 
@@ -418,7 +426,7 @@ Income:Salary Assets:Bank 5000.00 CHF
             "2024-01-01\n  Migros\n  Wiedikon\nAssets:Bank\n-> Expenses:Groceries 50.00 CHF\n";
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
-        let tokens = tokenize(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank");
+        let tokens = tokenize(source, t, t.bookings().next().unwrap(), "Assets:Bank");
         assert!(tokens.contains("migros"), "{tokens:?}");
         assert!(tokens.contains("wiedikon"), "{tokens:?}");
     }
@@ -426,7 +434,7 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// An untrained model has no candidates and changes nothing.
     #[test]
     fn test_infer_without_training() {
-        let source = "2024-02-01 \"Migros\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
+        let source = "2024-02-01\n  Migros\nAssets:Bank\n-> Expenses:TBD 12.00 CHF\n";
         let model = Model::new("Expenses:TBD");
         assert_eq!(
             model.infer(source, &parse_text(source).unwrap(), 0.0),
@@ -437,7 +445,7 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// Placeholder bookings in the training file carry no information.
     #[test]
     fn test_train_skips_placeholder() {
-        let source = "2024-01-01 \"Migros\"\nAssets:Bank Expenses:TBD 50.00 CHF\n";
+        let source = "2024-01-01\n  Migros\nAssets:Bank\n-> Expenses:TBD 50.00 CHF\n";
         let mut model = Model::new("Expenses:TBD");
         model.train(source, &parse_text(source).unwrap());
         assert_eq!(model.count, 0);
@@ -449,11 +457,11 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// separates them and the confidence stays low.
     #[test]
     fn test_confidence_is_low_without_evidence() {
-        let source = "2024-02-01 \"Zahnarzt Winterthur\"\nAssets:Bank Expenses:TBD 240.00 CHF\n";
+        let source = "2024-02-01\n  Zahnarzt Winterthur\nAssets:Bank\n-> Expenses:TBD 240.00 CHF\n";
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
         let c = model()
-            .predict(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank")
+            .predict(source, t, t.bookings().next().unwrap(), "Assets:Bank")
             .unwrap();
         assert!(c.confidence < 0.9, "{c:?}");
     }
@@ -462,11 +470,11 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// seen it at, is decided with high confidence.
     #[test]
     fn test_confidence_is_high_with_evidence() {
-        let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:TBD 55.00 CHF\n";
+        let source = "2024-02-01\n  Migros Zuerich\nAssets:Bank\n-> Expenses:TBD 55.00 CHF\n";
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
         let c = model()
-            .predict(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank")
+            .predict(source, t, t.bookings().next().unwrap(), "Assets:Bank")
             .unwrap();
         assert_eq!(c.account, "Expenses:Groceries");
         assert!(c.confidence > 0.9, "{c:?}");
@@ -477,19 +485,19 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// one is the weekly shop.
     #[test]
     fn test_amount_decides_between_accounts() {
-        let training = "2024-01-01 \"Coop\"\nAssets:Bank Expenses:Restaurants 12.00 CHF\n\n\
-                        2024-01-02 \"Coop\"\nAssets:Bank Expenses:Restaurants 12.50 CHF\n\n\
-                        2024-01-03 \"Coop\"\nAssets:Bank Expenses:Groceries 120.00 CHF\n\n\
-                        2024-01-04 \"Coop\"\nAssets:Bank Expenses:Groceries 125.00 CHF\n";
+        let training = "2024-01-01\n  Coop\nAssets:Bank\n-> Expenses:Restaurants 12.00 CHF\n\n\
+                        2024-01-02\n  Coop\nAssets:Bank\n-> Expenses:Restaurants 12.50 CHF\n\n\
+                        2024-01-03\n  Coop\nAssets:Bank\n-> Expenses:Groceries 120.00 CHF\n\n\
+                        2024-01-04\n  Coop\nAssets:Bank\n-> Expenses:Groceries 125.00 CHF\n";
         let mut model = Model::new("Expenses:TBD");
         model.train(training, &parse_text(training).unwrap());
 
         let predict = |amount: &str| {
-            let source = format!("2024-02-01 \"Coop\"\nAssets:Bank Expenses:TBD {amount} CHF\n");
+            let source = format!("2024-02-01\n  Coop\nAssets:Bank\n-> Expenses:TBD {amount} CHF\n");
             let tree = parse_text(&source).unwrap();
             let t = transactions(&tree).next().unwrap();
             model
-                .predict(&source, t, t.bookings.iter().next().unwrap(), "Assets:Bank")
+                .predict(&source, t, t.bookings().next().unwrap(), "Assets:Bank")
                 .unwrap()
                 .account
         };
@@ -500,7 +508,7 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// Below the threshold the placeholder survives untouched.
     #[test]
     fn test_infer_abstains_below_threshold() {
-        let source = "2024-02-01 \"Zahnarzt Winterthur\"\nAssets:Bank Expenses:TBD 240.00 CHF\n";
+        let source = "2024-02-01\n  Zahnarzt Winterthur\nAssets:Bank\n-> Expenses:TBD 240.00 CHF\n";
         let tree = parse_text(source).unwrap();
         assert_eq!(model().infer(source, &tree, 0.9), vec![]);
         assert!(!model().infer(source, &tree, 0.0).is_empty());
@@ -509,7 +517,7 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// A threshold above 1 rejects everything, however clear the match.
     #[test]
     fn test_infer_abstains_always_above_one() {
-        let source = "2024-02-01 \"Migros Zuerich\"\nAssets:Bank Expenses:TBD 12.00 CHF\n";
+        let source = "2024-02-01\n  Migros Zuerich\nAssets:Bank\n-> Expenses:TBD 12.00 CHF\n";
         let tree = parse_text(source).unwrap();
         assert_eq!(model().infer(source, &tree, 1.1), vec![]);
     }
@@ -519,11 +527,12 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// Commodity, quantity and the other account keep theirs.
     #[test]
     fn test_tokenize_normalizes_description_words() {
-        let source = "2024-01-01 \"MIGROS WIEDIKON, ZUERICH / Migros\"\n\
-                      Assets:Bank Expenses:Groceries 50.00 CHF\n";
+        let source = "2024-01-01\n  MIGROS WIEDIKON, ZUERICH / Migros\n\
+                      Assets:Bank\n\
+                      -> Expenses:Groceries 50.00 CHF\n";
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
-        let tokens = tokenize(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank");
+        let tokens = tokenize(source, t, t.bookings().next().unwrap(), "Assets:Bank");
         assert!(tokens.contains("wiedikon"), "{tokens:?}");
         assert!(!tokens.contains("wiedikon,"), "{tokens:?}");
         assert!(!tokens.contains("/"), "{tokens:?}");
@@ -544,7 +553,7 @@ Income:Salary Assets:Bank 5000.00 CHF
                 _ => "Expenses:Travel",
             };
             source.push_str(&format!(
-                "2024-01-01 \"noise item{i}\"\nAssets:Bank {account} {i}.00 CHF\n\n"
+                "2024-01-01\n  noise item{i}\nAssets:Bank\n-> {account} {i}.00 CHF\n\n"
             ));
         }
         let mut model = Model::new("Expenses:TBD");
@@ -580,10 +589,10 @@ Income:Salary Assets:Bank 5000.00 CHF
     /// The magnitude is a token in its own right, next to the exact amount.
     #[test]
     fn test_tokenize_includes_magnitude() {
-        let source = "2024-01-01 \"Migros\"\nAssets:Bank Expenses:Groceries 50.00 CHF\n";
+        let source = "2024-01-01\n  Migros\nAssets:Bank\n-> Expenses:Groceries 50.00 CHF\n";
         let tree = parse_text(source).unwrap();
         let t = transactions(&tree).next().unwrap();
-        let tokens = tokenize(source, t, t.bookings.iter().next().unwrap(), "Assets:Bank");
+        let tokens = tokenize(source, t, t.bookings().next().unwrap(), "Assets:Bank");
         assert!(tokens.contains("50.00"), "{tokens:?}");
         assert!(tokens.contains(&magnitude("50.00").unwrap()), "{tokens:?}");
     }

@@ -70,7 +70,6 @@ $ fin balance journal.fin --valuation CHF --months --to 2020-03-31
   - [review](#review)
   - [fetch](#fetch)
   - [format](#format)
-  - [migrate](#migrate)
   - [parse](#parse)
 - [Development](#development)
 
@@ -109,19 +108,27 @@ A journal is a text file. Create `journal.fin`:
 
 * Opening balances
 
-2019-12-31 "Opening balance"
-Equity:Equity        Assets:Checking            10000 CHF
+2019-12-31
+  Opening balance
+Assets:Checking
+<- Equity:Equity           10000 CHF
 
 * 2020-01
 
-2020-01-02 "Rent January"
-Assets:Checking      Expenses:Rent               2000 CHF
+2020-01-02
+  Rent January
+Assets:Checking
+-> Expenses:Rent            2000 CHF
 
-2020-01-15 "Groceries"
-Assets:Checking      Expenses:Groceries           200 CHF
+2020-01-15
+  Groceries
+Assets:Checking
+-> Expenses:Groceries        200 CHF
 
-2020-01-25 "Salary January"
-Income:Salary        Assets:Checking             5000 CHF
+2020-01-25
+  Salary January
+Assets:Checking
+<- Income:Salary            5000 CHF
 ```
 
 Every account has to be opened before it is used, and its first segment says
@@ -130,17 +137,14 @@ what kind of account it is: `Assets`, `Liabilities`, `Equity`, `Income` or
 org-mode's heading marker, so an editor that folds org sections will fold a
 journal of any size.
 
-A booking names the account money flows **from**, the account it flows
-**to**, and the amount:
-
-```
-<credit account> <debit account> <quantity> <commodity>
-```
-
-Money flows left to right, so `Income:Salary Assets:Checking 5000 CHF` is
-salary arriving in the checking account, and `Assets:Checking
-Expenses:Rent 2000 CHF` is rent leaving it. Both accounts are on the same
-line, so there is no way to write a transaction that does not balance.
+A transaction is a date, a description below it, and one or more bookings.
+Every booking names the account money flows **from**, the account it flows
+**to**, and the amount: one account stands at column zero, the accounts it
+faces are marked with an arrow, and the arrow says which way the money went.
+`Assets:Checking` with `-> Expenses:Rent 2000 CHF` below it is rent leaving
+the checking account, and `<- Income:Salary 5000 CHF` is salary arriving in
+it. Both accounts of a booking are named, so there is no way to write a
+transaction that does not balance.
 
 Ask for a balance:
 
@@ -168,31 +172,45 @@ shares. Append to `journal.fin`:
 2019-12-31 open Assets:Portfolio
 2019-12-31 open Expenses:Fees
 
-2020-01-05 "Transfer to portfolio"
-Assets:Checking      Assets:Portfolio            1000 CHF
+2020-01-05
+  Transfer to portfolio
+Assets:Checking
+-> Assets:Portfolio         1000 CHF
 
-2020-01-06 "Currency exchange"
-Assets:Portfolio     Equity:Equity                969 CHF
-Equity:Equity        Assets:Portfolio            1000 USD
+2020-01-06
+  Currency exchange
+Assets:Portfolio
+<- Equity:Equity            1000 USD
+-> Equity:Equity             969 CHF
 
-2020-01-06 "Buy 12 AAPL"
-Assets:Portfolio     Equity:Equity                892 USD
-Equity:Equity        Assets:Portfolio              12 AAPL
-Assets:Portfolio     Expenses:Fees                  4 USD
+2020-01-06
+  Buy 12 AAPL
+Assets:Portfolio
+<- Equity:Equity              12 AAPL
+-> Equity:Equity             892 USD
+-> Expenses:Fees               4 USD
 
 * 2020-02
 
-2020-02-02 "Rent February"
-Assets:Checking      Expenses:Rent               2000 CHF
+2020-02-02
+  Rent February
+Assets:Checking
+-> Expenses:Rent            2000 CHF
 
-2020-02-05 "Groceries"
-Assets:Checking      Expenses:Groceries           250 CHF
+2020-02-05
+  Groceries
+Assets:Checking
+-> Expenses:Groceries        250 CHF
 
-2020-02-25 "Groceries"
-Assets:Checking      Expenses:Groceries           423 CHF
+2020-02-25
+  Groceries
+Assets:Checking
+-> Expenses:Groceries        423 CHF
 
-2020-02-25 "Salary February"
-Income:Salary        Assets:Checking             5000 CHF
+2020-02-25
+  Salary February
+Assets:Checking
+<- Income:Salary            5000 CHF
 ```
 
 An exchange is not a flow between two accounts of yours — one commodity
@@ -371,16 +389,17 @@ A `balance` directive asserts what an account holds on a date. Add one that
 is deliberately wrong:
 
 ```
-2020-01-31 balance Assets:Checking              11801 CHF
+2020-01-31 balance
+Assets:Checking            11801 CHF
 ```
 
 ```
 $ fin balance journal.fin -v CHF --to 2020-03-31
 Error: balance directive on 2020-01-31: account Assets:Checking has balance 11800 CHF, want 11801 CHF.
 
-Defined in file "journal.fin", line 57, column 20
+Defined in file "journal.fin", line 80, column 1
 
-   57 |2020-01-31 balance Assets:Checking              11801 CHF
+   80 |Assets:Checking            11801 CHF
 ```
 
 Copy the closing balance of each statement into the journal as you import it
@@ -394,16 +413,13 @@ fin format journal.fin
 ```
 
 aligns the accounts and the amounts of every transaction, leaving comments
-and the whitespace between directives alone. A `balance` directive is written
-as a group — the date on a line of its own, the accounts below it, their amounts
-in the column the amounts of the transactions are in — followed by the blank
-line every directive written over several lines needs. The directives on one
-date are written as one:
+and the whitespace between directives alone. The balance assertions of one
+date are gathered into one directive, with their amounts in a column of their
+own:
 
 ```
 2020-01-31 balance
-Assets:Checking                     11800 CHF
-Assets:Portfolio                     1032 CHF
+Assets:Checking            11800 CHF
 ```
 
 Run it before committing and diffs stay about the numbers.
@@ -491,16 +507,17 @@ YYYY-MM-DD close <account>
 ### Transactions
 
 ```
-YYYY-MM-DD "<description>"
-<credit account> <debit account> <quantity> <commodity>
-<credit account> <debit account> <quantity> <commodity>
-...
+YYYY-MM-DD
+  <description>
+  <more description>
+<account>
+-> <account> <quantity> <commodity>
+-> <account> <quantity> <commodity>
 ```
 
-A date, a description in double quotes, and one or more bookings on the
-lines immediately following. Every booking names a credit account (first)
-and a debit account (second); the quantity is usually positive and money
-flows from left to right.
+A date, a description on the indented lines below it, and the bookings as
+groups of accounts joined by arrows. Every booking names a credit account and
+a debit account, which is what the arrow between them says.
 
 This deviates from ledger and beancount, where a posting names one account
 and the transaction balances only if the postings happen to sum to zero.
@@ -510,21 +527,6 @@ Naming both:
 - records an unambiguous flow between two accounts, which is what the
   reports and the sankey chart are built on,
 - is more compact.
-
-#### The arrow notation
-
-The same transaction can be written with the description unquoted on the
-line below the date, and the bookings as groups of accounts joined by
-arrows:
-
-```
-YYYY-MM-DD
-  <description>
-  <more description>
-<account>
--> <account> <quantity> <commodity>
--> <account> <quantity> <commodity>
-```
 
 The description runs over as many indented lines as it needs, and the line
 breaks between them are kept — by the reports, and by `fin format`, which
@@ -572,18 +574,19 @@ Expenses:Investments:Trading
 -> Assets:Investments:IBKR              11 VT
 ```
 
-Both notations can be mixed in one file, and `fin format` keeps each
-transaction in the notation it was written in.
-
 ### Balance assertions
 
 ```
-YYYY-MM-DD balance <account> <quantity> <commodity>
+YYYY-MM-DD balance
+<account> <quantity> <commodity>
+<account> <quantity> <commodity>
+...
 ```
 
-Checks that the account holds exactly that on that date, and reports an
-error, with the source location, if it does not. Several assertions sharing
-a date can be written as a block:
+Checks that each account holds exactly that on that date, and reports an
+error, with the source location, if it does not. The accounts go on the lines
+below the date, as in a group of bookings, and a blank line ends the
+directive:
 
 ```
 2020-01-31 balance
@@ -648,8 +651,10 @@ bill paid in March otherwise lands entirely in March:
 
 ```
 @accrue quarterly 2020-01-01 2020-12-31 Assets:Prepaid
-2020-03-24 "Insurance 2020"
-Assets:Checking Expenses:Insurance 1200 CHF
+2020-03-24
+  Insurance 2020
+Assets:Checking
+-> Expenses:Insurance 1200 CHF
 ```
 
 The transaction is replaced by one that moves the money into the accrual
@@ -671,8 +676,10 @@ was paid in.
 
 ```
 @performance()
-2024-03-31 "Custody fee"
-Assets:Portfolio Expenses:Fees 12.50 CHF
+2024-03-31
+  Custody fee
+Assets:Portfolio
+-> Expenses:Fees 12.50 CHF
 ```
 
 ## Commands
@@ -756,8 +763,8 @@ instead.
 
 ### import
 
-Importers write journal directives to stdout, transactions in [the arrow
-notation](#the-arrow-notation) and laid out as `fin format` would write them.
+Importers write journal directives to stdout, laid out as `fin format` would
+write them.
 They are named after the institution's domain, reversed:
 
 | Command | Export |
@@ -1020,42 +1027,10 @@ fetched, so it is reported rather than done quietly.
 fin format journal.fin prices/USD.fin
 ```
 
-Formats each file in place, aligning accounts and amounts, including across
-the two notations for transactions. Comments and the whitespace between
-directives are preserved.
-
-### migrate
-
-```
-fin migrate journal.fin journal/*.fin
-```
-
-Rewrites the transactions of each file from one booking per line into [the
-arrow notation](#the-arrow-notation), in place, and formats the result.
-Includes are not followed, so name every file; `--dry-run` prints to stdout
-instead of writing, and `--width` (80 by default) says where the description
-is wrapped.
-
-Each transaction is written around the account appearing in most of its
-bookings, which goes at column zero, with the accounts it receives from
-before the accounts it pays, each side sorted by account. The bookings that account is not part of form
-the next group in turn, and the larger group comes first. Of two accounts in
-equally many bookings, the one money sits in leads, so a booking between an
-account and a category reads as a flow out of, or into, the account:
-
-```
-2026-06-24 "Groceries"                  2026-06-24
-Assets:Bank Expenses:Food 42.50 CHF       Groceries
-                                        Assets:Bank
-                                        -> Expenses:Food     42.50 CHF
-```
-
-A negative quantity is the same booking the other way round, so it is written
-that way; only then does the arrow say where the money went. Nothing else
-changes: the accounts, the amounts, the addon and the description are the
-ones that were there, the description wrapped over as many lines as it needs.
-A transaction whose description is empty has nothing to put below the date
-and is left as it was.
+Formats each file in place, aligning the accounts and amounts of every
+transaction to one column. The balance assertions of one date are gathered
+into one directive. Comments and the whitespace between directives are
+preserved.
 
 ### parse
 

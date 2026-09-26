@@ -4,8 +4,8 @@ use std::ops::Range;
 use crate::syntax::cst::VirtualAccount;
 
 use super::cst::{
-    Addon, Assertion, Bookings, Close, Date, Direction, Directive, Group, Include, Leg, Open,
-    Price, SyntaxTree, Transaction,
+    Addon, Assertion, Close, Date, Direction, Directive, Group, Include, Leg, Open, Price,
+    SyntaxTree, Transaction,
 };
 
 pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::Result<()> {
@@ -47,44 +47,21 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
                 date,
                 addon,
                 description,
-                bookings,
+                groups,
                 ..
             }) => {
                 if let Some(a) = addon {
                     format_addon(w, a, source)?;
                     writeln!(w)?;
                 }
-                match bookings {
-                    Bookings::Lines(bookings) => {
-                        writeln!(
-                            w,
-                            "{date} \"{description}\"",
-                            date = &source[date.0.clone()],
-                            description = description.text(source)
-                        )?;
-                        for b in bookings {
-                            writeln!(
-                                w,
-                                "{credit:<width$} {debit:<width$} {amount:>AMOUNT_WIDTH$} {commodity}",
-                                credit = &source[b.credit.range.clone()],
-                                width = n,
-                                debit = &source[b.debit.range.clone()],
-                                amount = &source[b.quantity.0.clone()],
-                                commodity = &source[b.commodity.0.clone()],
-                            )?;
-                        }
-                    }
-                    Bookings::Groups(groups) => {
-                        writeln!(w, "{date}", date = &source[date.0.clone()])?;
-                        // Each line of the description keeps its own line, so
-                        // that a rewritten transaction reads as it was typed.
-                        for line in description.text(source).lines() {
-                            writeln!(w, "  {line}")?;
-                        }
-                        for g in groups {
-                            format_group(w, g, source, n)?;
-                        }
-                    }
+                writeln!(w, "{date}", date = &source[date.0.clone()])?;
+                // Each line of the description keeps its own line, so that a
+                // rewritten transaction reads as it was typed.
+                for line in &description.0 {
+                    writeln!(w, "  {line}", line = &source[line.clone()])?;
+                }
+                for g in groups {
+                    format_group(w, g, source, n)?;
                 }
             }
             Directive::VirtualAccount(VirtualAccount {
@@ -137,19 +114,9 @@ pub fn format_file(w: &mut impl Write, source: &str, tree: &SyntaxTree) -> io::R
                     .collect::<Vec<_>>()
                     .join("\n");
                 w.write_all(lines.as_bytes())?;
-                // A directive written on one line ends at its last token, so
-                // the newline after it is part of the text which follows; one
-                // written over several lines takes it in, and so has to write
-                // it back.
-                if source[range.clone()].ends_with('\n') {
-                    writeln!(w)?;
-                }
-                // A directive written over several lines has to be followed by
-                // a blank line, which a balance directive written on one line
-                // was not.
-                if !blank_line_follows(source, range) {
-                    writeln!(w)?;
-                }
+                // The directive takes in the newline which ends its last line,
+                // and so has to write it back.
+                writeln!(w)?;
             }
             Directive::Close(Close { date, account, .. }) => {
                 write!(
@@ -169,10 +136,10 @@ fn initialize(tree: &SyntaxTree, source: &str) -> usize {
     tree.directives
         .iter()
         .filter_map(|d| match d {
-            Directive::Transaction(Transaction { bookings, .. }) => Some(bookings),
+            Directive::Transaction(t) => Some(t),
             _ => None,
         })
-        .flat_map(Bookings::iter)
+        .flat_map(Transaction::bookings)
         .flat_map(|b| [b.credit, b.debit])
         .map(|a| source[a.range.clone()].chars().count())
         .max()
@@ -198,26 +165,6 @@ fn merges_into<'a>(
         _ => None,
     }
 }
-
-/// Whether the line after the directive is blank, or the file ends with it —
-/// which is what a directive written over several lines has to be followed by.
-fn blank_line_follows(source: &str, directive: &Range<usize>) -> bool {
-    let mut rest = &source[directive.end..];
-    // A directive written on one line stops at its last token, so the newline
-    // ending that line is the first one in the text which follows it.
-    if !source[directive.clone()].ends_with('\n') {
-        match rest.trim_start_matches(HORIZONTAL_SPACE).strip_prefix('\n') {
-            Some(tail) => rest = tail,
-            // The file ends with the directive.
-            None => return true,
-        }
-    }
-    let rest = rest.trim_start_matches(HORIZONTAL_SPACE);
-    rest.is_empty() || rest.starts_with('\n')
-}
-
-/// The whitespace which can stand on a line without filling it.
-const HORIZONTAL_SPACE: [char; 2] = [' ', '\t'];
 
 /// The accounts of a group at column zero, then the accounts facing them with
 /// their arrows. The amounts of both shapes of group end up in the same
@@ -305,7 +252,7 @@ mod tests {
         String::from_utf8(w).unwrap()
     }
 
-    /// The accounts of both notations are aligned to the same width, and the
+    /// The accounts of every group are aligned to the same width, and the
     /// arrow counts towards it, so every amount in the file is in one column.
     #[test]
     fn formats_groups() {
@@ -318,9 +265,6 @@ Assets:Investments:IBKR   \n\
 -> Expenses:Investments:Fees 1.00 USD
 Expenses:Investments:Trading
 ->   Assets:Investments:IBKR 11 VT
-
-2026-06-25 \"Fee\"
-Assets:Investments:IBKR Expenses:Investments:Fees 1 USD
 ";
         assert_eq!(
             "\
@@ -332,19 +276,14 @@ Assets:Investments:IBKR
 -> Expenses:Investments:Fees          1.00 USD
 Expenses:Investments:Trading
 -> Assets:Investments:IBKR              11 VT
-
-2026-06-25 \"Fee\"
-Assets:Investments:IBKR      Expenses:Investments:Fees             1 USD
 ",
             format(source)
         );
     }
 
-    /// A balance directive is written as a group, whatever shape it was
-    /// written in: the accounts below the date, with their amounts in the
-    /// column the amounts of the transactions are in. The directives on one
-    /// date are written as one; every one of them is followed by the blank
-    /// line a directive written over several lines needs.
+    /// The accounts of a balance directive are written below its date, with
+    /// their amounts in the column the amounts of the transactions are in, and
+    /// the directives on one date are written as one.
     #[test]
     fn formats_balances_as_groups() {
         let source = "\
@@ -353,8 +292,11 @@ Assets:Investments:IBKR      Expenses:Investments:Fees             1 USD
 Assets:Investments:IBKR
 -> Expenses:Investments:Trading 1698.95 USD
 
-2026-06-25 balance Assets:IBKR 100 USD
-2026-06-25 balance Assets:Investments:IBKR 11 VT
+2026-06-25 balance
+Assets:IBKR 100 USD
+
+2026-06-25 balance
+Assets:Investments:IBKR 11 VT
 
 2026-06-26 balance
 Assets:Investments:IBKR 1698.95 USD
@@ -430,8 +372,8 @@ Assets:Investments:IBKR 1698.95 USD
 Expenses:Investments:Fees -1.00 USD
 -> Expenses:Investments:Trading
 
-2026-06-25 balance Assets:IBKR 100 USD
-2026-06-25 balance Assets:Investments:IBKR 11 VT
+2026-06-25 balance
+Assets:IBKR 100 USD
 
 2026-06-26 balance
 Assets:Investments:IBKR 1698.95 USD

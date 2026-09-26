@@ -102,7 +102,7 @@ impl Command {
         let source = item.source();
         let t = item.transaction;
         let mut reviewed = 0;
-        for b in t.bookings.iter() {
+        for b in t.bookings() {
             let credit = &source[b.credit.range.clone()];
             let debit = &source[b.debit.range.clone()];
             if credit == self.account || debit == self.account {
@@ -165,10 +165,10 @@ mod tests {
         let mut journal = String::new();
         for day in 1..=9 {
             journal.push_str(&format!(
-                "2024-01-0{day} \"Coop Zuerich\"\nAssets:Bank Expenses:Groceries 50.00 CHF\n\n"
+                "2024-01-0{day}\n  Coop Zuerich\nAssets:Bank\n-> Expenses:Groceries 50.00 CHF\n\n"
             ));
         }
-        journal.push_str("2024-02-01 \"Coop Zuerich\"\nAssets:Bank Expenses:Travel 50.00 CHF\n");
+        journal.push_str("2024-02-01\n  Coop Zuerich\nAssets:Bank\n-> Expenses:Travel 50.00 CHF\n");
         journal
     }
 
