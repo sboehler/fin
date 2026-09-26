@@ -147,14 +147,22 @@ fn is_al(account: &str) -> bool {
 }
 
 /// The hub at column zero, then the accounts facing it: those it receives
-/// from first, then those it pays.
+/// from first, then those it pays, each side by account name.
 fn group(account: &str, flows: &[Flow]) -> Vec<String> {
     let mut lines = vec![account.to_string()];
     let legs = flows
         .iter()
         .filter_map(|f| f.other(account).map(|o| (o, f)));
     for (arrow, hub_credits) in [("<-", false), ("->", true)] {
-        for ((other, _), f) in legs.clone().filter(|((_, c), _)| *c == hub_credits) {
+        let mut side: Vec<_> = legs
+            .clone()
+            .filter(|((_, c), _)| *c == hub_credits)
+            .map(|((other, _), f)| (other, f))
+            .collect();
+        // By account, so that a long group can be read down its accounts.
+        // Two bookings of one account keep the order they were written in.
+        side.sort_by_key(|&(other, _)| other);
+        for (other, f) in side {
             lines.push(format!(
                 "{arrow} {other} {quantity} {commodity}",
                 quantity = f.quantity,
@@ -268,8 +276,9 @@ mod tests {
         );
     }
 
-    /// The account of most of the bookings leads the group, and the accounts
-    /// it receives from are written before those it pays.
+    /// The account of most of the bookings leads the group, the accounts it
+    /// receives from are written before those it pays, and each side is
+    /// sorted by account.
     #[test]
     fn the_account_of_most_bookings_leads() {
         assert_eq!(
@@ -277,8 +286,8 @@ mod tests {
 2026-06-24
   Payday
 Assets:Bank
-<- Income:Salary 5000 CHF
 <- Income:Bonus 500 CHF
+<- Income:Salary 5000 CHF
 -> Expenses:Rent 1200 CHF
 ",
             migrated(
@@ -301,8 +310,8 @@ Income:Bonus Assets:Bank 500 CHF
 2026-06-24
   Two households
 Assets:Bank
--> Expenses:Rent 1200 CHF
 -> Expenses:Food 300 CHF
+-> Expenses:Rent 1200 CHF
 Assets:Card
 -> Expenses:Fuel 60 CHF
 ",
@@ -328,8 +337,8 @@ Assets:Bank Expenses:Food 300 CHF
   Buy 11 VT
 Assets:IBKR
 <- Expenses:Trading 11 VT
--> Expenses:Trading 1698.95 USD
 -> Expenses:Fees 1.00 USD
+-> Expenses:Trading 1698.95 USD
 ",
             migrated(
                 "\
@@ -337,6 +346,28 @@ Assets:IBKR
 Expenses:Trading Assets:IBKR 11 VT
 Assets:IBKR Expenses:Trading 1698.95 USD
 Assets:IBKR Expenses:Fees 1.00 USD
+"
+            )
+        );
+    }
+
+    /// Two bookings of one account cannot be told apart by name, so they
+    /// keep the order they were written in.
+    #[test]
+    fn bookings_of_one_account_keep_their_order() {
+        assert_eq!(
+            "\
+2026-06-24
+  Shopping
+Assets:Bank
+-> Expenses:Food 2 CHF
+-> Expenses:Food 1 CHF
+",
+            migrated(
+                "\
+2026-06-24 \"Shopping\"
+Assets:Bank Expenses:Food 2 CHF
+Assets:Bank Expenses:Food 1 CHF
 "
             )
         );

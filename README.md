@@ -1026,7 +1026,7 @@ is wrapped.
 
 Each transaction is written around the account appearing in most of its
 bookings, which goes at column zero, with the accounts it receives from
-before the accounts it pays. The bookings that account is not part of form
+before the accounts it pays, each side sorted by account. The bookings that account is not part of form
 the next group in turn, and the larger group comes first. Of two accounts in
 equally many bookings, the one money sits in leads, so a booking between an
 account and a category reads as a flow out of, or into, the account:
