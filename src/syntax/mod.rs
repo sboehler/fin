@@ -6,7 +6,6 @@ use std::{
 use self::{
     cst::{Directive, Include, SyntaxTree},
     error::ParserError,
-    parser::Parser,
     sourcefile::SourceFile,
 };
 
@@ -23,7 +22,7 @@ pub mod sourcefile;
 /// Parses a journal held in memory. Unlike [`parse_file`], includes are not
 /// followed, since there is no directory to resolve them against.
 pub fn parse_text(text: &str) -> std::result::Result<SyntaxTree, ParserError> {
-    Parser::new(text).parse().map_err(|e| {
+    parser::parse(text).map_err(|e| {
         ParserError::SyntaxError(
             e,
             SourceFile {
@@ -46,9 +45,8 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, SourceFi
     while let Some(file_path) = todo.pop_front() {
         let file =
             SourceFile::read(&file_path).map_err(|e| ParserError::IO(file_path.clone(), e))?;
-        let tree = Parser::new(&file.text)
-            .parse()
-            .map_err(|e| ParserError::SyntaxError(e, file.clone()))?;
+        let tree =
+            parser::parse(&file.text).map_err(|e| ParserError::SyntaxError(e, file.clone()))?;
         let dir_name = file_path
             .parent()
             .ok_or(ParserError::InvalidPath(file_path.clone()))?;
@@ -73,8 +71,6 @@ pub fn parse_files(root: &Path) -> std::result::Result<Vec<(SyntaxTree, SourceFi
 pub fn parse_file(file_path: &Path) -> std::result::Result<(SyntaxTree, SourceFile), ParserError> {
     let file =
         SourceFile::read(file_path).map_err(|e| ParserError::IO(file_path.to_path_buf(), e))?;
-    let tree = Parser::new(&file.text)
-        .parse()
-        .map_err(|e| ParserError::SyntaxError(e, file.clone()))?;
+    let tree = parser::parse(&file.text).map_err(|e| ParserError::SyntaxError(e, file.clone()))?;
     Ok((tree, file))
 }

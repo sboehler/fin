@@ -44,6 +44,11 @@ impl<'s, 'a> Scope<'s, 'a> {
         self.start..self.scanner.pos()
     }
 
+    /// The scanner this production is reading from.
+    pub fn scanner(&self) -> &'s Scanner<'a> {
+        self.scanner
+    }
+
     /// The whole text being parsed.
     pub fn source(&self) -> &'a str {
         self.scanner.source
