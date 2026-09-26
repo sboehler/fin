@@ -70,6 +70,7 @@ $ fin balance journal.fin --valuation CHF --months --to 2020-03-31
   - [review](#review)
   - [fetch](#fetch)
   - [format](#format)
+  - [migrate](#migrate)
   - [parse](#parse)
 - [Development](#development)
 
@@ -1010,6 +1011,39 @@ fin format journal.fin prices/USD.fin
 Formats each file in place, aligning accounts and amounts, including across
 the two notations for transactions. Comments and the whitespace between
 directives are preserved.
+
+### migrate
+
+```
+fin migrate journal.fin journal/*.fin
+```
+
+Rewrites the transactions of each file from one booking per line into [the
+arrow notation](#the-arrow-notation), in place, and formats the result.
+Includes are not followed, so name every file; `--dry-run` prints to stdout
+instead of writing, and `--width` (80 by default) says where the description
+is wrapped.
+
+Each transaction is written around the account appearing in most of its
+bookings, which goes at column zero, with the accounts it receives from
+before the accounts it pays. The bookings that account is not part of form
+the next group in turn, and the larger group comes first. Of two accounts in
+equally many bookings, the one money sits in leads, so a booking between an
+account and a category reads as a flow out of, or into, the account:
+
+```
+2026-06-24 "Groceries"                  2026-06-24
+Assets:Bank Expenses:Food 42.50 CHF       Groceries
+                                        Assets:Bank
+                                        -> Expenses:Food     42.50 CHF
+```
+
+A negative quantity is the same booking the other way round, so it is written
+that way; only then does the arrow say where the money went. Nothing else
+changes: the accounts, the amounts, the addon and the description are the
+ones that were there, the description wrapped over as many lines as it needs.
+A transaction whose description is empty has nothing to put below the date
+and is left as it was.
 
 ### parse
 

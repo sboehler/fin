@@ -21,6 +21,7 @@ fn main() {
         commands::Commands::Balance(p) => p.run(),
         commands::Commands::Fetch(p) => p.run(),
         commands::Commands::Infer(p) => p.run(),
+        commands::Commands::Migrate(p) => p.run(),
         commands::Commands::Review(p) => p.run(),
         commands::Commands::Chart(p) => {
             let mut stdout = std::io::stdout().lock();

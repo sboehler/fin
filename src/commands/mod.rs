@@ -8,6 +8,7 @@ mod crossvalidate;
 mod fetch;
 mod format;
 mod infer;
+mod migrate;
 mod parse;
 mod review;
 
@@ -18,6 +19,7 @@ pub enum Commands {
     Balance(balance::Command),
     Fetch(fetch::Command),
     Infer(infer::Command),
+    Migrate(migrate::Command),
     Review(review::Command),
 
     #[command(subcommand)]
