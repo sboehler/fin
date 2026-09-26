@@ -135,14 +135,7 @@ fn import(
 
     let assertions = builder.assertions(&lines)?;
 
-    let mut printer = Printer::new(w, registry);
-    printer.transactions(&transactions)?;
-    if !assertions.is_empty() {
-        printer.newline()?;
-    }
-    for assertion in &assertions {
-        printer.assertion(assertion)?;
-    }
+    Printer::new(w, registry).journal(&transactions, &assertions)?;
     Ok(())
 }
 
@@ -576,7 +569,8 @@ Topup,Current,2026-01-12 14:23:45,2026-01-12 14:23:45,Payment from M.,100.00,0.0
              Assets:Revolut\n\
              <- Expenses:TBD       100.00 CHF\n\
              \n\
-             2026-01-12 balance Assets:Revolut 1035.82 CHF\n"
+             2026-01-12 balance\n\
+             Assets:Revolut       1035.82 CHF\n"
         );
     }
 
@@ -597,8 +591,9 @@ Umtausch,Giro,2026-08-07 09:49:54,2026-08-07 09:49:54,Umgetauscht in EUR,533.54,
                         <- Expenses:Trading     533.54 EUR\n\
                         -> Expenses:Trading     500.00 CHF\n\
                         \n\
-                        2026-08-07 balance Assets:Revolut 1896.03 CHF\n\
-                        2026-08-07 balance Assets:Revolut 559.43 EUR\n";
+                        2026-08-07 balance\n\
+                        Assets:Revolut         1896.03 CHF\n\
+                        Assets:Revolut          559.43 EUR\n";
         assert_eq!(
             import_to_string(&[("chf.csv", &chf), ("eur.csv", &eur)]),
             expected
@@ -625,7 +620,8 @@ Umtausch,Giro,2026-08-07 09:49:54,2026-08-07 09:49:54,Umgetauscht in EUR,-500.00
              Assets:Revolut\n\
              -> Expenses:TBD       500.00 CHF\n\
              \n\
-             2026-08-07 balance Assets:Revolut 1896.03 CHF\n"
+             2026-08-07 balance\n\
+             Assets:Revolut       1896.03 CHF\n"
         );
     }
 
@@ -681,15 +677,21 @@ Umtausch,Giro,2026-08-07 09:49:54,2026-08-07 09:49:54,Umgetauscht in EUR,-500.00
         let second = format!("{EN_HEADER}{}", row(12, "CHF", "8.00"));
         let eur = format!("{EN_HEADER}{}", row(9, "EUR", "7.00"));
         let journal = import_to_string(&[("a.csv", &first), ("b.csv", &second), ("c.csv", &eur)]);
+        // The assertions are the groups the journal ends with, read without
+        // the whitespace the formatter aligns them with.
         let assertions = journal
             .lines()
-            .filter(|l| l.contains("balance"))
+            .skip_while(|l| !l.ends_with("balance"))
+            .filter(|l| !l.is_empty())
+            .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
             .collect::<Vec<_>>();
         assert_eq!(
             assertions,
             vec![
-                "2026-01-09 balance Assets:Revolut 7.00 EUR",
-                "2026-01-12 balance Assets:Revolut 8.00 CHF",
+                "2026-01-09 balance",
+                "Assets:Revolut 7.00 EUR",
+                "2026-01-12 balance",
+                "Assets:Revolut 8.00 CHF",
             ]
         );
     }

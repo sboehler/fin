@@ -169,14 +169,7 @@ fn import(
     }
     transactions.sort_by_key(|t| t.date);
 
-    let mut printer = Printer::new(w, registry);
-    printer.transactions(&transactions)?;
-    if !assertions.is_empty() {
-        printer.newline()?;
-    }
-    for assertion in &assertions {
-        printer.assertion(assertion)?;
-    }
+    Printer::new(w, registry).journal(&transactions, &assertions)?;
     Ok(())
 }
 

@@ -55,5 +55,6 @@ Assets:IBKR
 Assets:IBKR
 -> Expenses:Rounding             0.01 CHF
 
-2025-12-31 balance Assets:IBKR 10 VTI
-2025-12-31 balance Assets:IBKR -498.71 USD
+2025-12-31 balance
+Assets:IBKR                        10 VTI
+Assets:IBKR                   -498.71 USD

@@ -66,7 +66,7 @@ pub fn import(source: &str, account: &str, w: &mut impl Write) -> Result<(), Box
         .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
     transactions.sort_by_key(|t| t.date);
 
-    Printer::new(w, registry).transactions(&transactions)?;
+    Printer::new(w, registry).journal(&transactions, &[])?;
     Ok(())
 }
 

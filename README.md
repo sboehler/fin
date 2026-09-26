@@ -394,8 +394,19 @@ fin format journal.fin
 ```
 
 aligns the accounts and the amounts of every transaction, leaving comments
-and the whitespace between directives alone. Run it before committing and
-diffs stay about the numbers.
+and the whitespace between directives alone. A `balance` directive is written
+as a group — the date on a line of its own, the accounts below it, their amounts
+in the column the amounts of the transactions are in — followed by the blank
+line every directive written over several lines needs. The directives on one
+date are written as one:
+
+```
+2020-01-31 balance
+Assets:Checking                     11800 CHF
+Assets:Portfolio                     1032 CHF
+```
+
+Run it before committing and diffs stay about the numbers.
 
 ### Charting the flows
 

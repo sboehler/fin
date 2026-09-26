@@ -71,12 +71,7 @@ pub fn import(source: &[u8], account: &str, w: &mut impl Write) -> Result<(), Bo
         .collect::<Vec<_>>();
     transactions.sort_by_key(|t| t.date);
 
-    let mut printer = Printer::new(w, registry);
-    printer.transactions(&transactions)?;
-    if let Some(assertion) = assertion {
-        printer.newline()?;
-        printer.assertion(&assertion)?;
-    }
+    Printer::new(w, registry).journal(&transactions, assertion.as_slice())?;
     Ok(())
 }
 

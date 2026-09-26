@@ -162,14 +162,7 @@ fn import(
 
     let assertions = builder.assertions(&lines)?;
 
-    let mut printer = Printer::new(w, registry);
-    printer.transactions(&transactions)?;
-    if !assertions.is_empty() {
-        printer.newline()?;
-    }
-    for assertion in &assertions {
-        printer.assertion(assertion)?;
-    }
+    Printer::new(w, registry).journal(&transactions, &assertions)?;
     Ok(())
 }
 
@@ -722,7 +715,8 @@ mod tests {
              -> Expenses:Fees          14.37 CHF\n\
              -> Expenses:Trading     1676.75 CHF\n\
              \n\
-             2026-03-25 balance Assets:Swissquote 123.21 CHF\n"
+             2026-03-25 balance\n\
+             Assets:Swissquote        123.21 CHF\n"
         );
     }
 
@@ -742,7 +736,8 @@ mod tests {
              -> Expenses:Fees          14.37 CHF\n\
              -> Expenses:Trading          13 VWRL\n\
              \n\
-             2026-03-25 balance Assets:Swissquote 123.21 CHF\n"
+             2026-03-25 balance\n\
+             Assets:Swissquote        123.21 CHF\n"
         );
     }
 
@@ -801,7 +796,8 @@ mod tests {
              <- Income:Dividends      100.00 USD\n\
              -> Expenses:Tax           15.00 USD\n\
              \n\
-             2026-07-01 balance Assets:Swissquote 3210.97 USD\n"
+             2026-07-01 balance\n\
+             Assets:Swissquote       3210.97 USD\n"
         );
     }
 
@@ -837,8 +833,9 @@ mod tests {
              <- Expenses:Trading     1776.32 CHF\n\
              -> Expenses:Trading     2273.45 USD\n\
              \n\
-             2026-03-25 balance Assets:Swissquote 1814.33 CHF\n\
-             2026-03-25 balance Assets:Swissquote 0.00 USD\n"
+             2026-03-25 balance\n\
+             Assets:Swissquote       1814.33 CHF\n\
+             Assets:Swissquote          0.00 USD\n"
         );
     }
 
@@ -914,7 +911,8 @@ mod tests {
              Assets:Swissquote\n\
              -> Expenses:TBD            1.00 CHF\n\
              \n\
-             2026-06-30 balance Assets:Swissquote 15.11 CHF\n"
+             2026-06-30 balance\n\
+             Assets:Swissquote         15.11 CHF\n"
         );
     }
 
@@ -950,15 +948,21 @@ mod tests {
             row("30-06-2026 14:00:00", "20.00", "CHF"),
             row("29-06-2026 12:00:00", "30.00", "USD"),
         ]);
+        // The assertions are the groups the journal ends with, read without
+        // the whitespace the formatter aligns them with.
         let assertions = journal
             .lines()
-            .filter(|l| l.contains("balance"))
+            .skip_while(|l| !l.ends_with("balance"))
+            .filter(|l| !l.is_empty())
+            .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
             .collect::<Vec<_>>();
         assert_eq!(
             assertions,
             vec![
-                "2026-06-29 balance Assets:Swissquote 30.00 USD",
-                "2026-06-30 balance Assets:Swissquote 10.00 CHF",
+                "2026-06-29 balance",
+                "Assets:Swissquote 30.00 USD",
+                "2026-06-30 balance",
+                "Assets:Swissquote 10.00 CHF",
             ]
         );
     }

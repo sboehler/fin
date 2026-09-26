@@ -225,7 +225,7 @@ fn import(
     // the order within it is left as the file has it.
     transactions.sort_by_key(|t| t.date);
 
-    Printer::new(w, registry).transactions(&transactions)?;
+    Printer::new(w, registry).journal(&transactions, &[])?;
     Ok(())
 }
 
