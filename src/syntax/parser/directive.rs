@@ -35,8 +35,6 @@ fn command(scope: &Scope) -> Result<Directive> {
         Some('"') => transaction(scope, addon, date)?,
         Some('b') => assertion(scope, date)?,
         Some('c') => close(scope, date)?,
-        // Nothing else on the date line: the description is on the line
-        // below it, and the bookings are written as groups.
         Some('\n') => grouped_transaction(scope, addon, date)?,
         _o => Err(scope.token_error())?,
     };
