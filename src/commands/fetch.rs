@@ -52,7 +52,7 @@ impl Command {
         let mut failures = Vec::new();
         for (entry, quotes) in entries.iter().zip(quotes) {
             let written =
-                quotes.and_then(|quotes| write_quotes(directory, entry, quotes).map_err(err));
+                quotes.and_then(|quotes| write_quotes(directory, entry, quotes).map_err(to_string));
             match written {
                 // A split is not an error, but it rewrites prices which were
                 // not fetched, so it is reported rather than done quietly.
@@ -103,14 +103,16 @@ fn fetch_quotes(
         .map(|config| {
             let one_year_ago = now.checked_sub_days(Days::new(365)).unwrap();
             bar.set_message(format!("fetching {}", config.symbol));
-            client.fetch(&config.symbol, one_year_ago, now).map_err(err)
+            client
+                .fetch(&config.symbol, one_year_ago, now)
+                .map_err(to_string)
         })
         .collect()
 }
 
 /// Failures are collected rather than returned, and `Box<dyn Error>` is
 /// neither `Send` nor worth keeping around, so they are kept as messages.
-fn err(e: Box<dyn Error>) -> String {
+fn to_string(e: Box<dyn Error>) -> String {
     e.to_string()
 }
 
