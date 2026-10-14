@@ -64,6 +64,7 @@ $ fin balance journal.fin --valuation CHF --months --to 2020-03-31
 - [File format](#file-format)
 - [Commands](#commands)
   - [balance](#balance)
+  - [register](#register)
   - [chart sankey](#chart-sankey)
   - [import](#import)
   - [infer](#infer)
@@ -702,6 +703,93 @@ fin balance [OPTIONS] <PATH>
 | `--last <N>` | Keep only the last `N` periods, plus the column they start from. |
 | `--diff` | Report each row as its change over the period rather than cumulatively. |
 | `--round <N>` | Decimal places. The default is 0. |
+
+### register
+
+```
+fin register [OPTIONS] <PATH> <ACCOUNT>
+```
+
+Lists the bookings of `ACCOUNT` and of the accounts below it, by date. Where
+`balance` adds the bookings of a period up, `register` is the period itself:
+one row per booking, with what moved and the account facing it.
+
+```
+$ fin register journal.fin Assets:Checking --to 2020-01-31
++------------+-----------------------+--------------------+--------+-----------+
+|    Date    |      Description      |      Account       | Amount | Commodity |
++------------+-----------------------+--------------------+--------+-----------+
+| 2019-12-31 | Opening balance       | Equity:Equity      | 10,000 | CHF       |
+| 2020-01-02 | Rent January          | Expenses:Rent      | -2,000 | CHF       |
+| 2020-01-05 | Transfer to portfolio | Assets:Portfolio   | -1,000 | CHF       |
+| 2020-01-15 | Groceries             | Expenses:Groceries |   -200 | CHF       |
+| 2020-01-25 | Salary January        | Income:Salary      |  5,000 | CHF       |
++------------+-----------------------+--------------------+--------+-----------+
+```
+
+The account column is the *other* end of each booking: the group is what you
+asked about, so what is worth naming is where the money came from or went to.
+
+The account argument is a prefix, matched segment-wise: `Assets` covers every
+asset account, and `Assets:Bank` would cover `Assets:Bank:Checking` but not
+`Assets:Bankrupt`. A booking with both ends inside the group — a transfer
+between two of your own bank accounts, say — is not something the group did,
+so it is left out. Asking about `Assets` above therefore drops the transfer
+from the checking account to the portfolio and reports what the asset accounts
+took in and paid out as a whole:
+
+```
+$ fin register journal.fin Assets --to 2020-01-31
++------------+-------------------+--------------------+--------+-----------+
+|    Date    |    Description    |      Account       | Amount | Commodity |
++------------+-------------------+--------------------+--------+-----------+
+| 2019-12-31 | Opening balance   | Equity:Equity      | 10,000 | CHF       |
+| 2020-01-02 | Rent January      | Expenses:Rent      | -2,000 | CHF       |
+| 2020-01-06 | Currency exchange | Equity:Equity      |  1,000 | USD       |
+| 2020-01-06 | Currency exchange | Equity:Equity      |   -969 | CHF       |
+| 2020-01-06 | Buy 12 AAPL       | Equity:Equity      |     12 | AAPL      |
+| 2020-01-06 | Buy 12 AAPL       | Equity:Equity      |   -892 | USD       |
+| 2020-01-06 | Buy 12 AAPL       | Expenses:Fees      |     -4 | USD       |
+| 2020-01-15 | Groceries         | Expenses:Groceries |   -200 | CHF       |
+| 2020-01-25 | Salary January    | Income:Salary      |  5,000 | CHF       |
++------------+-------------------+--------------------+--------+-----------+
+```
+
+Descriptions are wrapped to `--width` characters, and a description written on
+several lines keeps its line breaks.
+
+Amounts are the quantities booked, in the commodity they were booked in, so a
+register needs no prices. `--valuation` shows what each booking was worth in
+one commodity instead:
+
+```
+$ fin register journal.fin Assets:Portfolio -v CHF --to 2020-01-31
++------------+--------------------------------------------------+------------------+----------+-----------+
+|    Date    |                   Description                    |     Account      |  Amount  | Commodity |
++------------+--------------------------------------------------+------------------+----------+-----------+
+| 2020-01-05 | Transfer to portfolio                            | Assets:Checking  | 1,000.00 | CHF       |
+| 2020-01-06 | Currency exchange                                | Equity:Equity    |   970.70 | CHF       |
+| 2020-01-06 | Currency exchange                                | Equity:Equity    |  -969.00 | CHF       |
+| 2020-01-06 | Buy 12 AAPL                                      | Equity:Equity    |   865.83 | CHF       |
+| 2020-01-06 | Buy 12 AAPL                                      | Equity:Equity    |  -865.86 | CHF       |
+| 2020-01-06 | Buy 12 AAPL                                      | Expenses:Fees    |    -3.88 | CHF       |
+| 2020-01-31 | Adjust value of USD in account Assets:Portfolio  | Income:Portfolio |    -0.14 | CHF       |
+| 2020-01-31 | Adjust value of AAPL in account Assets:Portfolio | Income:Portfolio |    34.32 | CHF       |
++------------+--------------------------------------------------+------------------+----------+-----------+
+```
+
+Valuing the journal also books the unrealized gains, which is where the last
+two rows come from. They are what makes the rows add up to the 1,032 the
+balance report shows for the portfolio on that date.
+
+| Flag | Meaning |
+| --- | --- |
+| `-v, --valuation <COMMODITY>` | Show the value of every booking in this commodity rather than the quantity booked. |
+| `-m, --mapping <LEVEL,REGEX>` | Shorten the accounts shown to `LEVEL` segments. The group is selected by the real account names, so a mapping changes the labels only. Repeatable. |
+| `-r, --vaccounts <ACCOUNT>` | Substitute a [virtual account](#virtual-accounts) for the accounts it matches. Repeatable. |
+| `-f, --from`, `-t, --to <DATE>` | Period covered. Defaults to the first transaction and today. |
+| `--width <N>` | Wrap the description at this many characters. The default is 80. |
+| `--round <N>` | Decimal places. Defaults to two with `--valuation`, and to what the quantities need to be exact without it. |
 
 ### chart sankey
 

@@ -9,6 +9,7 @@ mod fetch;
 mod format;
 mod infer;
 mod parse;
+mod register;
 mod review;
 
 #[derive(Subcommand)]
@@ -18,6 +19,7 @@ pub enum Commands {
     Balance(balance::Command),
     Fetch(fetch::Command),
     Infer(infer::Command),
+    Register(register::Command),
     Review(review::Command),
 
     #[command(subcommand)]

@@ -45,6 +45,8 @@ pub enum Cell {
     Decimal {
         value: Decimal,
     },
+    /// Text, which may hold line breaks: the cell is then as many lines
+    /// tall, and the row grows to fit its tallest cell.
     Text {
         text: String,
         align: Alignment,
@@ -103,37 +105,66 @@ impl TextRenderer {
         column_widths: &[usize],
         cells: &[Cell],
     ) -> std::io::Result<()> {
-        write!(w, "|")?;
-        for (i, cell) in cells.iter().enumerate() {
-            match cell {
-                Cell::Decimal { value } if !value.is_zero() => {
-                    let color = match value.is_sign_negative() {
-                        true => "red",
-                        false => "green",
-                    };
-                    let formatted = self.format_number(value).color(color);
-                    write!(w, " {:>1$} ", formatted, column_widths[i])?
-                }
-                Cell::Empty | Cell::Decimal { .. } => {
-                    write!(w, "{}", " ".repeat(column_widths[i] + 2))?
-                }
-                Cell::Text {
-                    text,
-                    align,
-                    indent,
-                } => {
-                    write!(w, " {}", " ".repeat(*indent))?;
-                    let width = column_widths[i] - indent;
-                    match align {
-                        Alignment::Left => write!(w, "{text:<width$} ")?,
-                        Alignment::Right => write!(w, "{text:>width$} ")?,
-                        Alignment::Center => write!(w, "{text:^width$} ")?,
-                    }
+        for line in 0..Self::height(cells) {
+            write!(w, "|")?;
+            for (i, cell) in cells.iter().enumerate() {
+                self.print_cell(w, column_widths[i], cell, line)?;
+                write!(w, "|")?
+            }
+            writeln!(w)?;
+        }
+        Ok(())
+    }
+
+    /// The number of lines the row occupies, which is the number of lines of
+    /// its tallest cell.
+    fn height(cells: &[Cell]) -> usize {
+        cells
+            .iter()
+            .map(|cell| match cell {
+                Cell::Text { text, .. } => text.lines().count(),
+                Cell::Empty | Cell::Decimal { .. } => 1,
+            })
+            .max()
+            .unwrap_or_default()
+            // An empty cell still takes a line.
+            .max(1)
+    }
+
+    /// Prints the `line`th line of `cell`, padded to `width`. Cells which
+    /// have no such line are blank there.
+    fn print_cell<W: Write>(
+        &self,
+        w: &mut W,
+        width: usize,
+        cell: &Cell,
+        line: usize,
+    ) -> std::io::Result<()> {
+        match cell {
+            Cell::Decimal { value } if line == 0 && !value.is_zero() => {
+                let color = match value.is_sign_negative() {
+                    true => "red",
+                    false => "green",
+                };
+                let formatted = self.format_number(value).color(color);
+                write!(w, " {formatted:>width$} ")
+            }
+            Cell::Empty | Cell::Decimal { .. } => write!(w, "{}", " ".repeat(width + 2)),
+            Cell::Text {
+                text,
+                align,
+                indent,
+            } => {
+                let text = text.lines().nth(line).unwrap_or("");
+                write!(w, " {}", " ".repeat(*indent))?;
+                let width = width - indent;
+                match align {
+                    Alignment::Left => write!(w, "{text:<width$} "),
+                    Alignment::Right => write!(w, "{text:>width$} "),
+                    Alignment::Center => write!(w, "{text:^width$} "),
                 }
             }
-            write!(w, "|")?
         }
-        writeln!(w)
     }
 
     fn compute_widths(&self) -> Vec<usize> {
@@ -168,7 +199,15 @@ impl TextRenderer {
         match c {
             Cell::Empty => 0,
             Cell::Decimal { value } => self.format_number(value).chars().count(),
-            Cell::Text { text, indent, .. } => text.len() + indent,
+            Cell::Text { text, indent, .. } => {
+                // The widest line, since the cell is as wide as its longest
+                // one. Padding counts characters, not bytes.
+                text.lines()
+                    .map(|line| line.chars().count())
+                    .max()
+                    .unwrap_or(0)
+                    + indent
+            }
         }
     }
 
@@ -195,5 +234,60 @@ impl TextRenderer {
             }
         }
         res
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    fn text(text: &str) -> Cell {
+        Cell::Text {
+            text: text.to_string(),
+            align: Alignment::Left,
+            indent: 0,
+        }
+    }
+
+    fn render(table: Table) -> String {
+        // The amounts would otherwise be colored when rendering to a
+        // terminal.
+        colored::control::set_override(false);
+        let mut out = Vec::new();
+        TextRenderer::new(table, 2).render(&mut out).unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    /// A cell with line breaks makes the row as tall as the cell, and the
+    /// cells beside it are blank below their first line. The column is as
+    /// wide as the cell's longest line.
+    #[test]
+    fn test_renders_a_multiline_cell() {
+        let mut table = Table::new(vec![0, 1]);
+        table.add_row(Row::Separator);
+        table.add_row(Row::Row(vec![
+            text("one\ntwo three\nfour"),
+            Cell::Decimal {
+                value: Decimal::new(-1234, 1),
+            },
+        ]));
+        table.add_row(Row::Separator);
+        assert_eq!(
+            render(table),
+            "+-----------+---------+\n\
+             | one       | -123.40 |\n\
+             | two three |         |\n\
+             | four      |         |\n\
+             +-----------+---------+\n\n"
+        );
+    }
+
+    /// A column is as wide as its widest character count, not byte count.
+    #[test]
+    fn test_column_width_counts_characters() {
+        let mut table = Table::new(vec![0]);
+        table.add_row(Row::Row(vec![text("Zürich")]));
+        assert_eq!(render(table), "| Zürich |\n\n");
     }
 }

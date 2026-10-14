@@ -218,7 +218,13 @@ impl Journal {
         };
         let mut gains = Vec::new();
 
-        for ((account, commodity), qty) in quantities.iter() {
+        // The positions are held in a hash map, so they come in no
+        // particular order. Sort them, or the gains of a day would be
+        // ordered differently on every run.
+        let mut positions = quantities.iter().collect::<Vec<_>>();
+        positions.sort_by_key(|(position, _)| **position);
+
+        for ((account, commodity), qty) in positions {
             if !account.account_type.is_al() {
                 continue;
             }
