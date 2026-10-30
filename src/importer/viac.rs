@@ -12,7 +12,7 @@ use std::{collections::BTreeMap, error::Error, io::Write, path::PathBuf, rc::Rc}
 
 use chrono::NaiveDate;
 use clap::Args;
-use rust_decimal::{Decimal, RoundingStrategy, prelude::FromPrimitive};
+use rust_decimal::{Decimal, RoundingStrategy};
 use serde::Deserialize;
 
 use crate::model::{entities::Price, printer::Printer, registry::Registry};
@@ -69,16 +69,14 @@ pub fn import(
         .daily_wealth(portfolio)?
         .iter()
         .filter(|dv| from.is_none_or(|from| dv.date >= from))
-        .map(|dv| {
-            Ok(Price {
-                loc: None,
-                date: dv.date,
-                commodity,
-                price: dv.rounded()?,
-                target,
-            })
+        .map(|dv| Price {
+            loc: None,
+            date: dv.date,
+            commodity,
+            price: dv.rounded(),
+            target,
         })
-        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
+        .collect::<Vec<_>>();
     // A zero balance carries no price information: it is reported before the
     // first contribution and after the portfolio is emptied.
     prices.retain(|p| !p.price.is_zero());
@@ -116,17 +114,26 @@ struct PortfolioSummary {
 #[derive(Debug, Deserialize)]
 struct DailyValue {
     date: NaiveDate,
-    /// VIAC reports values with twenty-odd decimals; they are Swiss francs, so
-    /// everything past the rappen is noise.
-    value: f64,
+    value: TaggedValue,
+}
+
+/// VIAC wraps every number in a tagged object, e.g.
+/// `{"__type": "VIAC_DECIMAL", "__value": "6769.44631232876712328767"}`.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "__type", rename_all = "SCREAMING_SNAKE_CASE")]
+enum TaggedValue {
+    ViacDecimal {
+        #[serde(rename = "__value")]
+        value: Decimal,
+    },
 }
 
 impl DailyValue {
-    /// The value in francs and rappen.
-    fn rounded(&self) -> Result<Decimal, Box<dyn Error>> {
-        Decimal::from_f64(self.value)
-            .map(|v| v.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero))
-            .ok_or_else(|| format!("invalid value {} on {}", self.value, self.date).into())
+    /// The value in francs and rappen. VIAC reports twenty-odd decimals; they
+    /// are Swiss francs, so everything past the rappen is noise.
+    fn rounded(&self) -> Decimal {
+        let TaggedValue::ViacDecimal { value } = &self.value;
+        value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero)
     }
 }
 
@@ -164,22 +171,27 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
+    /// Values are tagged objects, as in a real VIAC summary.
     const SOURCE: &str = r#"{
       "dailyWealth": [
-        {"date": "2024-01-03", "value": 300.005},
-        {"date": "2024-01-01", "value": 0},
-        {"date": "2024-01-02", "value": 100.239876543}
+        {"date": "2024-01-03", "value": {"__type": "VIAC_DECIMAL", "__value": "300.005"}},
+        {"date": "2024-01-01", "value": {"__type": "VIAC_DECIMAL", "__value": "0"}},
+        {"date": "2024-01-02", "value": {"__type": "VIAC_DECIMAL", "__value": "100.239876543"}}
       ],
-      "totalValue": 300.005,
+      "totalValue": {"__type": "VIAC_DECIMAL", "__value": "300.005"},
       "p3aSummary": {
         "portfolioWealthSummaries": {
           "1.01": {
             "portfolioNumber": "1.01",
-            "dailyWealth": [{"date": "2024-01-02", "value": 100.239876543}]
+            "dailyWealth": [
+              {"date": "2024-01-02", "value": {"__type": "VIAC_DECIMAL", "__value": "100.239876543"}}
+            ]
           },
           "1.02": {
             "portfolioNumber": "1.02",
-            "dailyWealth": [{"date": "2024-01-03", "value": 199.765}]
+            "dailyWealth": [
+              {"date": "2024-01-03", "value": {"__type": "VIAC_DECIMAL", "__value": "199.765"}}
+            ]
           }
         }
       }
@@ -228,8 +240,28 @@ mod tests {
     }
 
     #[test]
+    fn test_import_unexpected_value_type() {
+        // A value tagged as anything but a VIAC_DECIMAL is not a decimal we
+        // know how to read, so it is rejected rather than guessed at.
+        let source = r#"{
+          "dailyWealth": [
+            {"date": "2024-01-02", "value": {"__type": "VIAC_MONEY", "__value": "1"}}
+          ]
+        }"#;
+        let err = import(source, "VIAC", None, None, &mut Vec::new()).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown variant `VIAC_MONEY`"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
     fn test_import_without_p3a_summary() {
-        let source = r#"{"dailyWealth": [{"date": "2024-01-02", "value": 1}]}"#;
+        let source = r#"{
+          "dailyWealth": [
+            {"date": "2024-01-02", "value": {"__type": "VIAC_DECIMAL", "__value": "1"}}
+          ]
+        }"#;
         let mut out = Vec::new();
         import(source, "VIAC", None, None, &mut out).unwrap();
         assert_eq!(
